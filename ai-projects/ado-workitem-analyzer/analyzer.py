@@ -7,6 +7,7 @@ Reads Azure DevOps work items (from JSON export or typed input) and:
 """
 
 import os, sys, json
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -123,17 +124,38 @@ def display(item: dict, analysis: dict):
     console.print()
 
 def main():
-    if len(sys.argv) < 2:
+    export = False
+    args = sys.argv[1:]
+    if "--export" in args:
+        export = True
+        args.remove("--export")
+    if "-e" in args:
+        export = True
+        args.remove("-e")
+
+    if len(args) < 1:
         console.print("[yellow]Usage:[/yellow] python analyzer.py <workitem.json>")
         console.print("[dim]Running with built-in sample work item...[/dim]\n")
         item = SAMPLE_WORK_ITEM
     else:
         with console.status("[bold green]Loading work item JSON...[/bold green]"):
-            with open(sys.argv[1], "r", encoding="utf-8") as f:
+            with open(args[0], "r", encoding="utf-8") as f:
                 item = json.load(f)
 
     analysis = analyze_workitem(item)
     display(item, analysis)
+
+    if export:
+        generated_at = datetime.now().isoformat()
+        output = {
+            "work_item": item,
+            "analysis": analysis,
+            "generated_at": generated_at,
+        }
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"output_{timestamp}.json"
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2)
 
 
 def _run_tests():
