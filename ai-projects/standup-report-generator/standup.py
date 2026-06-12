@@ -140,13 +140,14 @@ def generate_report(data: dict, verbose: bool = False) -> dict:
         console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{est_tokens} tokens)")
         console.print("⏳ Calling OpenAI API...")
         start = time.perf_counter()
-    response = _create_chat_completion(
-        model=MODEL,
-        messages=messages,
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "report_output"}},
-        temperature=0.4,
-    )
+    with console.status("[bold green]Processing..."):
+        response = _create_chat_completion(
+            model=MODEL,
+            messages=messages,
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "report_output"}},
+            temperature=0.4,
+        )
     print_usage(response)
     if verbose:
         elapsed = time.perf_counter() - start
@@ -167,8 +168,9 @@ def main():
         console.print("[dim]No file provided — using sample notes...[/dim]\n")
         data = SAMPLE_NOTES
     else:
-        with open(parsed.input_file) as f:
-            data = json.load(f)
+        with console.status("[bold green]Processing..."):
+            with open(parsed.input_file) as f:
+                data = json.load(f)
 
     with console.status("[bold green]Generating report...[/bold green]"):
         report = generate_report(data, verbose=parsed.verbose)
