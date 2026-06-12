@@ -7,6 +7,7 @@ security vulnerabilities, performance, and best practices.
 import os
 import sys
 import json
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -31,6 +32,21 @@ def get_client() -> OpenAI:
 console: Console = Console()
 
 CHAT_MODEL = "gpt-4o-mini"
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if attempt < len(delays):
+                    time.sleep(delays[attempt])
+                else:
+                    raise last_exception
+    return wrapper
 
 REVIEW_SCHEMA: dict[str, Any] = {
     "name": "code_review",
@@ -125,6 +141,7 @@ def detect_language(file_path: str) -> str:
     return ""
 
 
+@retry_with_backoff
 def review_code(code: str, language: str = "", context: str = "") -> dict[str, Any]:
     lang_hint = f"Language: {language}\n" if language else ""
     ctx_hint = f"Context: {context}\n" if context else ""
