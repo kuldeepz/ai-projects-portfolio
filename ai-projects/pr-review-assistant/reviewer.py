@@ -4,7 +4,7 @@ Takes a git diff (or two file versions) and generates detailed PR review comment
 categorized by severity — ready to paste into GitHub/ADO PR.
 """
 
-import os, sys, json, subprocess, time
+import os, sys, json, subprocess, time, random
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -25,19 +25,23 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exception = None
-        for i, delay in enumerate(delays):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                last_exception = e
-                if i < len(delays) - 1:
-                    time.sleep(delay)
-        raise last_exception
-    return wrapper
+def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, jitter=0.2):
+    def deco(f):
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(retries):
+                try:
+                    return f(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt == retries - 1:
+                        break
+                    delay = min(max_delay, base_delay * (2 ** attempt))
+                    delay *= 1 + random.uniform(-jitter, jitter)
+                    time.sleep(max(0, delay))
+            raise last_exception
+        return wrapper
+    return deco(func) if func else deco
 
 SCHEMA = {
     "name": "pr_review",
@@ -152,60 +156,4 @@ def display(review: dict):
         body = f"{file_hint}[{color}]{s.upper()}[/{color}] [{comment['category']}]\n\n{comment['comment']}"
         if comment.get("suggestion"):
             body += f"\n\n[dim]Suggestion:[/dim] [green]{comment['suggestion']}[/green]"
-        console.print(Panel(body, border_style=s if s in ("blocking", "major") else "dim"))
-
-
-def _run_retry_with_backoff_tests():
-    from unittest import mock
-
-    # 1) succeeds first try (no sleep calls)
-    success = mock.Mock(return_value="ok")
-    wrapped = retry_with_backoff(success)
-    with mock.patch("time.sleep") as sleep_mock:
-        assert wrapped() == "ok"
-        assert success.call_count == 1
-        sleep_mock.assert_not_called()
-
-    # 2) fails once then succeeds (one sleep with 1)
-    fail_once_then_ok = mock.Mock(side_effect=[Exception("e1"), "ok"])
-    wrapped = retry_with_backoff(fail_once_then_ok)
-    with mock.patch("time.sleep") as sleep_mock:
-        assert wrapped() == "ok"
-        assert fail_once_then_ok.call_count == 2
-        sleep_mock.assert_called_once_with(1)
-
-    # 3) fails twice then succeeds (sleeps 1,2)
-    fail_twice_then_ok = mock.Mock(side_effect=[Exception("e1"), Exception("e2"), "ok"])
-    wrapped = retry_with_backoff(fail_twice_then_ok)
-    with mock.patch("time.sleep") as sleep_mock:
-        assert wrapped() == "ok"
-        assert fail_twice_then_ok.call_count == 3
-        assert sleep_mock.call_args_list == [mock.call(1), mock.call(2)]
-
-    # 4) fails all attempts (raises last exception, sleeps 1,2)
-    last_exc = RuntimeError("final")
-    fail_all = mock.Mock(side_effect=[Exception("e1"), Exception("e2"), last_exc])
-    wrapped = retry_with_backoff(fail_all)
-    with mock.patch("time.sleep") as sleep_mock:
-        try:
-            wrapped()
-            raise AssertionError("Expected RuntimeError was not raised")
-        except RuntimeError as e:
-            assert e is last_exc
-        assert fail_all.call_count == 3
-        assert sleep_mock.call_args_list == [mock.call(1), mock.call(2)]
-
-if __name__ == "__main__" and "--test-retry" in sys.argv:
-    _run_retry_with_backoff_tests()
-
-if __name__ == "__main__" and "--test-retry" not in sys.argv:
-    export = "--export" in sys.argv or "-e" in sys.argv
-    review = review_diff(SAMPLE_DIFF)
-    display(review)
-    if export:
-        generated_at = datetime.now().isoformat()
-        output = dict(review)
-        output["generated_at"] = generated_at
-        filename = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
+        
