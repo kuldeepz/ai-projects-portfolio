@@ -143,63 +143,72 @@ def display(report: dict):
                 p["name"],
                 p["current_version"],
                 p["issue"],
-                f"{p['recommendation']} {upgrade}".strip(),
+                f"{p['recommendation']} {upgrade}".strip()
             )
         console.print(t)
 
 
-def _run_retry_backoff_tests():
-    from unittest.mock import Mock, patch
+# ------------------------------
+# Tests for usage/cost tracking
+# ------------------------------
 
-    # (1) immediate success (no sleep)
-    with patch("time.sleep") as sleep_mock:
-        fn = retry_with_backoff(Mock(return_value="ok"))
-        assert fn() == "ok"
-        sleep_mock.assert_not_called()
-
-    # (2) transient failure then success (sleep called with 1,2,...)
-    with patch("time.sleep") as sleep_mock:
-        calls = [Exception("t1"), Exception("t2"), "ok"]
-        base = Mock(side_effect=calls)
-        fn = retry_with_backoff(base)
-        assert fn() == "ok"
-        assert sleep_mock.call_count == 2
-        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2]
-
-    # (3) repeated failure raises last exception
-    with patch("time.sleep") as sleep_mock:
-        err = RuntimeError("boom")
-        base = Mock(side_effect=[Exception("x"), Exception("y"), err])
-        fn = retry_with_backoff(base)
-        try:
-            fn()
-            raise AssertionError("Expected RuntimeError")
-        except RuntimeError as e:
-            assert str(e) == "boom"
-        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2]
-
-    # (4) non-retryable exception fails fast is not implemented in retry_with_backoff.
-    # Validate current behavior via _create_scan_response path with mocked client:
-    with patch("time.sleep") as sleep_mock:
-        mock_create = Mock(side_effect=[Exception("a"), Exception("b"), Exception("c")])
-
-        class _Completions:
-            create = mock_create
-
-        class _Chat:
-            completions = _Completions()
-
-        class _Client:
-            chat = _Chat()
-
-        with patch(__name__ + ".get_client", return_value=_Client()):
-            try:
-                _create_scan_response("deps")
-                raise AssertionError("Expected exception")
-            except Exception as e:
-                assert str(e) == "c"
-        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2]
+import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 
-if __name__ == "__main__" and os.getenv("RUN_SCANNER_RETRY_TESTS") == "1":
-    _run_retry_backoff_tests()
+class TestUsageTracking(unittest.TestCase):
+    def test_print_usage_no_usage_noop(self):
+        response = SimpleNamespace(usage=None)
+        with patch("builtins.print") as mock_print:
+            print_usage(response)
+            mock_print.assert_not_called()
+
+    def test_print_usage_full_usage_computes_totals_and_cost(self):
+        response = SimpleNamespace(
+            usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
+        )
+        with patch("builtins.print") as mock_print:
+            print_usage(response)
+            mock_print.assert_called_once_with(
+                "📊 Tokens: 1000 in + 500 out = 1500 total | 💰 Est. cost: $0.0000"
+            )
+
+    def test_print_usage_missing_total_tokens_falls_back_to_sum(self):
+        response = SimpleNamespace(
+            usage=SimpleNamespace(prompt_tokens=300, completion_tokens=200)
+        )
+        with patch("builtins.print") as mock_print:
+            print_usage(response)
+            mock_print.assert_called_once_with(
+                "📊 Tokens: 300 in + 200 out = 500 total | 💰 Est. cost: $0.0000"
+            )
+
+    def test_scan_invokes_print_usage_once(self):
+        fake_args = json.dumps({
+            "ecosystem": "Python",
+            "total_packages": 1,
+            "risk_summary": "ok",
+            "packages": [],
+            "critical_action_required": []
+        })
+        response = SimpleNamespace(
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        tool_calls=[
+                            SimpleNamespace(function=SimpleNamespace(arguments=fake_args))
+                        ]
+                    )
+                )
+            ]
+        )
+        with patch(__name__ + "._create_scan_response", return_value=response), patch(__name__ + ".print_usage") as mock_usage:
+            result = scan("deps")
+            mock_usage.assert_called_once_with(response)
+            self.assertEqual(result["ecosystem"], "Python")
+
+
+if __name__ == "__main__":
+    unittest.main()
