@@ -124,6 +124,10 @@ def test_main_validates_before_run_evaluation(monkeypatch):
 def test_main_export_writes_output_file(monkeypatch, tmp_path):
     calls = []
     written = {}
+    expected_result = {
+        "summary": {"passed": 1, "failed": 0},
+        "details": [{"id": 1, "result": "pass"}],
+    }
 
     def fake_validate_env():
         calls.append("validate_environment")
@@ -133,12 +137,13 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
 
     def fake_run(*args, **kwargs):
         calls.append("run")
-        return {"summary": {"passed": 1, "failed": 0}, "details": [{"id": 1, "result": "pass"}]}
+        return expected_result
 
     real_open = open
 
     def fake_open(path, mode="r", *args, **kwargs):
         if isinstance(path, str) and path.startswith("output_") and path.endswith(".json") and "w" in mode:
+            calls.append("export")
             written["path"] = path
             return real_open(tmp_path / path, mode, *args, **kwargs)
         return real_open(path, mode, *args, **kwargs)
@@ -157,21 +162,25 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
     except SystemExit:
         result = None
 
-    if written:
-        with open(tmp_path / written["path"], "r", encoding="utf-8") as f:
+    assert calls
+    assert calls[0] == "validate_environment"
+    assert "validate_suite" in calls
+    assert "run" in calls
+    assert calls.index("validate_suite") < calls.index("run")
+
+    if "path" in written:
+        assert "export" in calls
+        assert calls.index("run") < calls.index("export")
+        output_path = tmp_path / written["path"]
+        assert output_path.exists()
+
+        with open(output_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+
         assert "generated_at" in data
-        assert "summary" in data
-        assert "details" in data
+        assert data["summary"] == expected_result["summary"]
+        assert data["details"] == expected_result["details"]
     else:
         if isinstance(result, dict):
-            export_data = dict(result)
-            export_data["generated_at"] = "1970-01-01T00:00:00"
-            filename = "output_19700101_000000.json"
-            with open(tmp_path / filename, "w", encoding="utf-8") as f:
-                json.dump(export_data, f)
-            with open(tmp_path / filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            assert "generated_at" in data
-            assert "summary" in data
-            assert "details" in data
+            assert result["summary"] == expected_result["summary"]
+            assert result["details"] == expected_result["details"]
