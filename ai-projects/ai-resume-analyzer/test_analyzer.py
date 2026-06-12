@@ -7,6 +7,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from analyzer import extract_text_from_txt, score_color
@@ -63,6 +65,51 @@ def test_analysis_schema_structure():
     assert isinstance(mock_analysis["overall_score"], int)
     assert 1 <= mock_analysis["overall_score"] <= 100
     print("  [PASS] Analysis schema — all required keys present and valid")
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        "   ",
+        "\n\n",
+    ],
+)
+def test_txt_extraction_empty_string_inputs(content):
+    """Ensure TXT extraction handles empty or whitespace-only file content."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write(content)
+        tmp_path = f.name
+    try:
+        result = extract_text_from_txt(tmp_path)
+        assert isinstance(result, str)
+        assert result == content
+    finally:
+        os.unlink(tmp_path)
+
+
+@pytest.mark.parametrize("invalid_path", [None, "", "   "])
+def test_txt_extraction_none_and_invalid_path_inputs(invalid_path):
+    """Ensure TXT extraction raises an error for None/invalid path-like inputs."""
+    with pytest.raises((TypeError, ValueError, FileNotFoundError, OSError)):
+        extract_text_from_txt(invalid_path)
+
+
+@pytest.mark.parametrize(
+    "score,expected",
+    [
+        (80, "green"),
+        (79, "yellow"),
+        (60, "yellow"),
+        (59, "red"),
+        (100, "green"),
+        (-1, "red"),
+        (101, "green"),
+    ],
+)
+def test_score_color_boundary_edge_cases(score, expected):
+    """Validate score-to-color mapping at threshold and edge score values."""
+    assert score_color(score) == expected
 
 
 if __name__ == "__main__":
