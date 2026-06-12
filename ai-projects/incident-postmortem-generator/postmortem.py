@@ -1,6 +1,9 @@
 import pytest
+from rich.console import Console
 
 import postmortem
+
+console = Console()
 
 
 def test_validate_environment_exits_when_api_key_missing(monkeypatch):
@@ -10,8 +13,9 @@ def test_validate_environment_exits_when_api_key_missing(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    with pytest.raises(SystemExit) as exc:
-        postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        with pytest.raises(SystemExit) as exc:
+            postmortem.validate_environment()
 
     assert exc.value.code == 1
     assert any("OPENAI_API_KEY is not set" in m for m in printed)
@@ -24,8 +28,9 @@ def test_validate_environment_exits_when_no_input_files_provided(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    with pytest.raises(SystemExit) as exc:
-        postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        with pytest.raises(SystemExit) as exc:
+            postmortem.validate_environment()
 
     assert exc.value.code == 2
     assert any("Provide at least one input file" in m for m in printed)
@@ -39,8 +44,9 @@ def test_validate_environment_exits_when_path_not_found(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    with pytest.raises(SystemExit) as exc:
-        postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        with pytest.raises(SystemExit) as exc:
+            postmortem.validate_environment()
 
     assert exc.value.code == 1
     assert any("File not found: missing.json" in m for m in printed)
@@ -55,8 +61,9 @@ def test_validate_environment_exits_when_not_a_file(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    with pytest.raises(SystemExit) as exc:
-        postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        with pytest.raises(SystemExit) as exc:
+            postmortem.validate_environment()
 
     assert exc.value.code == 1
     assert any("Not a file: path" in m for m in printed)
@@ -72,8 +79,9 @@ def test_validate_environment_exits_when_unreadable_file(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    with pytest.raises(SystemExit) as exc:
-        postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        with pytest.raises(SystemExit) as exc:
+            postmortem.validate_environment()
 
     assert exc.value.code == 1
     assert any("File is not readable: incident.json" in m for m in printed)
@@ -89,7 +97,8 @@ def test_validate_environment_success_verbose(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        postmortem.validate_environment()
 
     assert any("Setup OK" in m for m in printed)
 
@@ -104,7 +113,8 @@ def test_validate_environment_success_non_verbose_no_setup_banner(monkeypatch):
     printed = []
     monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
 
-    postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        postmortem.validate_environment()
 
     assert not any("Setup OK" in m for m in printed)
 
@@ -123,7 +133,8 @@ def test_validate_environment_ignores_non_file_flag_arguments(monkeypatch):
     monkeypatch.setattr(postmortem.os.path, "isfile", lambda p: True)
     monkeypatch.setattr(postmortem.os, "access", lambda p, mode: True)
 
-    postmortem.validate_environment()
+    with console.status("[bold green]Processing..."):
+        postmortem.validate_environment()
 
     assert "incident.json" in checked
     assert "--mode" not in checked
