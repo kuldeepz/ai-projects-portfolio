@@ -11,9 +11,9 @@ import csv
 import io
 import time
 import random
-from functools import wraps
 from pathlib import Path
 from datetime import datetime
+from functools import wraps
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -38,26 +38,42 @@ def get_client() -> OpenAI:
     return _client
 
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[bold red]Setup error:[/bold red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
+        sys.exit(1)
+
+    path_args = [arg for arg in sys.argv[1:] if arg and not arg.startswith("-")]
+    for raw_arg in path_args:
+        candidate = Path(raw_arg)
+        if candidate.exists():
+            if not candidate.is_file():
+                console.print(f"[bold red]Setup error:[/bold red] Path is not a file: {candidate}")
+                sys.exit(1)
+            if not os.access(candidate, os.R_OK):
+                console.print(f"[bold red]Setup error:[/bold red] File is not readable: {candidate}")
+                sys.exit(1)
+
+    console.print("[bold green]Setup OK ✓[/bold green]")
+
+
 def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, jitter=0.2):
     def deco(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            last_exc = None
             for attempt in range(retries + 1):
                 try:
                     return f(*args, **kwargs)
-                except Exception as e:
-                    last_exc = e
+                except Exception:
                     if attempt == retries:
                         raise
                     delay = min(max_delay, base_delay * (2 ** attempt))
                     delay *= random.uniform(1 - jitter, 1 + jitter)
                     time.sleep(delay)
-            raise last_exc
-
         return wrapper
 
-    return deco(func) if func is not None else deco
+    return deco(func) if func else deco
 
 
 SENTIMENT_SCHEMA = {
