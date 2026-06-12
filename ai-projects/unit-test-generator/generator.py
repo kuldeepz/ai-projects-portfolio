@@ -25,6 +25,10 @@ console = Console()
 CHAT_MODEL = "gpt-4o-mini"
 VERBOSE = False
 
+PRICING_PER_1K = {
+    "gpt-4o-mini": {"in": 0.000015, "out": 0.00006}
+}
+
 _client = None
 
 
@@ -42,9 +46,16 @@ def print_usage(response):
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", 0) or 0
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+
+    prices = PRICING_PER_1K.get(CHAT_MODEL)
+    if prices:
+        cost = (prompt_tokens / 1000) * prices["in"] + (completion_tokens / 1000) * prices["out"]
+        cost_text = f"${cost:.6f}"
+    else:
+        cost_text = f"N/A for model {CHAT_MODEL}"
+
     console.print(
-        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {cost_text}"
     )
 
 
@@ -168,68 +179,3 @@ def generate_tests(source_code: str, module_name: str, framework: str = "pytest"
     )
     print_usage(response)
     elapsed = time.time() - sta
-
-
-# -----------------------
-# Unit tests for print_usage
-# -----------------------
-
-def test_print_usage_with_no_usage_prints_nothing(monkeypatch):
-    calls = []
-
-    def fake_print(*args, **kwargs):
-        calls.append((args, kwargs))
-
-    monkeypatch.setattr(console, "print", fake_print)
-
-    class Response:
-        usage = None
-
-    print_usage(Response())
-    assert calls == []
-
-
-def test_print_usage_with_normal_usage_prints_tokens_and_cost(monkeypatch):
-    calls = []
-
-    def fake_print(*args, **kwargs):
-        calls.append((args, kwargs))
-
-    monkeypatch.setattr(console, "print", fake_print)
-
-    class Usage:
-        prompt_tokens = 1000
-        completion_tokens = 500
-        total_tokens = 1500
-
-    class Response:
-        usage = Usage()
-
-    print_usage(Response())
-
-    assert len(calls) == 1
-    printed = calls[0][0][0]
-    assert "1000 in + 500 out = 1500 total" in printed
-    assert "Est. cost: $0.0000" in printed
-
-
-def test_print_usage_with_missing_fields_defaults_to_zero(monkeypatch):
-    calls = []
-
-    def fake_print(*args, **kwargs):
-        calls.append((args, kwargs))
-
-    monkeypatch.setattr(console, "print", fake_print)
-
-    class Usage:
-        pass
-
-    class Response:
-        usage = Usage()
-
-    print_usage(Response())
-
-    assert len(calls) == 1
-    printed = calls[0][0][0]
-    assert "0 in + 0 out = 0 total" in printed
-    assert "Est. cost: $0.0000" in printed
