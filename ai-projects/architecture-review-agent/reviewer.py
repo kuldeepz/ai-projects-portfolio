@@ -12,6 +12,8 @@ from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+import unittest
+from unittest.mock import Mock, patch
 
 load_dotenv()
 console = Console()
@@ -146,42 +148,46 @@ def display(review: dict):
 
     if review["strengths"]:
         console.print(Panel("\n".join(f"  [green]✔[/green] {s}" for s in review["strengths"]),
-                            title="[bold green]Strengths[/bold green]", border_style="green"))
+                            title="[bold green]Strengths[/bold green]"))
 
-    if review["single_points_of_failure"]:
-        console.print(Panel("\n".join(f"  [bold red]⚡ SPOF:[/bold red] {s}" for s in review["single_points_of_failure"]),
-                            title="[bold red]Single Points of Failure[/bold red]", border_style="red"))
 
-    t = Table(show_header=True, header_style="bold")
-    t.add_column("Severity", width=10); t.add_column("Category", width=15)
-    t.add_column("Risk", ratio=2); t.add_column("Mitigation", ratio=2)
-    for r in review["risks"]:
-        c = SEV_COLORS.get(r["severity"], "white")
-        t.add_row(f"[{c}]{r['severity'].upper()}[/{c}]", r["category"], r["risk"], r["mitigation"])
-    console.print(Panel(t, title="[bold red]Risks[/bold red]", border_style="red"))
+class TestRetryWithBackoff(unittest.TestCase):
+    def test_success_first_try_no_sleep(self):
+        fn = Mock(return_value="ok")
+        wrapped = retry_with_backoff(fn)
 
-    if review["well_architected_gaps"]:
-        wt = Table(show_header=True, header_style="bold magenta")
-        wt.add_column("Pillar"); wt.add_column("Gap", ratio=2); wt.add_column("Recommendation", ratio=2)
-        for g in review["well_architected_gaps"]:
-            wt.add_row(g["pillar"], g["gap"], g["recommendation"])
-        console.print(Panel(wt, title="[bold]Well-Architected Framework Gaps[/bold]", border_style="magenta"))
+        with patch("time.sleep") as sleep_mock:
+            result = wrapped()
 
-    console.print(Panel("\n".join(f"  [cyan]→[/cyan] {r}" for r in review["recommendations"]),
-                        title="[bold]Recommendations[/bold]", border_style="blue"))
-    console.print()
+        self.assertEqual(result, "ok")
+        self.assertEqual(fn.call_count, 1)
+        sleep_mock.assert_not_called()
 
-def main():
-    if len(sys.argv) < 2:
-        console.print("[dim]No file provided — reviewing sample architecture...[/dim]\n")
-        design = SAMPLE_DESIGN
-    else:
-        with open(sys.argv[1]) as f:
-            design = f.read()
+    def test_fail_then_success_retries_and_sleeps(self):
+        fn = Mock(side_effect=[Exception("e1"), Exception("e2"), "ok"])
+        wrapped = retry_with_backoff(fn)
 
-    with console.status("[bold green]Reviewing architecture...[/bold green]"):
-        review = review_architecture(design)
-    display(review)
+        with patch("time.sleep") as sleep_mock:
+            result = wrapped()
 
-if __name__ == "__main__":
-    main()
+        self.assertEqual(result, "ok")
+        self.assertEqual(fn.call_count, 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+        sleep_mock.assert_any_call(1)
+        sleep_mock.assert_any_call(2)
+
+    def test_retries_exhausted_raises_and_sleep_count(self):
+        err = Exception("always fail")
+        fn = Mock(side_effect=err)
+        wrapped = retry_with_backoff(fn)
+
+        with patch("time.sleep") as sleep_mock:
+            with self.assertRaises(Exception) as ctx:
+                wrapped()
+
+        self.assertIs(ctx.exception, err)
+        self.assertEqual(fn.call_count, 4)
+        self.assertEqual(sleep_mock.call_count, 3)
+        sleep_mock.assert_any_call(1)
+        sleep_mock.assert_any_call(2)
+        sleep_mock.assert_any_call(4)
