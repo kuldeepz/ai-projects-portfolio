@@ -17,7 +17,6 @@ from rich.table import Table
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
-VERBOSE = False
 
 _client = None
 def get_client():
@@ -74,10 +73,10 @@ def collect_code(target: str, max_chars: int = 8000) -> str:
             break
     return "\n".join(snippets)[:max_chars]
 
-def analyze(code: str, context: str = "") -> dict:
+def analyze(code: str, context: str = "", verbose: bool = False) -> dict:
     ctx = f"\nContext: {context}" if context else ""
     user_content = f"Analyze this code for technical debt:{ctx}\n\n```\n{code}\n```"
-    if VERBOSE:
+    if verbose:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input chars:[/dim] {len(user_content)}")
         console.print(f"[dim]Estimated input tokens:[/dim] {max(1, len(user_content) // 4)}")
@@ -99,7 +98,7 @@ def analyze(code: str, context: str = "") -> dict:
             tool_choice={"type": "function", "function": {"name": "tech_debt_report"}},
             temperature=0.2,
         )
-    if VERBOSE:
+    if verbose:
         elapsed = (datetime.now() - start).total_seconds()
         console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
@@ -131,22 +130,4 @@ def display(report: dict):
     console.print(Panel(t, title="[bold]Debt Items[/bold]", border_style="red"))
 
     if report["quick_wins"]:
-        console.print(Panel(
-            "\n".join(f"  [green]⚡[/green] {q}" for q in report["quick_wins"]),
-            title="[bold green]Quick Wins (< 1 day)[/bold green]", border_style="green"
-        ))
-    console.print()
-
-def validate_environment(argv):
-    global VERBOSE
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args, _ = parser.parse_known_args(argv)
-    VERBOSE = args.verbose
-
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.strip():
-        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
-        sys.exit(1)
-
-    parser = a
+        console.print(P
