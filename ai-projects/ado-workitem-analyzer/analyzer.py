@@ -8,11 +8,9 @@ Reads Azure DevOps work items (from JSON export or typed input) and:
 
 import os, sys, json
 import argparse
-import unittest
+import time
 from datetime import datetime
-from io import StringIO
-from types import SimpleNamespace
-from typing import Any, TypedDict, NotRequired, Protocol, cast
+from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -27,47 +25,6 @@ MODEL = "gpt-4o-mini"
 INPUT_RATE_PER_1M = 0.15
 OUTPUT_RATE_PER_1M = 0.60
 
-
-class WorkItem(TypedDict):
-    id: str
-    type: str
-    title: str
-    description: str
-    acceptance_criteria: str
-    story_points: NotRequired[int | None]
-    priority: str
-    assigned_to: str
-    sprint: str
-    tags: list[str]
-
-
-class AnalysisResult(TypedDict):
-    ready_score: int
-    missing_fields: list[str]
-    acceptance_criteria_issues: list[str]
-    improved_acceptance_criteria: str
-    story_point_suggestion: int
-    risks: list[str]
-    suggestions: list[str]
-    summary: str
-
-
-class ToolFunctionSchema(TypedDict):
-    name: str
-    description: str
-    parameters: dict[str, object]
-
-
-class _UsageLike(Protocol):
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-
-class _ResponseLike(Protocol):
-    usage: _UsageLike
-
-
 _client: OpenAI | None = None
 def get_client() -> OpenAI:
     global _client
@@ -75,8 +32,19 @@ def get_client() -> OpenAI:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                if attempt == len(delays):
+                    raise
+                time.sleep(delays[attempt])
+    return wrapper
 
-def print_usage(response: _ResponseLike) -> None:
+def print_usage(response: Any) -> None:
     usage = response.usage
     prompt_tokens = usage.prompt_tokens
     completion_tokens = usage.completion_tokens
@@ -86,7 +54,6 @@ def print_usage(response: _ResponseLike) -> None:
         + (completion_tokens / 1_000_000) * OUTPUT_RATE_PER_1M
     )
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
-
 
 def validate_environment(args: argparse.Namespace) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
@@ -109,8 +76,7 @@ def validate_environment(args: argparse.Namespace) -> None:
 
     console.print("[green]Setup OK ✓[/green]")
 
-
-SCHEMA: ToolFunctionSchema = {
+SCHEMA: dict[str, Any] = {
     "name": "workitem_analysis",
     "description": "Analysis of an ADO work item for completeness and quality",
     "parameters": {
@@ -130,8 +96,7 @@ SCHEMA: ToolFunctionSchema = {
     }
 }
 
-
-SAMPLE_WORK_ITEM: WorkItem = {
+SAMPLE_WORK_ITEM: dict[str, Any] = {
     "id": "WI-1042",
     "type": "User Story",
     "title": "As a user I want to login",
@@ -144,8 +109,8 @@ SAMPLE_WORK_ITEM: WorkItem = {
     "tags": []
 }
 
-
-def analyze_workitem(item: WorkItem) -> AnalysisResult:
+@retry_with_backoff
+def analyze_workitem(item: dict[str, Any]) -> dict[str, Any]:
     with console.status("[bold green]Calling OpenAI for analysis...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -162,10 +127,9 @@ def analyze_workitem(item: WorkItem) -> AnalysisResult:
             temperature=0.2,
         )
     print_usage(response)
-    return cast(AnalysisResult, json.loads(response.choices[0].message.tool_calls[0].function.arguments))
+    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-
-def display(item: WorkItem, analysis: AnalysisResult) -> None:
+def display(item: dict[str, Any], analysis: dict[str, Any]) -> None:
     score = analysis["ready_score"]
     color = "green" if score >= 75 else "yellow" if score >= 50 else "red"
     console.print()
@@ -183,15 +147,12 @@ def display(item: WorkItem, analysis: AnalysisResult) -> None:
 
     if analysis["acceptance_criteria_issues"]:
         console.print(Panel("\n".join(f"  [yellow]⚠[/yellow] {i}" for i in analysis["acceptance_criteria_issues"]),
-                            title="[bold yellow]Acceptance Criteria Issues[/bold yellow]", border_style="yellow"))
+                            title="[bold yellow]AC Issues[/bold yellow]", border_style="yellow"))
 
-    console.print(Panel(analysis["improved_acceptance_criteria"],
-                        title="[bold green]Improved Acceptance Criteria[/bold green]", border_style="green"))
+    console.print(Panel(
+        f"[green]{analysis['improved_acceptance_criteria']}[/green]",
+        title="[bold green]Improved Acceptance Criteria (BDD)[/bold green]", border_style="green"
+    ))
 
-    if analysis["risks"]:
-        console.print(Panel("\n".join(f"  • {r}" for r in analysis["risks"]),
-                            title="[bold magenta]Risks / Dependencies[/bold magenta]", border_style="magenta"))
 
-    if analysis["suggestions"]:
-        console.print(Panel("\n".join(f"  • {s}" for s in analysis["suggestions"]),
-                            title="[bold cyan]Suggestions[/bold cyan]", border_style="cyan"))
+# -------------------- Tests ------------------
