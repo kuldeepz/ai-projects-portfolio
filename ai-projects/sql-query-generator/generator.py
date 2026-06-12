@@ -4,7 +4,7 @@ import sys
 import time
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, TypedDict
 
 from rich.console import Console
 
@@ -15,6 +15,35 @@ except ImportError:  # pragma: no cover
 
 
 console: Console = Console()
+
+
+class UsageLike(Protocol):
+    input_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+
+
+class ResponseOutputItemLike(Protocol):
+    type: str | None
+    name: str | None
+    arguments: str
+
+
+class ResponseLike(Protocol):
+    usage: UsageLike | None
+    output: list[ResponseOutputItemLike]
+
+
+class ResponsesAPI(Protocol):
+    def create(self, **kwargs: Any) -> ResponseLike: ...
+
+
+class OpenAIClientLike(Protocol):
+    responses: ResponsesAPI
+
+
+class SQLResult(TypedDict):
+    sql: str
 
 
 def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -36,11 +65,11 @@ def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 @retry_with_backoff
-def _create_response(client: Any, **kwargs: Any) -> Any:
+def _create_response(client: OpenAIClientLike, **kwargs: Any) -> ResponseLike:
     return client.responses.create(**kwargs)
 
 
-def print_usage(response: Any) -> None:
+def print_usage(response: ResponseLike) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -53,7 +82,7 @@ def print_usage(response: Any) -> None:
     )
 
 
-def get_client() -> Any:
+def get_client() -> OpenAIClientLike:
     return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
@@ -81,7 +110,7 @@ def load_schema(schema_paths: list[str]) -> str:
         return "\n\n".join(parts)
 
 
-def generate_sql(prompt: str, schema_paths: list[str]) -> dict[str, str]:
+def generate_sql(prompt: str, schema_paths: list[str]) -> SQLResult:
     client = get_client()
 
     with console.status("Generating SQL..."):
@@ -186,5 +215,4 @@ class TestPrintUsage(unittest.TestCase):
 
     def test_print_usage_uses_provided_total_tokens(self) -> None:
         usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=999)
-        response = SimpleNamespace(usage=usage)
-     
+        
