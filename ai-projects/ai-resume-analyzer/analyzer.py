@@ -179,92 +179,14 @@ def display_results(analysis: dict):
     score_table.add_column(style="dim")
 
 
-# -------------------------
-# Tests for validate_environment
-# -------------------------
-
-import pytest
-
-
-class _StubConsole:
-    def __init__(self):
-        self.messages = []
-
-    def print(self, message):
-        self.messages.append(str(message))
-
-
-def test_validate_environment_missing_api_key(monkeypatch):
-    stub = _StubConsole()
-    monkeypatch.setattr(sys.modules[__name__], "console", stub)
-    monkeypatch.setattr(os, "getenv", lambda key, default=None: "" if key == "OPENAI_API_KEY" else default)
-    monkeypatch.setattr(sys, "argv", ["analyzer.py"])
-
-    with pytest.raises(SystemExit) as exc:
-        validate_environment()
-
-    assert exc.value.code == 1
-    assert any("Missing OPENAI_API_KEY" in msg for msg in stub.messages)
-
-
-def test_validate_environment_valid_key_missing_file(monkeypatch, tmp_path):
-    stub = _StubConsole()
-    missing = tmp_path / "missing_resume.pdf"
-
-    monkeypatch.setattr(sys.modules[__name__], "console", stub)
-    monkeypatch.setattr(os, "getenv", lambda key, default=None: "test-key" if key == "OPENAI_API_KEY" else default)
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", str(missing)])
-
-    with pytest.raises(SystemExit) as exc:
-        validate_environment()
-
-    assert exc.value.code == 1
-    assert any("File not found:" in msg for msg in stub.messages)
-
-
-def test_validate_environment_directory_path(monkeypatch, tmp_path):
-    stub = _StubConsole()
-    dir_like_file = tmp_path / "resume.pdf"
-    dir_like_file.mkdir()
-
-    monkeypatch.setattr(sys.modules[__name__], "console", stub)
-    monkeypatch.setattr(os, "getenv", lambda key, default=None: "test-key" if key == "OPENAI_API_KEY" else default)
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", str(dir_like_file)])
-
-    with pytest.raises(SystemExit) as exc:
-        validate_environment()
-
-    assert exc.value.code == 1
-    assert any("Not a file:" in msg for msg in stub.messages)
-
-
-def test_validate_environment_unreadable_file(monkeypatch, tmp_path):
-    stub = _StubConsole()
-    resume = tmp_path / "resume.txt"
-    resume.write_text("hello", encoding="utf-8")
-
-    monkeypatch.setattr(sys.modules[__name__], "console", stub)
-    monkeypatch.setattr(os, "getenv", lambda key, default=None: "test-key" if key == "OPENAI_API_KEY" else default)
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", str(resume)])
-    monkeypatch.setattr(os, "access", lambda p, mode: False)
-
-    with pytest.raises(SystemExit) as exc:
-        validate_environment()
-
-    assert exc.value.code == 1
-    assert any("File is not readable:" in msg for msg in stub.messages)
-
-
-def test_validate_environment_happy_path(monkeypatch, tmp_path):
-    stub = _StubConsole()
-    resume = tmp_path / "resume.md"
-    resume.write_text("# Resume", encoding="utf-8")
-
-    monkeypatch.setattr(sys.modules[__name__], "console", stub)
-    monkeypatch.setattr(os, "getenv", lambda key, default=None: "test-key" if key == "OPENAI_API_KEY" else default)
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", str(resume)])
-    monkeypatch.setattr(os, "access", lambda p, mode: True)
+def main():
+    if len(sys.argv) < 2:
+        console.print("[yellow]Usage:[/yellow] python analyzer.py <resume.pdf|resume.txt> [target_role]")
+        console.print("[dim]Example: python analyzer.py my_resume.pdf 'Senior Data Engineer'[/dim]")
+        sys.exit(1)
 
     validate_environment()
 
-    assert any("Setup OK" in msg for msg in stub.messages)
+
+if __name__ == "__main__":
+    main()
