@@ -22,14 +22,20 @@ def test_colors_and_icons():
     print("  [PASS] Colors and icons — all 4 sentiments covered")
 
 
-def test_score_bar_colors():
-    pos = score_bar(0.8)
-    neg = score_bar(-0.8)
-    neutral = score_bar(0.0)
-    assert "green" in pos
-    assert "red" in neg
-    assert "blue" in neutral
-    print("  [PASS] Score bar — correct colors for positive/negative/neutral")
+@pytest.mark.parametrize(
+    "value,expected_color",
+    [
+        (0.8, "green"),
+        (-0.8, "red"),
+        (0.0, "blue"),
+        (1.0, "green"),
+        (-1.0, "red"),
+    ],
+)
+def test_score_bar_colors(value, expected_color):
+    bar = score_bar(value)
+    assert expected_color in bar
+    print("  [PASS] Score bar — correct colors for positive/negative/neutral and boundaries")
 
 
 def test_save_batch_csv():
@@ -67,20 +73,6 @@ def test_process_batch_file():
         print("  [PASS] Process batch file — texts and labels parsed correctly")
     finally:
         os.unlink(tmp)
-
-
-@pytest.mark.parametrize(
-    "value,expected_color",
-    [
-        (1.0, "green"),
-        (-1.0, "red"),
-        (0.0, "blue"),
-    ],
-)
-def test_score_bar_boundary_values(value, expected_color):
-    """Covers boundary sentiment scores at min, max, and neutral midpoint."""
-    bar = score_bar(value)
-    assert expected_color in bar
 
 
 @pytest.mark.parametrize(
@@ -140,3 +132,4 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); sys.exit(1)
+
