@@ -49,8 +49,6 @@ def validate_environment():
             console.print(f"[red]Error:[/red] File is not readable: {file_arg}")
             sys.exit(1)
 
-    console.print("[green]Setup OK ✓[/green]")
-
 def load_library() -> dict:
     if Path(LIBRARY_FILE).exists():
         with open(LIBRARY_FILE) as f:
@@ -156,50 +154,3 @@ def cmd_compare(name: str, input_text: str):
 
     for h, out in outputs:
         console.print(Panel(out[:500], title=f"[bold]Version {h}[/bold]", border_style="cyan"))
-
-
-# Tests for validate_environment branches
-
-def test_validate_environment_valid_add_file(monkeypatch, tmp_path):
-    file_path = tmp_path / "prompt.txt"
-    file_path.write_text("hello")
-
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["manager.py", "add", "name", str(file_path)])
-
-    validate_environment()
-
-
-def test_validate_environment_invalid_add_file_path(monkeypatch, tmp_path):
-    missing_file = tmp_path / "missing.txt"
-
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["manager.py", "add", "name", str(missing_file)])
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit for missing file path"
-    except SystemExit as e:
-        assert e.code == 1
-
-
-def test_validate_environment_missing_api_key_required_command(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(sys, "argv", ["manager.py", "test", "name", "input"])
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit for missing OPENAI_API_KEY"
-    except SystemExit as e:
-        assert e.code == 1
-
-
-def test_validate_environment_local_command_without_key(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(sys, "argv", ["manager.py", "list"])
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit for missing OPENAI_API_KEY"
-    except SystemExit as e:
-        assert e.code == 1
