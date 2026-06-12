@@ -179,3 +179,7 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict:
     )
     print_usage(response)
     return {}
+
+
+if __name__ == "__main__":
+    validate_environment()
