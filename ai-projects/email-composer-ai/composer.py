@@ -21,6 +21,7 @@ from rich.table import Table
 load_dotenv()
 
 _client: OpenAI | None = None
+VERBOSE: bool = False
 
 
 class EmailOutput(TypedDict):
@@ -106,6 +107,18 @@ LENGTH_PROMPTS: dict[str, str] = {
 
 @retry_with_backoff
 def _create_chat_completion(**kwargs):
+    if VERBOSE:
+        model = kwargs.get("model", CHAT_MODEL)
+        messages = kwargs.get("messages", [])
+        input_chars = sum(len(str(message.get("content", ""))) for message in messages)
+        console.print(f"[dim]Model: {model}[/dim]")
+        console.print(f"[dim]Input size: {input_chars} chars[/dim]")
+        console.print("⏳ Calling OpenAI API...")
+        start = time.time()
+        response = get_client().chat.completions.create(**kwargs)
+        elapsed = time.time() - start
+        console.print(f"✅ Done in {elapsed:.1f}s")
+        return response
     return get_client().chat.completions.create(**kwargs)
 
 
@@ -245,6 +258,11 @@ def test_validate_env_and_path_success(monkeypatch):
     monkeypatch.setattr(os.path, "exists", lambda _p: True)
     monkeypatch.setattr(os.path, "isfile", lambda _p: True)
     monkeypatch.setattr(os, "access", lambda _p, _m: True)
-    monkeypatch.setattr(sys, "argv", ["composer.py", "input.txt"])
+    monkeypatch.setattr(sys, "argv", ["composer.py", "-v", "input.txt"])
 
-    assert _validate_env_and_path(sys.argv[1]) is True
+    global VERBOSE
+    VERBOSE = ("--verbose" in sys.argv) or ("-v" in sys.argv)
+
+    file_arg = next((arg for arg in sys.argv[1:] if not arg.startswith("-")), None)
+    assert file_arg is not None
+    assert _validate_env_and_path(file_arg) is True
