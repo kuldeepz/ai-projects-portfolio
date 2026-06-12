@@ -8,7 +8,10 @@ Reads Azure DevOps work items (from JSON export or typed input) and:
 
 import os, sys, json
 import argparse
+import unittest
 from datetime import datetime
+from io import StringIO
+from types import SimpleNamespace
 from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -133,12 +136,35 @@ def display(item: dict[str, Any], analysis: dict[str, Any]) -> None:
 
     if analysis["acceptance_criteria_issues"]:
         console.print(Panel("\n".join(f"  [yellow]⚠[/yellow] {i}" for i in analysis["acceptance_criteria_issues"]),
-                            title="[bold yellow]AC Issues[/bold yellow]", border_style="yellow"))
-
-    console.print(Panel(
-        f"[green]{analysis['improved_acceptance_criteria']}[/green]",
-        title="[bold green]Improved Acceptance Criteria (BDD)[/bold green]", border_style="green"
-    ))
+                            title="Acceptance Criteria Issues", border_style="yellow"))
 
 
-# -------------------- Tests ------------------
+class TestPrintUsage(unittest.TestCase):
+    def _capture_output(self, response: Any) -> str:
+        global console
+        old_console = console
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, color_system=None)
+        try:
+            print_usage(response)
+            return buf.getvalue().strip()
+        finally:
+            console = old_console
+
+    def test_print_usage_full_usage_present(self) -> None:
+        usage = SimpleNamespace(prompt_tokens=1_000_000, completion_tokens=500_000, total_tokens=1_500_000)
+        response = SimpleNamespace(usage=usage)
+        out = self._capture_output(response)
+        self.assertIn("📊 Tokens: 1000000 in + 500000 out = 1500000 total", out)
+        self.assertIn("💰 Est. cost: $0.4500", out)
+
+    def test_print_usage_missing_usage_raises(self) -> None:
+        response = SimpleNamespace()
+        with self.assertRaises(AttributeError):
+            print_usage(response)
+
+    def test_print_usage_null_token_fields_raise(self) -> None:
+        usage = SimpleNamespace(prompt_tokens=None, completion_tokens=None, total_tokens=None)
+        response = SimpleNamespace(usage=usage)
+        with self.assertRaises(TypeError):
+            print_usage(response)
