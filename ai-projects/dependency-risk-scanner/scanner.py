@@ -103,10 +103,7 @@ def retry_with_backoff(func):
                 if i == len(delays) - 1:
                     break
                 if VERBOSE:
-                    print(
-                        f"⚠️ Retryable error ({type(e).__name__}) on attempt {i + 1}/{len(delays)}; "
-                        f"retrying in {delay}s..."
-                    )
+                    print(f"🔁 Retry {i + 1}/{len(delays)} failed ({type(e).__name__}); waiting {delay}s...")
                 with console.status("[bold green]Processing..."):
                     time.sleep(delay)
         raise last_exc
