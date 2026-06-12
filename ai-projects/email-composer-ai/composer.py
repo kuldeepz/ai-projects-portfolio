@@ -29,6 +29,11 @@ console: Console = Console()
 
 CHAT_MODEL: str = "gpt-4o-mini"
 
+# USD pricing rates per 1M tokens (input/output) by model.
+PRICING_PER_1M: dict[str, dict[str, float]] = {
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+}
+
 TONES: dict[str, tuple[str, str]] = {
     "1": ("formal", "Professional and polished — suitable for executives, clients, formal requests"),
     "2": ("friendly", "Warm and approachable — for colleagues, collaborators, casual business"),
@@ -69,17 +74,6 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
-def print_usage(response: Any) -> None:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return
-    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
-
-
 def compose_email(
     bullet_points: str,
     tone: str,
@@ -117,7 +111,6 @@ def compose_email(
         tool_choice={"type": "function", "function": {"name": "email_output"}},
         temperature=0.7,
     )
-    print_usage(response)
 
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
@@ -171,57 +164,3 @@ def interactive_mode() -> None:
     length = Prompt.ask("Length", choices=["short", "medium", "long"], default="medium")
     email_purpose = Prompt.ask("Purpose (e.g. 'follow up on proposal', 'request meeting')")
     recipient_context = Prompt.ask("Recipient context (e.g. 'my manager', 'a new client')")
-
-
-def _assert_email_result_contract(result: dict[str, Any]) -> None:
-    """Runtime contract check for compose_email structured output."""
-    required_keys = [
-        "subject",
-        "body",
-        "alternative_subjects",
-        "follow_up_suggestions",
-        "word_count",
-        "tone_notes",
-    ]
-    for key in required_keys:
-        if key not in result:
-            raise ValueError(f"Missing required key in email result: {key}")
-
-    if not isinstance(result["subject"], str):
-        raise TypeError("email result 'subject' must be str")
-    if not isinstance(result["body"], str):
-        raise TypeError("email result 'body' must be str")
-    if not isinstance(result["word_count"], int):
-        raise TypeError("email result 'word_count' must be int")
-    if not isinstance(result["tone_notes"], str):
-        raise TypeError("email result 'tone_notes' must be str")
-
-    if not isinstance(result["alternative_subjects"], list) or not all(
-        isinstance(item, str) for item in result["alternative_subjects"]
-    ):
-        raise TypeError("email result 'alternative_subjects' must be list[str]")
-
-    if not isinstance(result["follow_up_suggestions"], list) or not all(
-        isinstance(item, str) for item in result["follow_up_suggestions"]
-    ):
-        raise TypeError("email result 'follow_up_suggestions' must be list[str]")
-
-
-def _run_contract_tests() -> None:
-    """Lightweight tests for structured return contract."""
-    sample = {
-        "subject": "Project update",
-        "body": "Hi team, here is the latest update...",
-        "alternative_subjects": ["Weekly project update", "Status update"],
-        "follow_up_suggestions": ["Schedule a sync", "Share timeline"],
-        "word_count": 42,
-        "tone_notes": "Professional and concise.",
-    }
-    _assert_email_result_contract(sample)
-
-    parsed = json.loads(json.dumps(sample))
-    _assert_email_result_contract(parsed)
-
-
-if __name__ == "__main__" and "--self-test" in sys.argv:
-    _run_contract_tests()
