@@ -1,9 +1,12 @@
 import io
+import json
 import random
 import sys
 import time
-from contextlib import nullcontext, redirect_stdout
+from contextlib import redirect_stdout
+from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from typing import Any
 
 from rich.console import Console
@@ -41,15 +44,13 @@ def retry_with_backoff(
     base_delay: float = 1.0,
     retry_exceptions: tuple[type[Exception], ...] = (Exception,),
     operation_name: str = "operation",
-    show_status: bool = False,
 ):
     def deco(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             for attempt in range(max_retries + 1):
                 status_msg = f"[bold green]{operation_name} (attempt {attempt + 1}/{max_retries + 1})..."
-                ctx = console.status(status_msg) if show_status else nullcontext()
-                with ctx:
+                with console.status(status_msg):
                     try:
                         return func(*args, **kwargs)
                     except retry_exceptions:
@@ -74,6 +75,30 @@ def _extract_verbose_flag(argv: list[str]) -> tuple[list[str], bool]:
     return cleaned, verbose
 
 
+def _extract_export_flag(argv: list[str]) -> tuple[list[str], bool]:
+    export = False
+    cleaned: list[str] = []
+    for arg in argv:
+        if arg in ("--export", "-e"):
+            export = True
+            continue
+        cleaned.append(arg)
+    return cleaned, export
+
+
+def _export_results(results: Any) -> Path:
+    generated_at = datetime.now().isoformat()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = Path(f"output_{timestamp}.json")
+    data = {
+        "results": results,
+        "generated_at": generated_at,
+    }
+    with output_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return output_path
+
+
 def review_code(api_call, payload: Any, status_msg: str = "Calling review API...") -> Any:
     if VERBOSE:
         print("[verbose] preparing API call")
@@ -88,8 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     global VERBOSE
     argv = list(sys.argv[1:] if argv is None else argv)
     argv, verbose = _extract_verbose_flag(argv)
+    argv, export = _extract_export_flag(argv)
     VERBOSE = verbose
-    # Existing behavior would continue using argv
+    if export:
+        _export_results({})
     return 0
 
 
