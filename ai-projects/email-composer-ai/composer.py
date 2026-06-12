@@ -7,7 +7,7 @@ Supports tone selection, length control, and follow-up suggestions.
 import os
 import sys
 import json
-from typing import Any
+from typing import Any, TypedDict
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -20,11 +20,14 @@ load_dotenv()
 
 _client: OpenAI | None = None
 
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+
 console: Console = Console()
 
 CHAT_MODEL: str = "gpt-4o-mini"
@@ -41,6 +44,16 @@ TONES: dict[str, tuple[str, str]] = {
     "4": ("empathetic", "Compassionate and understanding — for difficult conversations, apologies"),
     "5": ("persuasive", "Compelling and motivating — for pitches, proposals, calls to action"),
 }
+
+
+class EmailOutput(TypedDict):
+    subject: str
+    body: str
+    alternative_subjects: list[str]
+    follow_up_suggestions: list[str]
+    word_count: int
+    tone_notes: str
+
 
 EMAIL_SCHEMA: dict[str, Any] = {
     "name": "email_output",
@@ -81,7 +94,7 @@ def compose_email(
     sender_name: str,
     recipient_context: str,
     email_purpose: str,
-) -> dict[str, Any]:
+) -> EmailOutput:
     length_instruction = LENGTH_PROMPTS.get(length, LENGTH_PROMPTS["medium"])
 
     system_prompt = (
@@ -137,7 +150,7 @@ def print_usage(prompt_tokens: int, completion_tokens: int) -> None:
     )
 
 
-def display_result(result: dict[str, Any]) -> None:
+def display_result(result: EmailOutput) -> None:
     console.print()
     console.print(Panel(
         f"[bold white]{result['subject']}[/bold white]",
@@ -162,26 +175,4 @@ def display_result(result: dict[str, Any]) -> None:
     meta_table.add_column(style="dim")
     meta_table.add_column()
     meta_table.add_row("Word count", str(result["word_count"]))
-    meta_table.add_row("Tone applied", result["tone_notes"])
-    console.print(Panel(meta_table, title="[bold]Metadata[/bold]", border_style="dim"))
-    console.print()
-
-
-def interactive_mode() -> None:
-    """Guided interactive input mode."""
-    console.print(Panel.fit(
-        "[bold cyan]AI Email Composer[/bold cyan]\n[dim]Turn bullet points into polished emails[/dim]",
-        border_style="cyan"
-    ))
-
-    # Tone selection
-    console.print("\n[bold]Select tone:[/bold]")
-    for key, (name, desc) in TONES.items():
-        console.print(f"  [cyan]{key}[/cyan] — [bold]{name}[/bold]: [dim]{desc}[/dim]")
-
-    tone_key = Prompt.ask("\nTone", choices=list(TONES.keys()), default="1")
-    tone = TONES[tone_key][0]
-
-    length = Prompt.ask("Length", choices=["short", "medium", "long"], default="medium")
-    email_purpose = Prompt.ask("Purpose (e.g. 'follow up on proposal', 'request meeting')")
-    recipient_context = Prompt.ask("Recipient context (e.g. 'my manager', 'a new client')")
+    me
