@@ -172,6 +172,84 @@ def _create_scan_response(dep_content: str):
         )
         elapsed = time.time() - started
         print(f"✅ Done in {elapsed:.1f}s")
-        usage = getattr(response, "usage", None)
-        if usage:
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        print_usage(response)
+        return response
+
+    return get_client().chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": (
+                "You are a security engineer specializing in supply chain security. "
+                "Analyze dependency files for: known vulnerabilities (CVEs), deprecated packages, "
+                "packages with no recent maintenance, overly broad version pins, and security-sensitive "
+                "packages that need careful version management. Use your knowledge of package ecosystems "
+                "up to your training cutoff."
+            )},
+            {"role": "user", "content": f"Scan these dependencies for risks:\n\n{dep_content}"}
+        ],
+        tools=[{"type": "function", "function": SCHEMA}],
+        tool_choice={"type": "function", "function": {"name": "dependency_report"}},
+        temperature=0.1,
+    )
+
+
+def get_usage_text(script_name: str = "scanner.py") -> str:
+    return (
+        f"Usage: python {script_name} [dependency_file] [--export output.json] [--verbose|-v]"
+    )
+
+
+# ------------------------
+# Tests for verbose behavior
+# ------------------------
+
+def test_validate_environment_accepts_verbose_flags(monkeypatch, capsys):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(sys, "argv", ["scanner.py", "--verbose"])
+    validate_environment()
+    out = capsys.readouterr().out
+    assert "Setup OK" in out
+
+    monkeypatch.setattr(sys, "argv", ["scanner.py", "-v"])
+    validate_environment()
+    out = capsys.readouterr().out
+    assert "Setup OK" in out
+
+
+def test_usage_includes_verbose_flag():
+    usage = get_usage_text("scanner.py")
+    assert "--verbose|-v" in usage
+
+
+def test_create_scan_response_verbose_logs_and_returns(monkeypatch, capsys):
+    class DummyUsage:
+        prompt_tokens = 10
+        completion_tokens = 5
+        total_tokens = 15
+
+    class DummyResponse:
+        usage = DummyUsage()
+
+    class DummyCompletions:
+        @staticmethod
+        def create(**kwargs):
+            return DummyResponse()
+
+    class DummyChat:
+        completions = DummyCompletions()
+
+    class DummyClient:
+        chat = DummyChat()
+
+    monkeypatch.setattr(sys.modules[__name__], "VERBOSE", True)
+    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: DummyClient())
+    monkeypatch.setattr(time, "time", lambda: 100.0)
+
+    resp = _create_scan_response("flask==3.0.0")
+
+    assert isinstance(resp, DummyResponse)
+    out = capsys.readouterr().out
+    assert "🔧 Model:" in out
+    assert "⏳ Calling OpenAI API..." in out
+    assert "✅ Done in" in out
+    assert "📊 Tokens:" in out
