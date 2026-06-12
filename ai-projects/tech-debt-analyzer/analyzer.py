@@ -126,34 +126,51 @@ def display(report: dict):
 
 def main():
     if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export|-e]")
-        console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export[/dim]")
+        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export json] [--out <file>]")
+        console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export json --out report.json[/dim]")
         sys.exit(1)
-    args = sys.argv[1:]
-    export = False
-    if "--export" in args:
-        export = True
-        args.remove("--export")
-    if "-e" in args:
-        export = True
-        args.remove("-e")
-    target = args[0]
-    context = args[1] if len(args) > 1 else ""
-    if not os.path.exists(target):
-        console.print(f"[red]Not found:[/red] {target}"); sys.exit(1)
 
-    with console.status("[bold green]Collecting code and analyzing debt...[/bold green]"):
-        code = collect_code(target)
-        report = analyze(code, context)
+    args = sys.argv[1:]
+    export_format = None
+    output_path = None
+
+    if "--export" in args:
+        i = args.index("--export")
+        if i + 1 < len(args):
+            export_format = args[i + 1].lower()
+            del args[i:i + 2]
+        else:
+            console.print("[red]Error:[/red] --export requires a format value (e.g., json)")
+            sys.exit(1)
+
+    if "--out" in args:
+        i = args.index("--out")
+        if i + 1 < len(args):
+            output_path = args[i + 1]
+            del args[i:i + 2]
+        else:
+            console.print("[red]Error:[/red] --out requires a file path")
+            sys.exit(1)
+
+    if not args:
+        console.print("[red]Error:[/red] Missing target file or directory")
+        sys.exit(1)
+
+    target = args[0]
+    context = " ".join(args[1:]) if len(args) > 1 else ""
+
+    code = collect_code(target)
+    report = analyze(code, context)
     display(report)
 
-    if export:
-        generated_at = datetime.now().isoformat()
-        output = {**report, "generated_at": generated_at}
+    if export_format:
+        if export_format != "json":
+            console.print(f"[red]Error:[/red] Unsupported export format: {export_format}")
+            sys.exit(1)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"output_{timestamp}.json"
-        Path(filename).write_text(json.dumps(output, indent=2), encoding="utf-8")
-        console.print(f"[green]Exported:[/green] {filename}")
+        out = Path(output_path or f"output_{timestamp}.json")
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        console.print(f"[green]Exported report:[/green] {out}")
 
 if __name__ == "__main__":
     main()
