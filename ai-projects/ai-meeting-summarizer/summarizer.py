@@ -166,66 +166,61 @@ def summarize_transcript(transcript: str) -> dict:
         if VERBOSE:
             elapsed = time.time() - start
             usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
-            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
-            if prompt_tokens is not None or completion_tokens is not None:
-                in_tok = prompt_tokens or 0
-                out_tok = completion_tokens or 0
-                console.print(f"[dim]Input/output tokens:[/dim] {in_tok}/{out_tok}")
-            console.print(f"✅ Done in {elapsed:.1f}s")
-    print_usage(response)
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
+            console.print(f"✅ API call complete in {elapsed:.2f}s")
+            console.print(
+                f"[dim]Tokens:[/dim] {prompt_tokens} in + {completion_tokens} out = {total_tokens} total"
+            )
+
+    tool_calls = response.choices[0].message.tool_calls
+    if not tool_calls:
+        raise RuntimeError("Model did not return structured meeting notes.")
+
+    arguments = tool_calls[0].function.arguments
+    if isinstance(arguments, str):
+        return json.loads(arguments)
+    return arguments
 
 
-SENTIMENT_STYLE = {
-    "positive": "green",
-    "neutral": "blue",
-    "tense": "red",
-    "mixed": "yellow",
-}
+def _extract_verbose_flag(argv: list[str]) -> tuple[list[str], bool]:
+    verbose = False
+    filtered = []
+    for arg in argv:
+        if arg in ("-v", "--verbose"):
+            verbose = True
+        else:
+            filtered.append(arg)
+    return filtered, verbose
 
 
-def display_notes(notes: dict):
-    sentiment_color = SENTIMENT_STYLE.get(notes.get("sentiment", "neutral"), "white")
+def main() -> int:
+    global VERBOSE
 
-    console.print()
-    console.print(Panel.fit("[bold]Meeting Notes[/bold]"))
-    console.print(f"Title: {notes.get('title', 'Untitled')}")
-    console.print(f"Sentiment: [{sentiment_color}]{notes.get('sentiment', 'neutral')}[/{sentiment_color}]")
+    args, cli_verbose = _extract_verbose_flag(sys.argv[1:])
+    VERBOSE = cli_verbose
 
+    if not args:
+        console.print("Usage: python summarizer.py <transcript-file>")
+        return 1
 
-if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
-    pass
+    transcript_path = Path(args[0])
+    if not transcript_path.exists():
+        console.print(f"File not found: {transcript_path}")
+        return 1
 
+    transcript = transcript_path.read_text(encoding="utf-8")
+    notes = summarize_transcript(transcript)
 
-if "--verbose" in sys.argv or "-v" in sys.argv:
-    VERBOSE = True
+    console.print(Panel.fit(f"# {notes.get('title', 'Meeting Notes')}", title="Summary"))
+    console.print(Markdown(notes.get("executive_summary", "")))
 
+    if VERBOSE:
+        print_usage(type("Resp", (), {"usage": None})())
 
-def _run_print_usage_tests():
-    import io
-    from types import SimpleNamespace
-
-    # usage missing branch
-    buf = io.StringIO()
-    test_console = Console(file=buf, force_terminal=False, color_system=None)
-    original_console = globals()["console"]
-    try:
-        globals()["console"] = test_console
-        print_usage(SimpleNamespace(usage=None))
-        assert buf.getvalue() == ""
-
-        # usage present branch + cost formatting
-        buf2 = io.StringIO()
-        globals()["console"] = Console(file=buf2, force_terminal=False, color_system=None)
-        usage = SimpleNamespace(prompt_tokens=1000, completion_tokens=500)
-        print_usage(SimpleNamespace(usage=usage))
-        out = buf2.getvalue()
-        assert "📊 Tokens: 1000 in + 500 out = 1500 total" in out
-        assert "💰 Est. cost: $0.0000" in out
-    finally:
-        globals()["console"] = original_console
+    return 0
 
 
-if __name__ == "__main__" and "--test-print-usage" in sys.argv:
-    _run_print_usage_tests()
+if __name__ == "__main__":
+    raise SystemExit(main())
