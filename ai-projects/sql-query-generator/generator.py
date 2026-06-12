@@ -140,3 +140,53 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------
+# Unit tests for print_usage
+# ---------------------------
+
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+
+class TestPrintUsage(unittest.TestCase):
+    def test_print_usage_no_usage_prints_nothing(self):
+        response = SimpleNamespace(usage=None)
+        with patch.object(console, "print") as mock_print:
+            print_usage(response)
+        mock_print.assert_not_called()
+
+    def test_print_usage_fallback_total_tokens_when_missing(self):
+        usage = SimpleNamespace(input_tokens=100, output_tokens=50)
+        response = SimpleNamespace(usage=usage)
+        with patch.object(console, "print") as mock_print:
+            print_usage(response)
+        mock_print.assert_called_once()
+        message = mock_print.call_args[0][0]
+        self.assertIn("100 in + 50 out = 150 total", message)
+
+    def test_print_usage_uses_provided_total_tokens(self):
+        usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=999)
+        response = SimpleNamespace(usage=usage)
+        with patch.object(console, "print") as mock_print:
+            print_usage(response)
+        mock_print.assert_called_once()
+        message = mock_print.call_args[0][0]
+        self.assertIn("100 in + 50 out = 999 total", message)
+
+    def test_print_usage_contains_expected_counts_and_cost_format(self):
+        usage = SimpleNamespace(input_tokens=1000, output_tokens=500, total_tokens=1500)
+        response = SimpleNamespace(usage=usage)
+        with patch.object(console, "print") as mock_print:
+            print_usage(response)
+        mock_print.assert_called_once()
+        message = mock_print.call_args[0][0]
+        self.assertIn("📊 Tokens: 1000 in + 500 out = 1500 total", message)
+        self.assertIn("💰 Est. cost: $0.0000", message)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    if "unittest" in sys.modules:
+        pass
