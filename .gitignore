@@ -1,0 +1,43 @@
+# Secrets & environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Embedding caches generated at runtime
+*.cache.json
+
+# Generated output files
+*.md.bak
+report_*.md
+notes_*.md
+generated_queries.sql
+email_*.txt
+sentiment_results_*.csv
+test_*.py.bak
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
