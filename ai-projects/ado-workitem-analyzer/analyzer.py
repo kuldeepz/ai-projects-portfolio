@@ -34,6 +34,27 @@ def print_usage(response):
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
+def validate_environment(args):
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Setup error:[/red] OPENAI_API_KEY is not set or is empty.")
+        console.print("Set it in your environment or .env file, then try again.")
+        sys.exit(1)
+
+    for path_arg in [args.input]:
+        if path_arg:
+            if not os.path.exists(path_arg):
+                console.print(f"[red]Setup error:[/red] File does not exist: {path_arg}")
+                sys.exit(1)
+            if not os.path.isfile(path_arg):
+                console.print(f"[red]Setup error:[/red] Not a file: {path_arg}")
+                sys.exit(1)
+            if not os.access(path_arg, os.R_OK):
+                console.print(f"[red]Setup error:[/red] File is not readable: {path_arg}")
+                sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
 SCHEMA = {
     "name": "workitem_analysis",
     "description": "Analysis of an ADO work item for completeness and quality",
@@ -136,6 +157,8 @@ def main():
         help="Export analysis JSON to optional path",
     )
     args = parser.parse_args()
+
+    validate_environment(args)
 
     if args.input:
         try:
