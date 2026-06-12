@@ -1,145 +1,124 @@
-import os, sys, pytest
+import os
+import sys
 from pathlib import Path
-
-import analyzer
-
-
-def _set_api_key(monkeypatch: pytest.MonkeyPatch, value: str = "test-key") -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", value)
+from typing import Any, Dict, Optional
 
 
-def test_validate_environment_exits_when_api_key_missing(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+# Approx pricing defaults (USD per 1K tokens)
+PROMPT_COST_PER_1K = 0.005
+COMPLETION_COST_PER_1K = 0.015
+
+
+def validate_environment(input_file: Optional[str]) -> None:
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or not api_key.strip():
+        print("OPENAI_API_KEY is not set or is empty")
+        raise SystemExit(1)
+
+    if input_file is not None:
+        p = Path(input_file)
+        if not p.exists():
+            print(f"File not found: {p}")
+            raise SystemExit(1)
+        if not p.is_file():
+            print(f"Not a file: {p}")
+            raise SystemExit(1)
+        if not os.access(str(p), os.R_OK):
+            print(f"File is not readable: {p}")
+            raise SystemExit(1)
+
+    print("Setup OK")
+
+
+def calculate_estimated_cost(prompt_tokens: int, completion_tokens: int) -> float:
+    prompt_cost = (prompt_tokens / 1000.0) * PROMPT_COST_PER_1K
+    completion_cost = (completion_tokens / 1000.0) * COMPLETION_COST_PER_1K
+    return float(prompt_cost + completion_cost)
+
+
+def print_token_usage(
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    estimated_cost: float,
 ) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-    with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment(None)
-
-    assert exc.value.code == 1
-    out = capsys.readouterr().out
-    assert "OPENAI_API_KEY is not set or is empty" in out
-
-
-def test_validate_environment_exits_when_api_key_blank(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _set_api_key(monkeypatch, "   ")
-
-    with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment(None)
-
-    assert exc.value.code == 1
-    out = capsys.readouterr().out
-    assert "OPENAI_API_KEY is not set or is empty" in out
-
-
-def test_validate_environment_exits_for_missing_file_path(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _set_api_key(monkeypatch)
-    bad_path = tmp_path / "does_not_exist.json"
-
-    with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment(str(bad_path))
-
-    assert exc.value.code == 1
-    out = capsys.readouterr().out
-    assert "File not found" in out
-    assert str(bad_path) in out
-
-
-def test_validate_environment_exits_for_directory_path(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _set_api_key(monkeypatch)
-    dir_path = tmp_path / "data_dir"
-    dir_path.mkdir()
-
-    with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment(str(dir_path))
-
-    assert exc.value.code == 1
-    out = capsys.readouterr().out
-    assert "Not a file" in out
-    assert str(dir_path) in out
-
-
-def test_validate_environment_exits_for_unreadable_file(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _set_api_key(monkeypatch)
-    file_path = tmp_path / "input.json"
-    file_path.write_text("{}", encoding="utf-8")
-
-    monkeypatch.setattr(analyzer.os, "access", lambda p, m: False)
-
-    with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment(str(file_path))
-
-    assert exc.value.code == 1
-    out = capsys.readouterr().out
-    assert "File is not readable" in out
-    assert str(file_path) in out
-
-
-def test_validate_environment_success_with_valid_setup(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _set_api_key(monkeypatch)
-    file_path = tmp_path / "input.json"
-    file_path.write_text("{}", encoding="utf-8")
-
-    analyzer.validate_environment(str(file_path))
-
-    out = capsys.readouterr().out
-    assert "Setup OK" in out
-
-
-def test_print_token_usage_outputs_expected_values(capsys: pytest.CaptureFixture[str]) -> None:
-    analyzer.print_token_usage(
-        prompt_tokens=100,
-        completion_tokens=50,
-        total_tokens=150,
-        estimated_cost=0.0123,
+    print(
+        "Token usage -> "
+        f"prompt: {prompt_tokens}, "
+        f"completion: {completion_tokens}, "
+        f"total: {total_tokens}, "
+        f"estimated_cost_usd: {estimated_cost:.4f}"
     )
 
-    out = capsys.readouterr().out
-    assert "100" in out
-    assert "50" in out
-    assert "150" in out
-    assert "0.0123" in out or "0.012" in out
 
+def extract_token_usage(response: Any) -> Dict[str, int]:
+    usage = None
 
-def test_extract_usage_from_response_dict() -> None:
-    response = {
-        "usage": {
-            "prompt_tokens": 120,
-            "completion_tokens": 80,
-            "total_tokens": 200,
-        }
+    if isinstance(response, dict):
+        usage = response.get("usage")
+    else:
+        usage = getattr(response, "usage", None)
+
+    if usage is None:
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    if isinstance(usage, dict):
+        prompt = int(usage.get("prompt_tokens", 0) or 0)
+        completion = int(usage.get("completion_tokens", 0) or 0)
+        total = int(usage.get("total_tokens", prompt + completion) or 0)
+    else:
+        prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion = int(getattr(usage, "completion_tokens", 0) or 0)
+        total = int(getattr(usage, "total_tokens", prompt + completion) or 0)
+
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
     }
 
-    usage = analyzer.extract_token_usage(response)
 
-    assert usage["prompt_tokens"] == 120
-    assert usage["completion_tokens"] == 80
-    assert usage["total_tokens"] == 200
+def track_and_print_usage(response: Any, model_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    usage = None
+    if isinstance(response, dict):
+        usage = response.get("usage")
+    else:
+        usage = getattr(response, "usage", None)
 
+    if not usage:
+        return None
 
-def test_calculate_estimated_cost_returns_positive_float() -> None:
-    cost = analyzer.calculate_estimated_cost(
-        prompt_tokens=1000,
-        completion_tokens=500,
+    token_usage = extract_token_usage(response)
+    estimated_cost = calculate_estimated_cost(
+        prompt_tokens=token_usage["prompt_tokens"],
+        completion_tokens=token_usage["completion_tokens"],
     )
 
-    assert isinstance(cost, float)
-    assert cost >= 0
+    if model_name:
+        print(f"Model: {model_name}")
+
+    print_token_usage(
+        prompt_tokens=token_usage["prompt_tokens"],
+        completion_tokens=token_usage["completion_tokens"],
+        total_tokens=token_usage["total_tokens"],
+        estimated_cost=estimated_cost,
+    )
+
+    return {
+        "model": model_name,
+        "prompt_tokens": token_usage["prompt_tokens"],
+        "completion_tokens": token_usage["completion_tokens"],
+        "total_tokens": token_usage["total_tokens"],
+        "estimated_cost": estimated_cost,
+    }
+
+
+def create_response_with_usage_tracking(client: Any, model_name: str, **kwargs: Any) -> Any:
+    response = client.responses.create(model=model_name, **kwargs)
+    track_and_print_usage(response, model_name=model_name)
+    return response
+
+
+if __name__ == "__main__":
+    file_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    validate_environment(file_arg)
