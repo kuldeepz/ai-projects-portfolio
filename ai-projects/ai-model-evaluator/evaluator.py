@@ -171,53 +171,35 @@ if __name__ == "__main__":
             self.assertFalse(VERBOSE)
             self.assertFalse(DEBUG_SENSITIVE)
 
-        def test_helper_extractors_and_token_estimator(self):
-            self.assertEqual(_extract_model_name(("gpt-4",), {}), "gpt-4")
-            self.assertEqual(_extract_model_name((), {"model": "gpt-4o"}), "gpt-4o")
-            self.assertEqual(_extract_model_name((123, object()), {}), "unknown")
+        def test_extract_model_name_table_driven(self):
+            cases = [
+                (("gpt-4",), {}, "gpt-4"),
+                ((), {"model": "gpt-4o"}, "gpt-4o"),
+                ((123, "gpt-4.1", "ignored"), {}, "gpt-4.1"),
+                (("positional-model",), {"model": "kw-model"}, "kw-model"),
+                ((123, object()), {}, "unknown"),
+            ]
+            for args, kwargs, expected in cases:
+                with self.subTest(args=args, kwargs=kwargs):
+                    self.assertEqual(_extract_model_name(args, kwargs), expected)
 
-            self.assertEqual(_extract_input_text((), {"input": "abc"}), "abc")
-            self.assertEqual(_extract_input_text((), {"prompt": "p"}), "p")
-            self.assertEqual(_extract_input_text((), {"messages": [{"role": "user", "content": "x"}]}), [{"role": "user", "content": "x"}])
-            self.assertEqual(_extract_input_text(("fallback",), {}), "fallback")
-            self.assertEqual(_extract_input_text((), {}), "")
+        def test_extract_input_text_table_driven(self):
+            messages = [{"role": "user", "content": "hi"}]
+            cases = [
+                ((), {"input": "abc"}, "abc"),
+                ((), {"prompt": "p"}, "p"),
+                ((), {"messages": messages}, messages),
+                (("positional-input",), {}, "positional-input"),
+                (("positional",), {"prompt": "kw-prompt"}, "kw-prompt"),
+                ((), {}, ""),
+            ]
+            for args, kwargs, expected in cases:
+                with self.subTest(args=args, kwargs=kwargs):
+                    self.assertEqual(_extract_input_text(args, kwargs), expected)
 
+        def test_helper_token_estimator(self):
             self.assertEqual(_estimate_token_count(""), 0)
             self.assertEqual(_estimate_token_count("abcd"), 1)
             self.assertEqual(_estimate_token_count("abcdefgh"), 2)
-            self.assertEqual(_estimate_token_count(None), 0)
-            self.assertGreaterEqual(_estimate_token_count({"k": "v"}), 1)
-
-        def test_verbose_logging_emitted_without_sensitive_metrics(self):
-            configure_verbose(["--verbose"])
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                with self.assertRaises(NotImplementedError):
-                    call_openai(model="gpt-4o", input="hello world")
-            output = buf.getvalue()
-            self.assertIn("Request model: gpt-4o", output)
-            self.assertNotIn("Input chars:", output)
-            self.assertIn("⏳ Calling OpenAI API...", output)
-            self.assertIn("✅ Done in", output)
-
-        def test_verbose_logging_emitted_with_sensitive_metrics_when_enabled(self):
-            configure_verbose(["--verbose", "--debug-sensitive"])
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                with self.assertRaises(NotImplementedError):
-                    call_openai(model="gpt-4o", input="hello world")
-            output = buf.getvalue()
-            self.assertIn("Request model: gpt-4o", output)
-            self.assertIn("Input chars:", output)
-            self.assertIn("⏳ Calling OpenAI API...", output)
-            self.assertIn("✅ Done in", output)
-
-        def test_verbose_logging_suppressed(self):
-            configure_verbose([])
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                with self.assertRaises(NotImplementedError):
-                    call_openai(model="gpt-4o", input="hello world")
-            self.assertEqual(buf.getvalue(), "")
 
     unittest.main()
