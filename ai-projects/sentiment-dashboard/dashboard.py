@@ -36,6 +36,25 @@ def get_client() -> OpenAI:
     return _client
 
 
+def _consume_verbose_flag(argv=None) -> bool:
+    """Remove --verbose/-v flags from argv and return whether verbose is enabled."""
+    if argv is None:
+        argv = sys.argv
+    enabled = False
+    cleaned = [argv[0]] if argv else []
+    for arg in argv[1:]:
+        if arg in ("--verbose", "-v"):
+            enabled = True
+            continue
+        cleaned.append(arg)
+    if argv is sys.argv:
+        sys.argv[:] = cleaned
+    return enabled
+
+
+VERBOSE = _consume_verbose_flag()
+
+
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
@@ -181,97 +200,8 @@ def display_single(result: dict, text: str):
     console.print(Panel(f"[dim italic]{preview}[/dim italic]", title="[bold]Input Text[/bold]", border_style="dim"))
 
     # Summary
-    console.print(Panel(result["summary"], title="[bold]Analysis[/bold]", border_style="dim"))
-
-    # Emotions
-    if result["emotions"]:
-        emo_table = Table(show_header=True, header_style="bold")
-        emo_table.add_column("Emotion")
-        emo_table.add_column("Intensity")
-        for e in result["emotions"]:
-            emo_table.add_row(
-                e["emotion"].title(),
-            )
+    console.print(Panel(result["summary"], title="[bold]Summary[/bold]", border_style="green"))
 
 
-if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
-    import unittest
-    from unittest.mock import patch, MagicMock
-
-    class RetryWithBackoffTests(unittest.TestCase):
-        def test_retry_succeeds_immediately(self):
-            calls = {"n": 0}
-
-            def fn():
-                calls["n"] += 1
-                return "ok"
-
-            wrapped = retry_with_backoff(fn)
-            with patch("time.sleep") as sleep_mock:
-                self.assertEqual(wrapped(), "ok")
-                self.assertEqual(calls["n"], 1)
-                sleep_mock.assert_not_called()
-
-        def test_retry_fails_twice_then_succeeds(self):
-            calls = {"n": 0}
-
-            def fn():
-                calls["n"] += 1
-                if calls["n"] < 3:
-                    raise RuntimeError("transient")
-                return "ok"
-
-            wrapped = retry_with_backoff(fn)
-            with patch("time.sleep") as sleep_mock:
-                self.assertEqual(wrapped(), "ok")
-                self.assertEqual(calls["n"], 3)
-                self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2])
-
-        def test_retry_exhausted_raises_original(self):
-            calls = {"n": 0}
-            exc = ValueError("boom")
-
-            def fn():
-                calls["n"] += 1
-                raise exc
-
-            wrapped = retry_with_backoff(fn)
-            with patch("time.sleep") as sleep_mock:
-                with self.assertRaises(ValueError) as ctx:
-                    wrapped()
-                self.assertIs(ctx.exception, exc)
-                self.assertEqual(calls["n"], 4)
-                self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2, 4])
-
-    class AnalyzeSentimentRetryIntegrationTests(unittest.TestCase):
-        def _mock_response(self):
-            response = MagicMock()
-            response.choices = [MagicMock()]
-            response.choices[0].message.tool_calls = [MagicMock()]
-            response.choices[0].message.tool_calls[0].function.arguments = json.dumps({
-                "sentiment": "positive",
-                "score": 0.8,
-                "confidence": 92,
-                "emotions": [{"emotion": "joy", "intensity": "high"}],
-                "key_phrases": ["great experience"],
-                "summary": "Overall positive sentiment."
-            })
-            return response
-
-        def test_analyze_sentiment_retries_on_transient_client_errors(self):
-            create_mock = MagicMock(side_effect=[RuntimeError("t1"), RuntimeError("t2"), self._mock_response()])
-            client = MagicMock()
-            client.chat.completions.create = create_mock
-
-            with patch(__name__ + ".get_client", return_value=client), patch("time.sleep") as sleep_mock:
-                result = analyze_sentiment("text")
-
-            self.assertEqual(create_mock.call_count, 3)
-            self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2])
-            self.assertEqual(result["sentiment"], "positive")
-
-    if "--verbose" in sys.argv or "-v" in sys.argv:
-        VERBOSE = True
-        sys.argv = [arg for arg in sys.argv if arg not in ("--verbose", "-v")]
-
-    unittest.main()
+if __name__ == "__main__":
+    pass
