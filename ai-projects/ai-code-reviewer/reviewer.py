@@ -12,7 +12,7 @@ import random
 from functools import wraps
 from pathlib import Path
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -25,6 +25,50 @@ from rich.text import Text
 load_dotenv()
 
 _client: OpenAI | None = None
+
+
+class ReviewIssue(TypedDict):
+    severity: Literal["critical", "high", "medium", "low"]
+    issue: str
+    fix: str
+
+
+class PerformanceIssue(TypedDict):
+    issue: str
+    fix: str
+
+
+class ReviewResult(TypedDict, total=False):
+    language: str
+    overall_score: int
+    summary: str
+    security_issues: list[ReviewIssue]
+    bugs: list[ReviewIssue]
+    performance_issues: list[PerformanceIssue]
+    best_practice_violations: list[str]
+    positive_aspects: list[str]
+    refactored_snippet: str
+
+
+class JsonSchemaObject(TypedDict, total=False):
+    type: str
+    description: str
+    enum: list[str]
+    properties: dict[str, "JsonSchemaObject"]
+    items: "JsonSchemaObject"
+    required: list[str]
+
+
+class ReviewSchemaParameters(TypedDict):
+    type: str
+    properties: dict[str, JsonSchemaObject]
+    required: list[str]
+
+
+class ReviewSchema(TypedDict):
+    name: str
+    description: str
+    parameters: ReviewSchemaParameters
 
 
 def get_client() -> OpenAI:
@@ -67,7 +111,7 @@ def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, retry_exce
     return deco
 
 
-REVIEW_SCHEMA: dict[str, Any] = {
+REVIEW_SCHEMA: ReviewSchema = {
     "name": "code_review",
     "description": "Structured code review with findings across multiple categories",
     "parameters": {
@@ -161,7 +205,7 @@ def detect_language(file_path: str) -> str:
 
 
 @retry_with_backoff(max_retries=3, base_delay=1.0, retry_exceptions=(Exception,))
-def review_code(code: str, language: str = "", context: str = "") -> dict[str, Any]:
+def review_code(code: str, language: str = "", context: str = "") -> ReviewResult:
     lang_hint = f"Language: {language}\n" if language else ""
     ctx_hint = f"Context: {context}\n" if context else ""
 
@@ -174,17 +218,18 @@ def review_code(code: str, language: str = "", context: str = "") -> dict[str, A
                     "You are a senior software engineer conducting a thorough code review. "
                     "Review for: security vulnerabilities (SQL injection, XSS, secrets in code, etc.), "
                     "logic bugs, performance inefficiencies, and best practice violations. "
-                    "Be specific — point to the exact pattern or line causing each issue. "
-                    "For refactored_snippet, only include it if there are critical/high severity issues."
-                )
+                    "Be specific — point to the exact pattern or line causing each issue."
+                ),
             },
             {
                 "role": "user",
-                "content": f"{lang_hint}{ctx_hint}",
+                "content": f"{lang_hint}{ctx_hint}\n```\n{code}\n```",
             },
         ],
+        functions=[REVIEW_SCHEMA],
+        function_call={"name": "code_review"},
     )
 
     print_usage(response)
-    raw = response.choices[0].message.content or "{}"
-    return json.loads(raw)
+    args = response.choices[0].message.function_call.arguments
+    return json.loads(args)
