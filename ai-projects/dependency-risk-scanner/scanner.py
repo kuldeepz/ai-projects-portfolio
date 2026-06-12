@@ -175,9 +175,9 @@ def export_report(report: dict, output_path: str):
         json.dump(payload, f, indent=2)
 
 
-RISK_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim yellow", "ok": "green"}
-RISK_ICONS = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "ok": "✅"}
+def main():
+    export_enabled = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
 
 
-def display(report: dict):
-    pass
+if __name__ == "__main__":
+    main()
