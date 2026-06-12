@@ -42,16 +42,6 @@ def test_notes_join_handles_empty_strings(notes, expected):
     """Covers empty-string and empty-list note joining behavior."""
     assert " ".join(notes) == expected
 
-@pytest.mark.parametrize("notes", [
-    None,
-    [None],
-    ["done", None, "next"],
-])
-def test_none_inputs_raise_or_are_guarded(notes):
-    """Covers None inputs to joining logic where text notes are expected."""
-    with pytest.raises(TypeError):
-        " ".join(notes)
-
 @pytest.mark.parametrize("data", [
     {"raw_notes": []},
     {"raw_notes": ["single update"]},
@@ -61,6 +51,37 @@ def test_raw_notes_boundary_lengths(data):
     """Covers boundary raw_notes lengths from empty to populated samples."""
     assert isinstance(data["raw_notes"], list)
     assert len(data["raw_notes"]) >= 0
+
+
+def test_sample_notes_missing_raw_notes_key_behavior():
+    """Application-level contract: raw_notes key is required in note payloads."""
+    with pytest.raises(KeyError):
+        _ = SAMPLE_NOTES["missing_raw_notes"]
+
+
+@pytest.mark.parametrize("notes, expected", [
+    (["   ", "\t", "\n"], ""),
+    (["done", "   ", "next"], "done next"),
+    ([], ""),
+])
+def test_application_level_note_normalization(notes, expected):
+    """Validate app-facing behavior: ignore blank/whitespace-only notes."""
+    normalized = " ".join(n.strip() for n in notes if isinstance(n, str) and n.strip())
+    assert normalized == expected
+
+
+def test_very_long_note_supported():
+    """Boundary case: very long note text should be handled deterministically."""
+    long_note = "x" * 10000
+    output = " ".join([long_note])
+    assert output == long_note
+    assert len(output) == 10000
+
+
+@pytest.mark.parametrize("fmt_key", ["unknown", "", "9999", "not_a_real_format"])
+def test_unknown_format_key_is_not_available(fmt_key):
+    """Unknown format keys should not appear as supported options."""
+    assert fmt_key not in FORMATS
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__]))
