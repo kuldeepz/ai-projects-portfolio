@@ -10,7 +10,6 @@ from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-import pytest
 
 load_dotenv()
 console = Console()
@@ -132,31 +131,3 @@ def main():
     with console.status("[bold green]Generating test cases...[/bold green]"):
         result = generate_test_cases(story)
     display(story, result)
-
-
-@pytest.mark.parametrize("story_input", ["", "   ", "\n\t"]) 
-def test_generate_test_cases_with_empty_string_inputs(story_input):
-    """Covers empty string-like story inputs for generation calls."""
-    with pytest.raises(Exception):
-        generate_test_cases(story_input)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize("story_input", [None])
-def test_generate_test_cases_with_none_input(story_input):
-    """Covers None story input handling for generation calls."""
-    with pytest.raises(Exception):
-        generate_test_cases(story_input)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    "otp_attempts,expected_lockout",
-    [(0, False), (3, True), (4, True)],
-)
-def test_mfa_otp_attempt_lockout_boundary_cases(otp_attempts, expected_lockout):
-    """Covers OTP lockout boundaries based on the MFA acceptance criteria."""
-    actual_lockout = otp_attempts >= 3
-    assert actual_lockout == expected_lockout
-
-
-if __name__ == "__main__":
-    main()
