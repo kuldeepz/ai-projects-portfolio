@@ -139,24 +139,19 @@ def main():
     validate_environment()
 
     if len(sys.argv) < 2:
-        console.print("[dim]No file provided — using sample release data...[/dim]\n")
+        console.print("[dim]No file provided — using sample release data[/dim]")
         data = SAMPLE_ITEMS
     else:
-        with open(sys.argv[1]) as f:
+        with open(sys.argv[1], "r", encoding="utf-8") as f:
             data = json.load(f)
 
-    with console.status("[bold green]Generating release notes...[/bold green]"):
-        notes = generate_notes(data)
+    notes = generate_notes(data)
 
-    console.print()
-    console.print(Panel(Markdown(notes["full_markdown"]),
-                        title=f"[bold cyan]Release Notes — {notes['version']}[/bold cyan]",
-                        border_style="cyan", padding=(1, 2)))
-
-    out = f"release_notes_{notes['version'].replace('.','_')}.md"
-    with open(out, "w") as f:
-        f.write(notes["full_markdown"])
-    console.print(f"\n[green]Saved:[/green] {out}\n")
+    console.print(Panel.fit(
+        Markdown(notes.get("full_markdown", "")),
+        title=f"Release Notes {notes.get('version', '')}",
+        border_style="green"
+    ))
 
 if __name__ == "__main__":
     main()
