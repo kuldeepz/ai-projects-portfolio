@@ -7,6 +7,7 @@ Acts as a local prompt registry for AI teams.
 import os, sys, json, hashlib
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -15,19 +16,19 @@ from rich.table import Table
 from rich.syntax import Syntax
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
-LIBRARY_FILE = "prompt_library.json"
-VERBOSE = False
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
+LIBRARY_FILE: str = "prompt_library.json"
+VERBOSE: bool = False
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def call_openai(input_content: str, temperature: float = 0.3):
+def call_openai(input_content: str, temperature: float = 0.3) -> Any:
     if VERBOSE:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
@@ -44,7 +45,7 @@ def call_openai(input_content: str, temperature: float = 0.3):
         print_usage(response)
     return response
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -54,7 +55,7 @@ def print_usage(response):
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-def validate_environment():
+def validate_environment() -> None:
     cmd = sys.argv[1] if len(sys.argv) >= 2 else None
 
     api_required = {"test", "compare"}
@@ -86,11 +87,11 @@ def load_library() -> dict:
             return json.load(f)
     return {"prompts": {}}
 
-def save_library(lib: dict):
+def save_library(lib: dict) -> None:
     with open(LIBRARY_FILE, "w") as f:
         json.dump(lib, f, indent=2)
 
-def export_results(results: dict):
+def export_results(results: dict) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"output_{timestamp}.json"
     payload = dict(results)
@@ -99,7 +100,7 @@ def export_results(results: dict):
         json.dump(payload, f, indent=2)
     console.print(f"[green]Exported results[/green] to [bold]{filename}[/bold]")
 
-def cmd_add(name: str, prompt_text: str, description: str = "", tags: list = None):
+def cmd_add(name: str, prompt_text: str, description: str = "", tags: list | None = None) -> None:
     lib = load_library()
     version_hash = hashlib.md5(prompt_text.encode()).hexdigest()[:8]
     entry = lib["prompts"].get(name, {"name": name, "description": description, "tags": tags or [], "versions": []})
@@ -115,7 +116,7 @@ def cmd_add(name: str, prompt_text: str, description: str = "", tags: list = Non
     save_library(lib)
     console.print(f"[green]Added prompt[/green] [bold]{name}[/bold] (v{version_hash})")
 
-def cmd_list():
+def cmd_list() -> None:
     lib = load_library()
     if not lib["prompts"]:
         console.print("[dim]No prompts in library yet. Use 'add' to create one.[/dim]")
@@ -132,7 +133,7 @@ def cmd_list():
         )
     console.print(Panel(t, title="[bold]Prompt Library[/bold]", border_style="cyan"))
 
-def cmd_show(name: str):
+def cmd_show(name: str) -> None:
     lib = load_library()
     if name not in lib["prompts"]:
         console.print(f"[red]Prompt not found:[/red] {name}"); return
@@ -150,7 +151,7 @@ def cmd_show(name: str):
                     title="Test Result", border_style="dim"
                 ))
 
-def cmd_test(name: str, test_input: str):
+def cmd_test(name: str, test_input: str) -> str | None:
     lib = load_library()
     if name not in lib["prompts"]:
         console.print(f"[red]Prompt not found:[/red] {name}"); return None
@@ -175,7 +176,7 @@ def cmd_test(name: str, test_input: str):
     console.print(Panel(output_text, title=f"[bold]Test Output[/bold] {name} v{current_hash}", border_style="green"))
     return output_text
 
-def cmd_compare(name: str, input_text: str):
+def cmd_compare(name: str, input_text: str) -> dict | None:
     lib = load_library()
     if name not in lib["prompts"]:
         console.print(f"[red]Prompt not found:[/red] {name}")
