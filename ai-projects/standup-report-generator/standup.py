@@ -120,10 +120,11 @@ def main():
     console.print(f"\n[green]Saved:[/green] {out}\n")
 
     if parsed.export == "json":
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        now = datetime.now()
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
         export_out = parsed.export_out or f"output_{timestamp}.json"
         export_data = dict(report)
-        export_data["generated_at"] = datetime.now().isoformat()
+        export_data["generated_at"] = now.isoformat()
         with open(export_out, "w") as f:
             json.dump(export_data, f, indent=2)
         console.print(f"[green]Exported:[/green] {export_out}\n")
