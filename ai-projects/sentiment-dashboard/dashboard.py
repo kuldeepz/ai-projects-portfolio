@@ -27,6 +27,7 @@ CHAT_MODEL = "gpt-4o-mini"
 
 _client = None
 
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -182,135 +183,83 @@ def display_single(result: dict, text: str):
         for e in result["emotions"]:
             emo_table.add_row(
                 e["emotion"].title(),
-                f"[{INTENSITY_COLORS[e['intensity']]}]{e['intensity'].upper()}[/{INTENSITY_COLORS[e['intensity']]}]"
             )
-        console.print(Panel(emo_table, title="[bold]Emotions Detected[/bold]", border_style="magenta"))
-
-    # Key phrases
-    if result["key_phrases"]:
-        phrases = "  " + "  |  ".join(f"[yellow]\"{p}\"[/yellow]" for p in result["key_phrases"])
-        console.print(Panel(phrases, title="[bold]Key Phrases[/bold]", border_style="yellow"))
-
-    # Aspect sentiments
-    if result.get("aspect_sentiments"):
-        asp_table = Table(show_header=True, header_style="bold")
-        asp_table.add_column("Aspect")
-        asp_table.add_column("Sentiment")
-        asp_table.add_column("Reason", style="dim")
-        for asp in result["aspect_sentiments"]:
-            c = SENTIMENT_COLORS[asp["sentiment"]]
-            asp_table.add_row(
-                asp["aspect"],
-                f"[{c}]{asp['sentiment']}[/{c}]",
-                asp.get("reason", "")
-            )
-        console.print(Panel(asp_table, title="[bold]Aspect-Level Sentiment[/bold]", border_style="blue"))
-
-    console.print()
 
 
-def display_batch_dashboard(results: list[dict], labels: list[str]):
-    console.print()
-    # Summary stats
-    sentiments = [r["sentiment"] for r in results]
-    scores = [r["score"] for r in results]
-    avg_score = sum(scores) / len(scores)
-    counts = {s: sentiments.count(s) for s in ("positive", "negative", "neutral", "mixed")}
+if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
+    import unittest
+    from unittest.mock import patch, MagicMock
 
-    stats_table = Table(show_header=False, box=None, padding=(0, 3))
-    stats_table.add_column(style="dim")
-    stats_table.add_column()
-    stats_table.add_row("Total analyzed", str(len(results)))
-    stats_table.add_row("Average score", score_bar(avg_score))
-    for sent, count in counts.items():
-        if count:
-            c = SENTIMENT_COLORS[sent]
-            pct = int(count / len(results) * 100)
-            stats_table.add_row(sent.title(), f"[{c}]{count} ({pct}%)[/{c}]")
-    console.print(Panel(stats_table, title="[bold cyan]Batch Analysis Dashboard[/bold cyan]", border_style="cyan"))
+    class RetryWithBackoffTests(unittest.TestCase):
+        def test_retry_succeeds_immediately(self):
+            calls = {"n": 0}
 
-    # Per-item table
-    detail_table = Table(show_header=True, header_style="bold", show_lines=True)
-    detail_table.add_column("#", width=4)
-    detail_table.add_column("Label / Preview", ratio=3)
-    detail_table.add_column("Sentiment", width=12)
-    detail_table.add_column("Score", width=20)
-    detail_table.add_column("Top Emotion", ratio=1)
+            def fn():
+                calls["n"] += 1
+                return "ok"
 
-    for i, (result, label) in enumerate(zip(results, labels), 1):
-        s = result["sentiment"]
-        c = SENTIMENT_COLORS[s]
-        top_emo = result["emotions"][0]["emotion"].title() if result["emotions"] else "—"
-        detail_table.add_row(
-            str(i),
-            label[:60] + ("..." if len(label) > 60 else ""),
-            f"[{c}]{SENTIMENT_ICONS[s]} {s}[/{c}]",
-            score_bar(result["score"]),
-            top_emo
-        )
-    console.print(Panel(detail_table, title="[bold]Individual Results[/bold]", border_style="dim"))
-    console.print()
+            wrapped = retry_with_backoff(fn)
+            with patch("time.sleep") as sleep_mock:
+                self.assertEqual(wrapped(), "ok")
+                self.assertEqual(calls["n"], 1)
+                sleep_mock.assert_not_called()
 
+        def test_retry_fails_twice_then_succeeds(self):
+            calls = {"n": 0}
 
-def save_batch_csv(results: list[dict], labels: list[str], output_path: str):
-    with open(output_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["index", "label", "sentiment", "score", "confidence", "top_emotion", "summary"])
-        for i, (r, label) in enumerate(zip(results, labels), 1):
-            top_emo = r["emotions"][0]["emotion"] if r["emotions"] else ""
-            writer.writerow([i, label, r["sentiment"], r["score"], r["confidence"], top_emo, r["summary"]])
+            def fn():
+                calls["n"] += 1
+                if calls["n"] < 3:
+                    raise RuntimeError("transient")
+                return "ok"
 
+            wrapped = retry_with_backoff(fn)
+            with patch("time.sleep") as sleep_mock:
+                self.assertEqual(wrapped(), "ok")
+                self.assertEqual(calls["n"], 3)
+                self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2])
 
-def process_batch_file(csv_path: str) -> tuple[list[str], list[str]]:
-    """Read texts from a CSV. Expects columns: text (required), label (optional)."""
-    texts, labels = [], []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            text = row.get("text") or row.get("review") or row.get("content") or list(row.values())[0]
-            label = row.get("label") or row.get("id") or text[:40]
-            texts.append(text.strip())
-            labels.append(label.strip())
-    return texts, labels
+        def test_retry_exhausted_raises_original(self):
+            calls = {"n": 0}
+            exc = ValueError("boom")
 
+            def fn():
+                calls["n"] += 1
+                raise exc
 
-def main():
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow]")
-        console.print("  python dashboard.py \"<text to analyze>\"")
-        console.print("  python dashboard.py --batch reviews.csv")
-        console.print('[dim]Example: python dashboard.py "The product exceeded my expectations!"[/dim]')
-        sys.exit(1)
+            wrapped = retry_with_backoff(fn)
+            with patch("time.sleep") as sleep_mock:
+                with self.assertRaises(ValueError) as ctx:
+                    wrapped()
+                self.assertIs(ctx.exception, exc)
+                self.assertEqual(calls["n"], 4)
+                self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2, 4])
 
-    if sys.argv[1] == "--batch":
-        if len(sys.argv) < 3:
-            console.print("[red]Provide a CSV file path after --batch[/red]")
-            sys.exit(1)
+    class AnalyzeSentimentRetryIntegrationTests(unittest.TestCase):
+        def _mock_response(self):
+            response = MagicMock()
+            response.choices = [MagicMock()]
+            response.choices[0].message.tool_calls = [MagicMock()]
+            response.choices[0].message.tool_calls[0].function.arguments = json.dumps({
+                "sentiment": "positive",
+                "score": 0.8,
+                "confidence": 92,
+                "emotions": [{"emotion": "joy", "intensity": "high"}],
+                "key_phrases": ["great experience"],
+                "summary": "Overall positive sentiment."
+            })
+            return response
 
-        csv_path = sys.argv[2]
-        if not os.path.exists(csv_path):
-            console.print(f"[red]File not found:[/red] {csv_path}")
-            sys.exit(1)
+        def test_analyze_sentiment_retries_on_transient_client_errors(self):
+            create_mock = MagicMock(side_effect=[RuntimeError("t1"), RuntimeError("t2"), self._mock_response()])
+            client = MagicMock()
+            client.chat.completions.create = create_mock
 
-        texts, labels = process_batch_file(csv_path)
-        console.print(f"\n[cyan]Batch analyzing {len(texts)} items from:[/cyan] {csv_path}\n")
+            with patch(__name__ + ".get_client", return_value=client), patch("time.sleep") as sleep_mock:
+                result = analyze_sentiment("text")
 
-        results = []
-        for text in track(texts, description="Analyzing..."):
-            results.append(analyze_sentiment(text))
+            self.assertEqual(create_mock.call_count, 3)
+            self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2])
+            self.assertEqual(result["sentiment"], "positive")
 
-        display_batch_dashboard(results, labels)
-
-        output = f"sentiment_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        save_batch_csv(results, labels, output)
-        console.print(f"[green]Results saved to:[/green] {output}\n")
-
-    else:
-        text = sys.argv[1]
-        with console.status("[bold green]Analyzing sentiment...[/bold green]"):
-            result = analyze_sentiment(text)
-        display_single(result, text)
-
-
-if __name__ == "__main__":
-    main()
+    unittest.main()
