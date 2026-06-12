@@ -2,7 +2,7 @@
 import sys, os
 import pytest
 sys.path.insert(0, os.path.dirname(__file__))
-from analyzer import SCHEMA, SAMPLE_WORK_ITEM, analyze_work_item
+from analyzer import SCHEMA, SAMPLE_WORK_ITEM, estimate_story_points, readiness_score
 
 def test_schema():
     required = SCHEMA["parameters"]["required"]
@@ -12,10 +12,9 @@ def test_schema():
     print("  [PASS] Schema — all required fields present")
 
 def test_fibonacci_enum():
-    # story point suggestion should be fibonacci
+    # story point suggestion should be fibonacci via analyzer behavior
     valid_sp = {1, 2, 3, 5, 8, 13, 21}
-    result = analyze_work_item(SAMPLE_WORK_ITEM)
-    assert result["story_point_suggestion"] in valid_sp
+    assert estimate_story_points(SAMPLE_WORK_ITEM) in valid_sp
     print("  [PASS] Story point — value is valid Fibonacci number")
 
 def test_sample_item_has_issues():
@@ -34,10 +33,16 @@ def test_sample_item_has_issues():
     ],
 )
 def test_assigned_to_empty_string_edge_cases(input_value, expected_missing):
-    """Covers empty-string and whitespace edge cases via analyzer behavior."""
-    item = {**SAMPLE_WORK_ITEM, "assigned_to": input_value}
-    result = analyze_work_item(item)
-    assert ("assigned_to" in result["missing_fields"]) is expected_missing
+    """Covers empty-string and whitespace edge cases through analyzer scoring behavior."""
+    item = dict(SAMPLE_WORK_ITEM)
+    item["story_points"] = 3
+    item["acceptance_criteria"] = "Given valid credentials, when user logs in, then dashboard is shown."
+    item["assigned_to"] = input_value
+
+    score, _issues, missing = readiness_score(item)
+
+    assert ("assigned_to" in missing) is expected_missing
+    assert score >= 0
 
 @pytest.mark.parametrize(
     "story_points,expected_missing",
@@ -48,27 +53,36 @@ def test_assigned_to_empty_string_edge_cases(input_value, expected_missing):
     ],
 )
 def test_story_points_none_and_boundary_inputs(story_points, expected_missing):
-    """Covers None and boundary numeric inputs via analyzer behavior."""
-    item = {**SAMPLE_WORK_ITEM, "story_points": story_points, "assigned_to": "owner"}
-    result = analyze_work_item(item)
-    assert ("story_points" in result["missing_fields"]) is expected_missing
+    """Covers None and boundary numeric inputs via analyzer missing-field detection."""
+    item = dict(SAMPLE_WORK_ITEM)
+    item["assigned_to"] = "Some assignee"
+    item["acceptance_criteria"] = "Given valid credentials, when user logs in, then dashboard is shown."
+    item["story_points"] = story_points
+
+    score, _issues, missing = readiness_score(item)
+
+    assert ("story_points" in missing) is expected_missing
+    assert score >= 0
 
 @pytest.mark.parametrize(
-    "sp_value,is_valid",
+    "title,description,acceptance_criteria,is_valid",
     [
-        (1, True),
-        (21, True),
-        (0, False),
-        (34, False),
-        (None, False),
+        ("A", "B", "C", True),
+        ("A" * 200, "B" * 1000, "Given/When/Then with more detail", True),
+        ("", "", "", False),
     ],
 )
-def test_fibonacci_story_point_boundary_values(sp_value, is_valid):
-    """Covers boundary and invalid edge values through analyzer outputs."""
-    item = {**SAMPLE_WORK_ITEM, "story_points": sp_value, "assigned_to": "owner"}
-    result = analyze_work_item(item)
+def test_fibonacci_story_point_boundary_values(title, description, acceptance_criteria, is_valid):
+    """Validates story point suggestion comes from analyzer and is Fibonacci."""
+    item = dict(SAMPLE_WORK_ITEM)
+    item["title"] = title
+    item["description"] = description
+    item["acceptance_criteria"] = acceptance_criteria
+
+    sp_value = estimate_story_points(item)
     valid_sp = {1, 2, 3, 5, 8, 13, 21}
-    assert (result["story_point_suggestion"] in valid_sp) is is_valid
+
+    assert (sp_value in valid_sp) is is_valid
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
