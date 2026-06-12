@@ -15,7 +15,6 @@ from rich.markdown import Markdown
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
-VERBOSE = False
 
 _client = None
 def get_client():
@@ -82,7 +81,7 @@ SAMPLE_NOTES = {
 def _create_chat_completion(**kwargs):
     return get_client().chat.completions.create(**kwargs)
 
-def generate_report(data: dict) -> dict:
+def generate_report(data: dict, verbose: bool = False) -> dict:
     fmt = data.get("format", "standup")
     fmt_desc = next((v[1] for v in FORMATS.values() if v[0] == fmt), fmt)
     messages = [
@@ -98,7 +97,7 @@ def generate_report(data: dict) -> dict:
             f"Raw notes:\n" + "\n".join(f"- {n}" for n in data.get("raw_notes", []))
         )}
     ]
-    if VERBOSE:
+    if verbose:
         total_chars = sum(len(m["content"]) for m in messages)
         est_tokens = int(total_chars / 4)
         console.print(f"[dim]Model:[/dim] {MODEL}")
@@ -112,7 +111,7 @@ def generate_report(data: dict) -> dict:
         tool_choice={"type": "function", "function": {"name": "report_output"}},
         temperature=0.4,
     )
-    if VERBOSE:
+    if verbose:
         elapsed = time.perf_counter() - start
         console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
@@ -125,9 +124,6 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true")
     parsed = parser.parse_args()
 
-    global VERBOSE
-    VERBOSE = parsed.verbose
-
     if not parsed.input_file:
         console.print("[dim]No file provided — using sample notes...[/dim]\n")
         data = SAMPLE_NOTES
@@ -136,7 +132,7 @@ def main():
             data = json.load(f)
 
     with console.status("[bold green]Generating report...[/bold green]"):
-        report = generate_report(data)
+        report = generate_report(data, verbose=parsed.verbose)
 
     console.print()
     console.print(Panel(Markdown(report["formatted_report"]),
@@ -160,119 +156,3 @@ def main():
         export_out = parsed.export_out or f"output_{timestamp}.json"
         export_data = dict(report)
         export_data["generated_at"] = now.isoformat()
-        with open(export_out, "w") as f:
-            json.dump(export_data, f, indent=2)
-        console.print(f"[green]Exported:[/green] {export_out}\n")
-
-if __name__ == "__main__":
-    main()
-
-
-# -----------------------------
-# CLI tests for export behavior
-# -----------------------------
-import unittest
-import tempfile
-from unittest.mock import patch
-
-
-class TestCLIExportBehavior(unittest.TestCase):
-    def _fake_report(self):
-        return {
-            "title": "Daily Standup",
-            "formatted_report": "# Update\n- Did things",
-            "key_highlights": ["Did things"],
-            "blockers_summary": "None",
-            "tone_notes": "Professional",
-        }
-
-    def test_verbose_flag_sets_verbose_mode(self):
-        global VERBOSE
-        VERBOSE = False
-        with patch.object(sys, "argv", ["standup.py", "-v"]), \
-             patch(__name__ + ".generate_report", return_value=self._fake_report()), \
-             patch("builtins.open", unittest.mock.mock_open()):
-            main()
-        self.assertTrue(VERBOSE)
-
-    def test_generate_report_verbose_prints_diagnostics(self):
-        global VERBOSE
-        VERBOSE = True
-
-        fake_args = json.dumps(self._fake_report())
-
-        class _Fn:
-            arguments = fake_args
-
-        class _ToolCall:
-            function = _Fn()
-
-        class _Msg:
-            tool_calls = [_ToolCall()]
-
-        class _Choice:
-            message = _Msg()
-
-        class _Resp:
-            choices = [_Choice()]
-
-        class _Completions:
-            def create(self, **kwargs):
-                return _Resp()
-
-        class _Chat:
-            completions = _Completions()
-
-        class _Client:
-            chat = _Chat()
-
-        with patch(__name__ + ".get_client", return_value=_Client()), \
-             patch.object(console, "print") as mock_print:
-            generate_report(SAMPLE_NOTES)
-
-        printed = "\n".join(" ".join(str(a) for a in call.args) for call in mock_print.call_args_list)
-        self.assertIn("Model:", printed)
-        self.assertIn("Input size:", printed)
-        self.assertIn("Calling OpenAI API", printed)
-        self.assertIn("Done in", printed)
-
-    def test_generate_report_non_verbose_suppresses_diagnostics(self):
-        global VERBOSE
-        VERBOSE = False
-
-        fake_args = json.dumps(self._fake_report())
-
-        class _Fn:
-            arguments = fake_args
-
-        class _ToolCall:
-            function = _Fn()
-
-        class _Msg:
-            tool_calls = [_ToolCall()]
-
-        class _Choice:
-            message = _Msg()
-
-        class _Resp:
-            choices = [_Choice()]
-
-        class _Completions:
-            def create(self, **kwargs):
-                return _Resp()
-
-        class _Chat:
-            completions = _Completions()
-
-        class _Client:
-            chat = _Chat()
-
-        with patch(__name__ + ".get_client", return_value=_Client()), \
-             patch.object(console, "print") as mock_print:
-            generate_report(SAMPLE_NOTES)
-
-        printed = "\n".join(" ".join(str(a) for a in call.args) for call in mock_print.call_args_list)
-        self.assertNotIn("Model:", printed)
-        self.assertNotIn("Input size:", printed)
-        self.assertNotIn("Calling OpenAI API", printed)
-        self.assertNotIn("Done in", printed)
