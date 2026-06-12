@@ -2,7 +2,7 @@ import io
 import random
 import sys
 import time
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 from functools import wraps
 from typing import Any
 
@@ -41,13 +41,15 @@ def retry_with_backoff(
     base_delay: float = 1.0,
     retry_exceptions: tuple[type[Exception], ...] = (Exception,),
     operation_name: str = "operation",
+    show_status: bool = False,
 ):
     def deco(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             for attempt in range(max_retries + 1):
                 status_msg = f"[bold green]{operation_name} (attempt {attempt + 1}/{max_retries + 1})..."
-                with console.status(status_msg):
+                ctx = console.status(status_msg) if show_status else nullcontext()
+                with ctx:
                     try:
                         return func(*args, **kwargs)
                     except retry_exceptions:
