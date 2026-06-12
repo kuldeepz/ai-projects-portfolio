@@ -134,20 +134,4 @@ def main():
     if not ns.file:
         console.print("[dim]No file provided — using sample discussion...[/dim]\n")
         discussion = SAMPLE_DISCUSSION
-        adr_num = "001"
-    else:
-        with console.status("[bold green]Processing...[/bold green]"):
-            with open(ns.file) as f:
-                discussion = f.read()
-        adr_num = ns.adr_num
-
-    with console.status("[bold green]Generating ADR...[/bold green]"):
-        adr = create_adr(discussion, adr_num)
-
-    console.print()
-    console.print(Panel(Markdown(adr["full_markdown"]),
-                        title=f"[bold cyan]ADR-{adr_num}: {adr['title']}[/bold cyan]",
-                        border_style="cyan"))
-
-
-
+        adr_num = ""
