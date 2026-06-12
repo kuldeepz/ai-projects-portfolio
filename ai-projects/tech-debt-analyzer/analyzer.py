@@ -134,30 +134,35 @@ def main():
     export_format = None
     output_path = None
 
-    if "--export" in args:
-        i = args.index("--export")
-        if i + 1 < len(args):
+    if "--export" in args or "-e" in args:
+        flag = "--export" if "--export" in args else "-e"
+        i = args.index(flag)
+        if i + 1 >= len(args) or args[i + 1].startswith("-"):
+            export_format = "json"
+            del args[i]
+        else:
             export_format = args[i + 1].lower()
             del args[i:i + 2]
-        else:
-            console.print("[red]Error:[/red] --export requires a format value (e.g., json)")
-            sys.exit(1)
 
     if "--out" in args:
         i = args.index("--out")
-        if i + 1 < len(args):
-            output_path = args[i + 1]
-            del args[i:i + 2]
-        else:
+        if i + 1 >= len(args):
             console.print("[red]Error:[/red] --out requires a file path")
             sys.exit(1)
+        output_path = args[i + 1]
+        del args[i:i + 2]
 
     if not args:
-        console.print("[red]Error:[/red] Missing target file or directory")
+        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export json] [--out <file>]")
+        console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export json --out report.json[/dim]")
         sys.exit(1)
 
     target = args[0]
     context = " ".join(args[1:]) if len(args) > 1 else ""
+
+    if not Path(target).exists():
+        console.print(f"[red]Error:[/red] Target not found: {target}")
+        sys.exit(1)
 
     code = collect_code(target)
     report = analyze(code, context)
@@ -167,10 +172,11 @@ def main():
         if export_format != "json":
             console.print(f"[red]Error:[/red] Unsupported export format: {export_format}")
             sys.exit(1)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out = Path(output_path or f"output_{timestamp}.json")
-        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-        console.print(f"[green]Exported report:[/green] {out}")
+        out_file = output_path or f"tech_debt_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        export_payload = dict(report)
+        export_payload["generated_at"] = datetime.now().isoformat()
+        Path(out_file).write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
+        console.print(f"[green]Exported report to:[/green] {out_file}")
 
 if __name__ == "__main__":
     main()
