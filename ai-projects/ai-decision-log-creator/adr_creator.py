@@ -100,7 +100,7 @@ def create_adr(discussion: str, adr_number: str = "001") -> dict:
         console.print(f"[dim]Input tokens (est):[/dim] {max(1, len(prompt) // 4)}")
         console.print("⏳ Calling OpenAI API...")
         start = time.perf_counter()
-    with console.status("[bold green]Calling OpenAI to generate ADR...[/bold green]"):
+    with console.status("[bold green]Processing...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -134,3 +134,27 @@ def main():
 
     if not ns.file:
         console.print("[dim]No file provided — using sample discussion...[/dim]")
+        discussion = SAMPLE_DISCUSSION
+    else:
+        path = Path(ns.file)
+        if not path.exists():
+            console.print(f"[red]File not found:[/red] {ns.file}")
+            sys.exit(1)
+        discussion = path.read_text(encoding="utf-8")
+
+    adr = create_adr(discussion, ns.adr_num)
+
+    if ns.export:
+        out_path = Path(f"adr-{ns.adr_num}.json")
+        out_path.write_text(json.dumps(adr, indent=2), encoding="utf-8")
+        console.print(f"[green]Exported JSON:[/green] {out_path}")
+        return
+
+    markdown = adr.get("full_markdown", "")
+    if markdown:
+        console.print(Panel(Markdown(markdown), title=f"ADR {ns.adr_num}"))
+    else:
+        console.print_json(json.dumps(adr))
+
+if __name__ == "__main__":
+    main()
