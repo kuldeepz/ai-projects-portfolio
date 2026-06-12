@@ -39,6 +39,35 @@ def get_client() -> OpenAI:
     return _client
 
 
+def validate_environment(args=None) -> None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("❌ OPENAI_API_KEY is missing. Set it in your environment or .env file.")
+        raise SystemExit(1)
+
+    paths_to_check = []
+    if args is not None:
+        for attr in ("file", "input_file", "transcript_file", "path"):
+            if hasattr(args, attr):
+                value = getattr(args, attr)
+                if value:
+                    paths_to_check.append(value)
+
+    for raw_path in paths_to_check:
+        path = Path(raw_path)
+        if not path.exists():
+            console.print(f"❌ File not found: {path}")
+            raise SystemExit(1)
+        if not path.is_file():
+            console.print(f"❌ Not a file: {path}")
+            raise SystemExit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"❌ File is not readable: {path}")
+            raise SystemExit(1)
+
+    console.print("Setup OK ✓")
+
+
 def print_usage(response) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
