@@ -117,6 +117,7 @@ def test_save_batch_csv_edge_and_none_labels(result, label, expected_sentiment):
             rows = list(csv.DictReader(f))
         assert len(rows) == 1
         assert rows[0]["sentiment"] == expected_sentiment
+        assert rows[0]["label"] == ("" if label is None else label)
     finally:
         os.unlink(tmp)
 
