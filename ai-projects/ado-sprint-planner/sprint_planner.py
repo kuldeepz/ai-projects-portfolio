@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -18,15 +19,20 @@ the optimal sprint composition with story point distribution.
 """
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
 
 
-def retry_with_backoff(max_attempts=3, base_delay=1, factor=2, retryable_exceptions=(Exception,)):
-    def deco(func):
+def retry_with_backoff(
+    max_attempts: int = 3,
+    base_delay: int = 1,
+    factor: int = 2,
+    retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def deco(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exc = None
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exc: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
@@ -43,17 +49,17 @@ def retry_with_backoff(max_attempts=3, base_delay=1, factor=2, retryable_excepti
     return deco
 
 
-_client = None
+_client: OpenAI | None = None
 
 
-def get_client():
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
 
-SCHEMA = {
+SCHEMA: dict[str, Any] = {
     "name": "sprint_plan",
     "description": "AI-generated sprint plan",
     "parameters": {
@@ -102,7 +108,7 @@ SCHEMA = {
     },
 }
 
-SAMPLE_BACKLOG = {
+SAMPLE_BACKLOG: dict[str, Any] = {
     "team": {"name": "Phoenix", "velocity": 40, "capacity_this_sprint": 36, "members": 5},
     "sprint_number": 15,
     "items": [
@@ -118,7 +124,7 @@ SAMPLE_BACKLOG = {
 }
 
 
-def parse_export_arg(argv):
+def parse_export_arg(argv: list[str]) -> tuple[list[str], str | None]:
     args = argv[:]
     export_path = None
 
@@ -136,7 +142,7 @@ def parse_export_arg(argv):
 
 
 @retry_with_backoff()
-def plan_sprint(data: dict) -> dict:
+def plan_sprint(data: dict[str, Any]) -> dict[str, Any]:
     response = get_client().chat.completions.create(
         model=MODEL,
         messages=[
@@ -157,7 +163,7 @@ def plan_sprint(data: dict) -> dict:
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
-def display(data: dict, plan: dict):
+def display(data: dict[str, Any], plan: dict[str, Any]) -> None:
     team = data["team"]
     util = plan["capacity_utilization_pct"]
     color = "green" if util <= 95 else "yellow" if util <= 105 else "red"
@@ -174,7 +180,7 @@ def display(data: dict, plan: dict):
     console.print(Panel(f"[italic bold]{plan['sprint_goal']}[/italic bold]", title="[bold]Sprint Goal[/bold]"))
 
 
-def export_output(filename: str, output: dict):
+def export_output(filename: str, output: dict[str, Any]) -> None:
     try:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2)
