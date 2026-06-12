@@ -7,7 +7,7 @@ import time
 from typing import Any, Callable
 
 from dotenv import load_dotenv
-from openai import OpenAI, APIConnectionError, RateLimitError, APITimeoutError, APIError
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
