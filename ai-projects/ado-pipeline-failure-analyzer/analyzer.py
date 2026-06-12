@@ -6,7 +6,7 @@ and provides a step-by-step remediation plan.
 
 import os, sys, json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, NotRequired, Literal, Protocol, cast
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -18,15 +18,61 @@ load_dotenv()
 console: Console = Console()
 MODEL: str = "gpt-4o-mini"
 
+
+class UsageLike(Protocol):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class ResponseLike(Protocol):
+    usage: UsageLike | None
+
+
+class FixStep(TypedDict):
+    step: int
+    action: str
+    command: NotRequired[str]
+
+
+class Diagnosis(TypedDict):
+    failure_stage: str
+    root_cause: str
+    error_type: Literal[
+        "compilation_error",
+        "test_failure",
+        "dependency_error",
+        "config_error",
+        "permission_error",
+        "timeout",
+        "network_error",
+        "resource_error",
+        "unknown",
+    ]
+    severity: Literal["blocking", "warning", "flaky"]
+    affected_files: NotRequired[list[str]]
+    fix_steps: list[FixStep]
+    prevention_tips: list[str]
+    estimated_fix_time: NotRequired[str]
+
+
+class JsonSchema(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, object]
+
+
 _client: OpenAI | None = None
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def print_usage(response: Any) -> None:
-    usage = getattr(response, "usage", None)
+
+def print_usage(response: ResponseLike) -> None:
+    usage = response.usage
     if not usage:
         return
     prompt_tokens = usage.prompt_tokens
@@ -35,7 +81,8 @@ def print_usage(response: Any) -> None:
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-SCHEMA: dict[str, Any] = {
+
+SCHEMA: JsonSchema = {
     "name": "pipeline_diagnosis",
     "description": "Root cause analysis of a failed CI/CD pipeline",
     "parameters": {
@@ -94,7 +141,7 @@ ModuleNotFoundError: No module named 'stripe'
 ##[section]Finishing: Run tests
 """
 
-def analyze_log(log: str) -> dict[str, Any]:
+def analyze_log(log: str) -> Diagnosis:
     response = get_client().chat.completions.create(
         model=MODEL,
         messages=[
@@ -108,10 +155,10 @@ def analyze_log(log: str) -> dict[str, Any]:
         tool_choice={"type": "function", "function": {"name": "pipeline_diagnosis"}},
         temperature=0.1,
     )
-    print_usage(response)
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+    print_usage(cast(ResponseLike, response))
+    return cast(Diagnosis, json.loads(response.choices[0].message.tool_calls[0].function.arguments))
 
-def display(diagnosis: dict[str, Any]) -> None:
+def display(diagnosis: Diagnosis) -> None:
     sev_color = {"blocking": "red", "warning": "yellow", "flaky": "blue"}.get(diagnosis["severity"], "white")
     console.print()
     console.print(Panel.fit(
@@ -136,27 +183,4 @@ def display(diagnosis: dict[str, Any]) -> None:
                             title="[bold]Affected Files[/bold]", border_style="yellow"))
 
     console.print(Panel("\n".join(f"  [dim]→[/dim] {p}" for p in diagnosis["prevention_tips"]),
-                        title="[bold]Prevention Tips[/bold]", border_style="dim"))
-
-    if diagnosis.get("estimated_fix_time"):
-        console.print(f"\n[dim]Estimated fix time:[/dim] [bold]{diagnosis['estimated_fix_time']}[/bold]\n")
-
-def main() -> None:
-    if len(sys.argv) < 2:
-        console.print("[dim]No log file provided — analyzing sample failure log...[/dim]\n")
-        log = SAMPLE_LOG
-    elif sys.argv[1] == "-":
-        log = sys.stdin.read()
-    else:
-        with open(sys.argv[1]) as f:
-            log = f.read()
-
-    if len(log) > 8000:
-        log = log[-8000:]  # keep the tail — failures are usually at the end
-
-    with console.status("[bold green]Analyzing pipeline log...[/bold green]"):
-        diagnosis = analyze_log(log)
-    display(diagnosis)
-
-if __name__ == "__main__":
-    main()
+                        title="[bold blue]Prevention Tips[/bold blue]", border_style="blue"))
