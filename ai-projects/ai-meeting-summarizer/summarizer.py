@@ -4,6 +4,7 @@ Takes a raw meeting transcript (text file or pasted text) and produces
 structured meeting notes: summary, action items, decisions, key topics, attendees.
 """
 
+import argparse
 import os
 import sys
 import json
@@ -169,32 +170,32 @@ def summarize_transcript(transcript: str) -> dict:
             prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
             completion_tokens = getattr(usage, "completion_tokens", 0) or 0
             total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
-            console.print(f"✅ API call complete in {elapsed:.2f}s")
             console.print(
-                f"[dim]Tokens:[/dim] prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}"
+                f"[dim]API call:[/dim] {elapsed:.2f}s | "
+                f"tokens {prompt_tokens}+{completion_tokens}={total_tokens}"
             )
 
-    message = response.choices[0].message
-    tool_calls = getattr(message, "tool_calls", None)
+    tool_calls = response.choices[0].message.tool_calls or []
     if not tool_calls:
-        raise ValueError("Model did not return structured tool output")
-    args = tool_calls[0].function.arguments
-    if isinstance(args, str):
-        return json.loads(args)
-    return args
+        raise RuntimeError("Model did not return structured meeting notes")
+
+    arguments = tool_calls[0].function.arguments
+    return json.loads(arguments)
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args, remaining = parser.parse_known_args(argv)
+    return args, remaining
+
+
+def main() -> None:
+    global VERBOSE
+    args, remaining = parse_args()
+    VERBOSE = args.verbose
+    sys.argv = [sys.argv[0], *remaining]
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python summarizer.py <transcript_file> [-v|--verbose]")
-        sys.exit(1)
-
-    VERBOSE = "-v" in sys.argv or "--verbose" in sys.argv
-    transcript_path = next((a for a in sys.argv[1:] if a not in {"-v", "--verbose"}), None)
-    if not transcript_path:
-        print("Usage: python summarizer.py <transcript_file> [-v|--verbose]")
-        sys.exit(1)
-
-    text = Path(transcript_path).read_text(encoding="utf-8")
-    notes = summarize_transcript(text)
-    print(json.dumps(notes, indent=2, ensure_ascii=False))
+    main()
