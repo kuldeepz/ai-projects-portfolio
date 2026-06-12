@@ -30,11 +30,11 @@ CHAT_MODEL = "gpt-4o-mini"
 def validate_environment() -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        print(Fore.RED + "Missing OPENAI_API_KEY. Please set it in your environment or .env file.")
+        print(Fore.RED + "Missing OPENAI_API_KEY. Please set it in your .env file.")
         sys.exit(1)
 
     if len(sys.argv) < 2:
-        print(Fore.RED + "Usage: python chatbot.py <pdf_file>")
+        print(Fore.YELLOW + "Usage: python chatbot.py <path_to_pdf>")
         sys.exit(1)
 
     pdf_path = sys.argv[1]
@@ -42,43 +42,38 @@ def validate_environment() -> None:
         print(Fore.RED + f"File not found: {pdf_path}")
         sys.exit(1)
 
-    if not os.path.isfile(pdf_path):
-        print(Fore.RED + f"Not a file: {pdf_path}")
-        sys.exit(1)
-
-    if not os.access(pdf_path, os.R_OK):
-        print(Fore.RED + f"File is not readable: {pdf_path}")
-        sys.exit(1)
-
     print(Fore.GREEN + "Setup OK ✓")
 
 
-def extract_text_from_pdf(pdf_path: str) -> str:
-    text: list[str] = []
-    with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
+def read_pdf(pdf_path: str) -> str:
+    text = ""
+    with open(pdf_path, "rb") as file:
+        reader = PyPDF2.PdfReader(file)
         for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text.append(page_text)
-    return "\n".join(text)
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
+    return text
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
     words = text.split()
-    chunks: list[str] = []
-    step = chunk_size - overlap
-    for i in range(0, len(words), step):
-        chunk = " ".join(words[i:i + chunk_size])
-        if chunk.strip():
-            chunks.append(chunk)
+    chunks = []
+    start = 0
+
+    while start < len(words):
+        end = min(start + chunk_size, len(words))
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        start += chunk_size - overlap
+
     return chunks
 
 
-def get_embeddings(texts: list[str]) -> list[list[float]]:
+def get_embedding(text: str) -> list[float]:
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.embeddings.create(model=EMBED_MODEL, input=texts)
-    return [item.embedding for item in response.data]
+    response = client.embeddings.create(model=EMBED_MODEL, input=text)
+    return response.data[0].embedding
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -90,33 +85,32 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def retrieve_top_chunks(
-    query_embedding: list[float],
-    chunk_embeddings: list[list[float]],
-    chunks: list[str],
-    top_k: int = TOP_K,
-) -> list[str]:
-    scores = [(cosine_similarity(query_embedding, emb), chunk) for emb, chunk in zip(chunk_embeddings, chunks)]
-    scores.sort(key=lambda x: x[0], reverse=True)
-    return [chunk for _, chunk in scores[:top_k]]
+def retrieve_top_chunks(query_embedding: list[float], chunk_embeddings: list[list[float]], chunks: list[str], top_k: int = TOP_K) -> list[str]:
+    scored = []
+    for i, emb in enumerate(chunk_embeddings):
+        score = cosine_similarity(query_embedding, emb)
+        scored.append((score, chunks[i]))
+
+    scored.sort(reverse=True, key=lambda x: x[0])
+    return [chunk for _, chunk in scored[:top_k]]
 
 
 def answer_question(question: str, context_chunks: list[str], chat_history: list[dict[str, Any]]) -> str:
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    context = "\n\n---\n\n".join(context_chunks)
+    context = "\n\n".join(context_chunks)
 
     system_prompt = (
-        "You are a helpful assistant that answers questions strictly based on the provided document context. "
-        "If the answer is not found in the context, say so clearly. Be concise and accurate."
+        "You are a helpful assistant answering questions based ONLY on provided context from a PDF. "
+        "If the answer is not in the context, say you don't know."
     )
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-    messages.extend(chat_history[-6:])
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(chat_history)
     messages.append({
         "role": "user",
-        "content": f"Context from document:\n{context}\n\nQuestion: {question}",
+        "content": f"Context:\n{context}\n\nQuestion: {question}"
     })
 
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     response = client.chat.completions.create(
         model=CHAT_MODEL,
         messages=messages,
@@ -126,60 +120,63 @@ def answer_question(question: str, context_chunks: list[str], chat_history: list
 
 
 def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
-    cache_path = Path(pdf_path).with_suffix(".cache.json")
+    print(Fore.CYAN + "Reading PDF...")
+    text = read_pdf(pdf_path)
 
-    if cache_path.exists():
-        print(Fore.YELLOW + "  Loading cached embeddings...")
-        with open(cache_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data["chunks"], data["embeddings"]
-
-    print(Fore.CYAN + "  Extracting text from PDF...")
-    text = extract_text_from_pdf(pdf_path)
-
-    print(Fore.CYAN + "  Chunking text...")
+    print(Fore.CYAN + "Chunking text...")
     chunks = chunk_text(text)
-    print(Fore.CYAN + f"  Created {len(chunks)} chunks")
+    print(Fore.CYAN + f"Created {len(chunks)} chunks")
 
-    print(Fore.CYAN + "  Creating embeddings (this may take a moment)...")
-    embeddings = get_embeddings(chunks)
+    print(Fore.CYAN + "Generating embeddings (this may take a moment)...")
+    embeddings = [get_embedding(chunk) for chunk in chunks]
 
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump({"chunks": chunks, "embeddings": embeddings}, f)
-
-    print(Fore.GREEN + f"  Index built and cached at {cache_path}")
     return chunks, embeddings
 
 
-def main() -> None:
-    print(Style.BRIGHT + Fore.BLUE + "\n📄 PDF Chatbot (RAG)\n")
-    validate_environment()
+def save_chat_history(chat_history: list[dict[str, Any]], output_path: str = "chat_history.json") -> None:
+    data = {
+        "timestamp": datetime.now().isoformat(),
+        "history": chat_history,
+    }
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
+
+def main() -> None:
+    validate_environment()
     pdf_path = sys.argv[1]
 
-    print(Fore.MAGENTA + f"\nBuilding/Loading index for: {pdf_path}")
+    print(Style.BRIGHT + Fore.MAGENTA + "\n📄 PDF Chatbot with RAG")
+    print(Fore.MAGENTA + f"Using file: {pdf_path}\n")
+
     chunks, chunk_embeddings = build_index(pdf_path)
 
-    print(Fore.GREEN + "\n✅ Ready! Ask questions about the PDF. Type 'exit' to quit.\n")
+    chat_history = []
 
-    chat_history: list[dict[str, Any]] = []
+    print(Fore.GREEN + "\nAsk questions about the document.")
+    print(Fore.GREEN + "Type 'exit' to quit, 'save' to save chat history.\n")
 
     while True:
         question = input(Fore.YELLOW + "You: ").strip()
-        if question.lower() in {"exit", "quit"}:
-            print(Fore.BLUE + "Goodbye!")
+
+        if question.lower() in ["exit", "quit"]:
+            print(Fore.CYAN + "Goodbye!")
             break
+
+        if question.lower() == "save":
+            save_chat_history(chat_history)
+            print(Fore.GREEN + "Chat history saved to chat_history.json")
+            continue
+
         if not question:
             continue
 
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        q_embed_resp = client.embeddings.create(model=EMBED_MODEL, input=[question])
-        query_embedding = q_embed_resp.data[0].embedding
-
+        print(Fore.CYAN + "Thinking...")
+        query_embedding = get_embedding(question)
         top_chunks = retrieve_top_chunks(query_embedding, chunk_embeddings, chunks)
         answer = answer_question(question, top_chunks, chat_history)
 
-        print(Fore.CYAN + "\nAssistant: " + Style.RESET_ALL + f"{answer}\n")
+        print(Fore.GREEN + "Assistant: " + answer + "\n")
 
         chat_history.append({"role": "user", "content": question})
         chat_history.append({"role": "assistant", "content": answer})
