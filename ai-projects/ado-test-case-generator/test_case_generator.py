@@ -22,6 +22,10 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def is_locked_out(attempts: int) -> bool:
+    """Return True when OTP attempts reach the lockout threshold (3)."""
+    return attempts >= 3
+
 SCHEMA = {
     "name": "test_cases",
     "description": "Test cases generated from a user story",
