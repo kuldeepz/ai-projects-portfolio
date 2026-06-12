@@ -7,7 +7,7 @@ import time
 from typing import Any, Callable
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, RateLimitError, APITimeoutError, APIError
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -22,12 +22,19 @@ load_dotenv()
 console: Console = Console()
 MODEL: str = "gpt-4o-mini"
 
+RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    APIConnectionError,
+    RateLimitError,
+    APITimeoutError,
+    APIError,
+)
+
 
 def retry_with_backoff(
     max_attempts: int = 3,
     base_delay: int = 1,
     factor: int = 2,
-    retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
+    retryable_exceptions: tuple[type[Exception], ...] = RETRYABLE_EXCEPTIONS,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def deco(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
@@ -165,35 +172,4 @@ def plan_sprint(data: dict[str, Any]) -> dict[str, Any]:
 
 def display(data: dict[str, Any], plan: dict[str, Any]) -> None:
     team = data["team"]
-    util = plan["capacity_utilization_pct"]
-    color = "green" if util <= 95 else "yellow" if util <= 105 else "red"
-    console.print()
-    console.print(
-        Panel.fit(
-            f"[bold]Sprint {data['sprint_number']} — Team {team['name']}[/bold]\n"
-            f"[dim]Velocity: {team['velocity']}  |  Capacity: {team['capacity_this_sprint']} pts  |  Members: {team['members']}[/dim]\n"
-            f"Utilization: [{color} bold]{util}%[/{color} bold]  ({plan['total_points']}/{team['capacity_this_sprint']} pts)",
-            title="[bold cyan]Sprint Plan[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-    console.print(Panel(f"[italic bold]{plan['sprint_goal']}[/italic bold]", title="[bold]Sprint Goal[/bold]"))
-
-
-def export_output(filename: str, output: dict[str, Any]) -> None:
-    try:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(output, f, indent=2)
-    except OSError as e:
-        console.print(f"[red]Failed to export JSON: {e}[/red]")
-
-
-if __name__ == "__main__":
-    args, export_path = parse_export_arg(sys.argv[1:])
-    data = SAMPLE_BACKLOG
-    plan = plan_sprint(data)
-    display(data, plan)
-
-    if export_path:
-        output = {"input": data, "plan": plan}
-        export_output(export_path, output)
+ 
