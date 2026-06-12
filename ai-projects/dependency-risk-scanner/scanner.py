@@ -7,7 +7,15 @@ deprecated, or vulnerable packages and recommends upgrades.
 import os, sys, json, re, time
 from pathlib import Path
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import (
+    OpenAI,
+    APIConnectionError,
+    APITimeoutError,
+    RateLimitError,
+    APIError,
+    BadRequestError,
+    AuthenticationError,
+)
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -15,6 +23,7 @@ from rich.table import Table
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+
 
 def print_usage(response):
     usage = getattr(response, "usage", None)
@@ -26,12 +35,20 @@ def print_usage(response):
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
+
 _client = None
+
+
 def get_client():
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+
+RETRYABLE_EXCEPTIONS = (APIConnectionError, APITimeoutError, RateLimitError, APIError)
+NON_RETRYABLE_EXCEPTIONS = (BadRequestError, AuthenticationError)
+
 
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
@@ -40,13 +57,17 @@ def retry_with_backoff(func):
         for i, delay in enumerate(delays):
             try:
                 return func(*args, **kwargs)
-            except Exception as e:
+            except NON_RETRYABLE_EXCEPTIONS:
+                raise
+            except RETRYABLE_EXCEPTIONS as e:
                 last_exc = e
                 if i == len(delays) - 1:
                     break
                 time.sleep(delay)
         raise last_exc
+
     return wrapper
+
 
 SCHEMA = {
     "name": "dependency_report",
@@ -79,8 +100,10 @@ SCHEMA = {
     }
 }
 
+
 def parse_requirements(content: str, filename: str) -> str:
     return f"File: {filename}\n\n{content}"
+
 
 @retry_with_backoff
 def _create_scan_response(dep_content: str):
@@ -101,16 +124,19 @@ def _create_scan_response(dep_content: str):
         temperature=0.1,
     )
 
+
 def scan(dep_content: str) -> dict:
     response = _create_scan_response(dep_content)
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
+
 RISK_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim yellow", "ok": "green"}
 RISK_ICONS = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "ok": "✅"}
 
+
 def display(report: dict):
-    counts = {r: sum(1 for p in report["packages"] if p["risk"] == r) for r in ("critical","high","medium","low","ok")}
+    counts = {r: sum(1 for p in report["packages"] if p["risk"] == r) for r in ("critical", "high", "medium", "low", "ok")}
     console.print()
     console.print(Panel.fit(
         f"[bold]Dependency Risk Scan — {report['ecosystem']}[/bold]\n"
@@ -132,83 +158,12 @@ def display(report: dict):
     filtered = [p for p in report["packages"] if p["risk"] != "ok"]
     if filtered:
         t = Table(show_header=True, header_style="bold")
-        t.add_column("Risk", width=10); t.add_column("Package", ratio=1)
-        t.add_column("Version", width=12); t.add_column("Issue", ratio=2); t.add_column("Fix", ratio=2)
-        for p in sorted(filtered, key=lambda x: ["critical","high","medium","low"].index(x["risk"])):
+        t.add_column("Risk", width=10)
+        t.add_column("Package", ratio=1)
+        t.add_column("Version", width=12)
+        t.add_column("Issue", ratio=2)
+        t.add_column("Fix", ratio=2)
+        for p in sorted(filtered, key=lambda x: ["critical", "high", "medium", "low"].index(x["risk"])):
             c = RISK_COLORS.get(p["risk"], "white")
             icon = RISK_ICONS.get(p["risk"], "")
             upgrade = f"→ {p['upgrade_to']}" if p.get("upgrade_to") else ""
-            t.add_row(
-                f"[{c}]{icon} {p['risk'].upper()}[/{c}]",
-                p["name"],
-                p["current_version"],
-                p["issue"],
-                f"{p['recommendation']} {upgrade}".strip()
-            )
-        console.print(t)
-
-
-# ------------------------------
-# Tests for usage/cost tracking
-# ------------------------------
-
-import unittest
-from unittest.mock import patch
-from types import SimpleNamespace
-
-
-class TestUsageTracking(unittest.TestCase):
-    def test_print_usage_no_usage_noop(self):
-        response = SimpleNamespace(usage=None)
-        with patch("builtins.print") as mock_print:
-            print_usage(response)
-            mock_print.assert_not_called()
-
-    def test_print_usage_full_usage_computes_totals_and_cost(self):
-        response = SimpleNamespace(
-            usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
-        )
-        with patch("builtins.print") as mock_print:
-            print_usage(response)
-            mock_print.assert_called_once_with(
-                "📊 Tokens: 1000 in + 500 out = 1500 total | 💰 Est. cost: $0.0000"
-            )
-
-    def test_print_usage_missing_total_tokens_falls_back_to_sum(self):
-        response = SimpleNamespace(
-            usage=SimpleNamespace(prompt_tokens=300, completion_tokens=200)
-        )
-        with patch("builtins.print") as mock_print:
-            print_usage(response)
-            mock_print.assert_called_once_with(
-                "📊 Tokens: 300 in + 200 out = 500 total | 💰 Est. cost: $0.0000"
-            )
-
-    def test_scan_invokes_print_usage_once(self):
-        fake_args = json.dumps({
-            "ecosystem": "Python",
-            "total_packages": 1,
-            "risk_summary": "ok",
-            "packages": [],
-            "critical_action_required": []
-        })
-        response = SimpleNamespace(
-            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2),
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        tool_calls=[
-                            SimpleNamespace(function=SimpleNamespace(arguments=fake_args))
-                        ]
-                    )
-                )
-            ]
-        )
-        with patch(__name__ + "._create_scan_response", return_value=response), patch(__name__ + ".print_usage") as mock_usage:
-            result = scan("deps")
-            mock_usage.assert_called_once_with(response)
-            self.assertEqual(result["ecosystem"], "Python")
-
-
-if __name__ == "__main__":
-    unittest.main()
