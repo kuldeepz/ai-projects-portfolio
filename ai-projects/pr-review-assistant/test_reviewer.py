@@ -31,20 +31,10 @@ def test_sample_diff_has_issues():
 
 @pytest.mark.parametrize(
     "candidate",
-    ["", " ", "\n\t"],
+    [None, "", " ", "\n\t"],
 )
-def test_empty_string_inputs(candidate):
-    """Covers empty-string-like inputs across key exported text constants."""
-    assert candidate not in SCHEMA["parameters"]["required"]
-    assert candidate not in VERDICT_COLORS
-    assert candidate not in VERDICT_ICONS
-
-@pytest.mark.parametrize(
-    "candidate",
-    [None,],
-)
-def test_none_inputs_where_applicable(candidate):
-    """Covers None inputs for mapping lookups and required-field membership."""
+def test_invalid_candidates_not_present(candidate):
+    """Covers null/empty-like invalid inputs across key exported constants."""
     assert candidate not in SCHEMA["parameters"]["required"]
     assert candidate not in VERDICT_COLORS
     assert candidate not in VERDICT_ICONS
