@@ -27,17 +27,7 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def print_usage(response):
-    usage = getattr(response, "usage", None)
-    if not usage:
-        return
-    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
-
-def call_openai(input_content: str, temperature: float = 0):
+def call_openai(input_content: str, temperature: float = 0.3):
     if VERBOSE:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
@@ -49,10 +39,20 @@ def call_openai(input_content: str, temperature: float = 0):
         temperature=temperature,
     )
     if VERBOSE:
-        elapsed_ms = int((datetime.now() - started).total_seconds() * 1000)
-        console.print(f"[dim]Latency:[/dim] {elapsed_ms} ms")
+        elapsed = (datetime.now() - started).total_seconds()
+        console.print(f"[dim]Completed in:[/dim] {elapsed:.2f}s")
         print_usage(response)
     return response
+
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 def validate_environment():
     cmd = sys.argv[1] if len(sys.argv) >= 2 else None
