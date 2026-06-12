@@ -1,5 +1,6 @@
 """Sanity tests for unit-test-generator — no API key required."""
 import os, sys, textwrap
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from generator import extract_function_signatures, TEST_SCHEMA
 
@@ -46,6 +47,40 @@ def test_schema_structure():
     for field in ["test_file_content", "functions_covered", "test_count", "coverage_notes"]:
         assert field in required
     print("  [PASS] Schema — required fields present")
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("", []),
+    ("   \n\t  ", []),
+    (textwrap.dedent("""
+        # comments only
+        # still no functions
+    """), []),
+])
+def test_signature_extraction_empty_inputs(source, expected):
+    """Covers empty-string-like inputs and expects no signatures."""
+    assert extract_function_signatures(source) == expected
+
+
+@pytest.mark.parametrize("source", [
+    None,
+])
+def test_signature_extraction_none_input(source):
+    """Covers None input handling for signature extraction."""
+    with pytest.raises(Exception):
+        extract_function_signatures(source)
+
+
+@pytest.mark.parametrize("source, expected_names", [
+    ("def f(a, /, b, *, c=1):\n    return a + b + c\n", ["f"]),
+    ("def ünicode_名(x):\n    return x\n", ["ünicode_名"]),
+    ("@decorator\ndef decorated(x):\n    return x\n", ["decorated"]),
+])
+def test_signature_extraction_edge_cases(source, expected_names):
+    """Covers parser edge cases like positional-only args, unicode, and decorators."""
+    sigs = extract_function_signatures(source)
+    for name in expected_names:
+        assert any(name in s for s in sigs)
 
 
 if __name__ == "__main__":
