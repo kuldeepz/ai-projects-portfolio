@@ -154,18 +154,55 @@ def cmd_compare(name: str, input_text: str):
         console.print(f"[red]Prompt not found:[/red] {name}"); return
     versions = lib["prompts"][name]["versions"]
     if len(versions) < 2:
-        console.print("[yellow]Need at least 2 versions to compare.[/yellow]"); return
+        console.print("[yellow]Need at least 2 versions to compare.[/yellow]")
+        return
 
-    outputs = []
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Version", width=12)
+    table.add_column("Output", ratio=3)
+
     for v in versions:
-        with console.status(f"[bold green]Testing v{v['hash']}...[/bold green]"):
-            r = get_client().chat.completions.create(
+        with console.status(f"[bold green]Comparing v{v['hash']}...[/bold green]"):
+            response = get_client().chat.completions.create(
                 model=MODEL,
                 messages=[{"role": "user", "content": f"{v['prompt']}\n\nInput: {input_text}"}],
-                temperature=0.1,
+                temperature=0.3,
             )
-        print_usage(r)
-        outputs.append((v["hash"], r.choices[0].message.content))
+        print_usage(response)
+        output = response.choices[0].message.content
+        table.add_row(v["hash"], output[:500])
 
-    for h, out in outputs:
-        console.print(Panel(out[:500], title=f"[bold]Version {h}[/bold]", border_style="cyan"))
+    console.print(Panel(table, title=f"[bold]Comparison for {name}[/bold]", border_style="magenta"))
+
+
+def main():
+    validate_environment()
+    if len(sys.argv) < 2:
+        console.print("Usage: python manager.py [add|list|show|test|compare] ...")
+        return
+
+    cmd = sys.argv[1]
+    if cmd == "add" and len(sys.argv) >= 4:
+        name = sys.argv[2]
+        arg = sys.argv[3]
+        if Path(arg).exists() and Path(arg).is_file():
+            prompt_text = Path(arg).read_text(encoding="utf-8")
+        else:
+            prompt_text = arg
+        description = sys.argv[4] if len(sys.argv) >= 5 else ""
+        tags = sys.argv[5].split(",") if len(sys.argv) >= 6 else []
+        cmd_add(name, prompt_text, description, tags)
+    elif cmd == "list":
+        cmd_list()
+    elif cmd == "show" and len(sys.argv) >= 3:
+        cmd_show(sys.argv[2])
+    elif cmd == "test" and len(sys.argv) >= 4:
+        cmd_test(sys.argv[2], " ".join(sys.argv[3:]))
+    elif cmd == "compare" and len(sys.argv) >= 4:
+        cmd_compare(sys.argv[2], " ".join(sys.argv[3:]))
+    else:
+        console.print("[red]Invalid command or missing arguments.[/red]")
+
+
+if __name__ == "__main__":
+    main()
