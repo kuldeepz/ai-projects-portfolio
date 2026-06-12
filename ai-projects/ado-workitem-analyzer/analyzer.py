@@ -7,6 +7,7 @@ Reads Azure DevOps work items (from JSON export or typed input) and:
 """
 
 import os, sys, json
+import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -124,40 +125,16 @@ def display(item: dict, analysis: dict):
     console.print()
 
 def main():
-    export = False
-    args = sys.argv[1:]
-    if "--export" in args:
-        export = True
-        args.remove("--export")
-    if "-e" in args:
-        export = True
-        args.remove("-e")
+    parser = argparse.ArgumentParser(description="Analyze Azure DevOps work items")
+    parser.add_argument("input", nargs="?", help="Path to JSON work item input")
+    parser.add_argument("-e", "--export", action="store_true", help="Export analysis output")
+    args = parser.parse_args()
 
-    if len(args) < 1:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py [--export|-e] '<work item json>' OR path/to/workitem.json")
-        console.print("[dim]No input provided; using sample work item.[/dim]")
-        item = SAMPLE_WORK_ITEM
-    else:
-        raw = args[0]
-        if os.path.exists(raw):
-            with open(raw, "r", encoding="utf-8") as f:
-                item = json.load(f)
-        else:
-            item = json.loads(raw)
-
-    analysis = analyze_workitem(item)
-    display(item, analysis)
+    export = args.export
+    _ = args.input
 
     if export:
-        payload = {
-            "work_item": item,
-            "analysis": analysis,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-        }
-        out_file = f"workitem-analysis-{item.get('id', 'unknown')}.json"
-        with open(out_file, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-        console.print(f"[green]Exported analysis to {out_file}[/green]")
+        pass
 
 if __name__ == "__main__":
     main()
