@@ -49,9 +49,4 @@ def test_scale_target_boundary_cases(boundary):
         assert boundary >= 0
 
 if __name__ == "__main__":
-    print("\n=== architecture-review-agent: Sanity Tests ===\n")
-    try:
-        test_schema(); test_risk_categories(); test_sample_design_has_issues()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); sys.exit(1)
+    raise SystemExit(pytest.main([__file__]))
