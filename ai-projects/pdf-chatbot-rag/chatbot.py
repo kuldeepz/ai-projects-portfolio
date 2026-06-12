@@ -35,10 +35,14 @@ CHAT_MODEL = "gpt-4o-mini"
 
 
 def print_usage(response):
-    usage = response.usage
-    prompt_tokens = usage.prompt_tokens
+    usage = getattr(response, "usage", None)
+    if not usage:
+        print("📊 Tokens: 0 in + 0 out = 0 total | 💰 Est. cost: $0.0000")
+        return
+
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-    total_tokens = usage.total_tokens
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
     input_cost = (prompt_tokens / 1000) * 0.000015
     output_cost = (completion_tokens / 1000) * 0.00006
     cost = input_cost + output_cost
@@ -172,51 +176,3 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     print(Fore.GREEN + "  Embeddings cached for future use.")
 
     return chunks, embeddings
-
-
-def run_chat(pdf_path: str):
-    """Main interactive chat loop."""
-    print(Fore.GREEN + Style.BRIGHT + "\n=== PDF Chatbot (RAG) ===")
-    print(Fore.WHITE + f"Loading: {pdf_path}\n")
-
-    if not os.path.exists(pdf_path):
-        print(Fore.RED + f"File not found: {pdf_path}")
-        sys.exit(1)
-
-    chunks, embeddings = build_index(pdf_path)
-    print(Fore.GREEN + f"\nReady! {len(chunks)} chunks indexed from your PDF.")
-    print(Fore.WHITE + "Type your question below. Type 'exit' to quit.\n")
-
-    chat_history = []
-
-    while True:
-        try:
-            question = input(Fore.CYAN + "You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print(Fore.YELLOW + "\nGoodbye!")
-            break
-
-        if not question:
-            continue
-        if question.lower() in ("exit", "quit", "q"):
-            print(Fore.YELLOW + "Goodbye!")
-            break
-
-        query_embedding = get_embeddings([question])[0]
-        top_chunks = retrieve_top_chunks(query_embedding, embeddings, chunks)
-        answer = answer_question(question, top_chunks, chat_history)
-
-        print(Fore.GREEN + "\nAssistant: " + Style.RESET_ALL + answer + "\n")
-
-        chat_history.append({"role": "user", "content": question})
-        chat_history.append({"role": "assistant", "content": answer})
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(Fore.YELLOW + "Usage: python chatbot.py <path_to_pdf>")
-        print(Fore.WHITE + "Example: python chatbot.py sample.pdf")
-        sys.exit(1)
-
-    validate_environment()
-    run_chat(sys.argv[1])
