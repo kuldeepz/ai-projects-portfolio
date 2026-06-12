@@ -140,7 +140,7 @@ def generate_report(data: dict, verbose: bool = False) -> dict:
         console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{est_tokens} tokens)")
         console.print("⏳ Calling OpenAI API...")
         start = time.perf_counter()
-    with console.status("[bold green]Processing..."):
+    with console.status("[bold green]Calling OpenAI API...[/bold green]"):
         response = _create_chat_completion(
             model=MODEL,
             messages=messages,
