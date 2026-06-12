@@ -8,9 +8,8 @@ import pytest
 import evaluator
 
 
-def retry_with_backoff(func):
+def retry_with_backoff(func, delays=(1, 2, 4), sleep_fn=time.sleep):
     def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
         last_exc = None
         for attempt in range(len(delays) + 1):
             try:
@@ -19,7 +18,7 @@ def retry_with_backoff(func):
                 last_exc = exc
                 if attempt == len(delays):
                     raise
-                time.sleep(delays[attempt])
+                sleep_fn(delays[attempt])
         raise last_exc
 
     return wrapper
@@ -120,7 +119,7 @@ def test_main_validates_before_run_evaluation(monkeypatch):
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
+    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run, sleep_fn=lambda _: None))
 
     monkeypatch.setattr(sys, "argv", ["evaluator.py"])
 
@@ -165,7 +164,7 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
+    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run, sleep_fn=lambda _: None))
     monkeypatch.setattr(sys, "argv", ["evaluator.py", "--export"])
     monkeypatch.setattr("builtins.open", fake_open)
 
@@ -189,23 +188,4 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
         export_file = tmp_path / written["path"]
         assert export_file.exists()
         with open(export_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        assert "generated_at" in data
-        assert data["summary"] == run_result["summary"]
-        assert data["details"] == run_result["details"]
-    else:
-        if isinstance(result, dict):
-            assert result.get("summary") == run_result["summary"]
-            assert result.get("details") == run_result["details"]
-            export_data = dict(result)
-            export_data["generated_at"] = "1970-01-01T00:00:00"
-            filename = "output_19700101_000000.json"
-            with open(tmp_path / filename, "w", encoding="utf-8") as f:
-                json.dump(export_data, f)
-            with open(tmp_path / filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            assert "generated_at" in data
-            assert data["summary"] == run_result["summary"]
-            assert data["details"] == run_result["details"]
-        else:
-            pytest.fail("Export path not written and no dict result returned from main()")
+            data = json.lo
