@@ -131,29 +131,37 @@ def main():
         "-e",
         "--export",
         nargs="?",
-        const=True,
-        default=False,
-        metavar="FILE",
-        help="Export analysis output to JSON; optionally provide output file path"
+        default=None,
+        const=f"ado_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        help="Export analysis JSON to optional path",
     )
-
     args = parser.parse_args()
 
     if args.input:
-        with open(args.input, "r", encoding="utf-8") as f:
-            item = json.load(f)
+        try:
+            with open(args.input, "r", encoding="utf-8") as f:
+                item = json.load(f)
+        except Exception as e:
+            console.print(f"[red]Failed to read input file:[/red] {e}")
+            sys.exit(1)
     else:
         item = SAMPLE_WORK_ITEM
 
     analysis = analyze_workitem(item)
     display(item, analysis)
 
-    if args.export is not False:
-        default_name = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        export_path = default_name if args.export is True else args.export
-        with open(export_path, "w", encoding="utf-8") as f:
-            json.dump({"work_item": item, "analysis": analysis}, f, indent=2)
-        console.print(f"[green]Exported analysis to {export_path}[/green]")
+    if args.export:
+        payload = {
+            "generated_at": datetime.now().isoformat(),
+            "work_item": item,
+            "analysis": analysis,
+        }
+        try:
+            with open(args.export, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            console.print(f"[green]Exported analysis to[/green] {args.export}")
+        except OSError as e:
+            console.print(f"[red]Failed to export:[/red] {e}")
 
 if __name__ == "__main__":
     main()
