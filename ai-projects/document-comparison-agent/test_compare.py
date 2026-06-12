@@ -1,5 +1,6 @@
 """Sanity tests for document-comparison-agent — no API key required."""
 import os, sys, tempfile
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from compare import read_document, COMPARE_SCHEMA, similarity_bar
 
@@ -51,6 +52,43 @@ def test_mock_report():
     assert len(mock["conflicts"]) == 1
     assert all(k in mock["conflicts"][0] for k in ("topic", "doc1_position", "doc2_position"))
     print("  [PASS] Mock report — structure valid")
+
+
+@pytest.mark.parametrize("content", ["", "   ", "\n\n"])
+def test_read_txt_empty_content_parametrized(content):
+    """Covers reading text files with empty or whitespace-only content."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write(content)
+        tmp = f.name
+    try:
+        result = read_document(tmp)
+        assert isinstance(result, str)
+        assert result.strip() == ""
+    finally:
+        os.unlink(tmp)
+
+
+@pytest.mark.parametrize("path_value", [None, "", "   "])
+def test_read_document_none_or_blank_path(path_value):
+    """Covers invalid None/blank path inputs for document reading."""
+    with pytest.raises((TypeError, ValueError, FileNotFoundError, OSError)):
+        read_document(path_value)
+
+
+@pytest.mark.parametrize(
+    "score, expected_color",
+    [
+        (0, "red"),
+        (50, "yellow"),
+        (100, "green"),
+        (-1, "red"),
+        (101, "green"),
+    ],
+)
+def test_similarity_bar_boundary_scores(score, expected_color):
+    """Covers boundary and out-of-range similarity scores for color mapping."""
+    bar = similarity_bar(score)
+    assert expected_color in bar
 
 
 if __name__ == "__main__":
