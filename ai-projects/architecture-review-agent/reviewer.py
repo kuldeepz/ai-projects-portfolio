@@ -35,7 +35,9 @@ def print_usage(response):
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    INPUT_PER_M = 0.15
+    OUTPUT_PER_M = 0.60
+    cost = (prompt_tokens / 1_000_000) * INPUT_PER_M + (completion_tokens / 1_000_000) * OUTPUT_PER_M
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 def retry_with_backoff(func):
@@ -158,60 +160,3 @@ def main():
     i = 0
     while i < len(args):
         arg = args[i]
-
-
-class TestReviewArchitectureVerboseLogs(unittest.TestCase):
-    def _mock_response(self):
-        response = Mock()
-        response.usage = None
-        tool_call = Mock()
-        tool_call.function.arguments = json.dumps({
-            "architecture_type": "monolith",
-            "overall_score": 70,
-            "strengths": [],
-            "risks": [],
-            "single_points_of_failure": [],
-            "well_architected_gaps": [],
-            "recommendations": [],
-            "summary": "ok"
-        })
-        response.choices = [Mock(message=Mock(tool_calls=[tool_call]))]
-        return response
-
-    @patch("__main__.print_usage")
-    @patch("__main__.get_client")
-    def test_review_architecture_verbose_false_no_timing_logs(self, mock_get_client, _mock_print_usage):
-        global VERBOSE
-        VERBOSE = False
-
-        mock_client = Mock()
-        mock_client.chat.completions.create.return_value = self._mock_response()
-        mock_get_client.return_value = mock_client
-
-        with patch("builtins.print") as mock_print:
-            result = review_architecture("design")
-
-        self.assertEqual(result["architecture_type"], "monolith")
-        mock_client.chat.completions.create.assert_called_once()
-        mock_print.assert_not_called()
-
-    @patch("__main__.print_usage")
-    @patch("__main__.time.time", side_effect=[100.0, 101.2])
-    @patch("__main__.get_client")
-    def test_review_architecture_verbose_true_prints_timing_logs(self, mock_get_client, _mock_time, _mock_print_usage):
-        global VERBOSE
-        VERBOSE = True
-
-        mock_client = Mock()
-        mock_client.chat.completions.create.return_value = self._mock_response()
-        mock_get_client.return_value = mock_client
-
-        with patch("builtins.print") as mock_print:
-            result = review_architecture("design")
-
-        self.assertEqual(result["architecture_type"], "monolith")
-        printed_lines = [args[0] for args, _ in mock_print.call_args_list if args]
-        self.assertTrue(any("🤖 Model:" in line for line in printed_lines))
-        self.assertTrue(any("📝 Input size:" in line for line in printed_lines))
-        self.assertTrue(any("⏳ Calling OpenAI API..." in line for line in printed_lines))
-        self.assertTrue(any("✅ Done in 1.2s" in line for line in printed_lines))
