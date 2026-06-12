@@ -4,7 +4,7 @@ Converts raw bullet notes into polished standup / status reports
 for daily standups, weekly syncs, or executive status updates.
 """
 
-import os, sys, json, argparse
+import os, sys, json, argparse, time
 from datetime import date, datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -15,6 +15,7 @@ from rich.markdown import Markdown
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -65,25 +66,36 @@ SAMPLE_NOTES = {
 def generate_report(data: dict) -> dict:
     fmt = data.get("format", "standup")
     fmt_desc = next((v[1] for v in FORMATS.values() if v[0] == fmt), fmt)
+    messages = [
+        {"role": "system", "content": (
+            f"You are a professional technical writer. Transform raw bullet notes into a polished "
+            f"{fmt_desc}. Keep it concise, professional, and well-structured in markdown. "
+            f"For standup: use Yesterday / Today / Blockers sections. "
+            f"For executive: focus on business impact, skip technical jargon. "
+            f"For Slack: use emojis sparingly, keep it scannable."
+        )},
+        {"role": "user", "content": (
+            f"Name: {data.get('name','')}, Role: {data.get('role','')}, Date: {data.get('date','')}\n"
+            f"Raw notes:\n" + "\n".join(f"- {n}" for n in data.get("raw_notes", []))
+        )}
+    ]
+    if VERBOSE:
+        total_chars = sum(len(m["content"]) for m in messages)
+        est_tokens = int(total_chars / 4)
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{est_tokens} tokens)")
+        console.print("⏳ Calling OpenAI API...")
+        start = time.perf_counter()
     response = get_client().chat.completions.create(
         model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                f"You are a professional technical writer. Transform raw bullet notes into a polished "
-                f"{fmt_desc}. Keep it concise, professional, and well-structured in markdown. "
-                f"For standup: use Yesterday / Today / Blockers sections. "
-                f"For executive: focus on business impact, skip technical jargon. "
-                f"For Slack: use emojis sparingly, keep it scannable."
-            )},
-            {"role": "user", "content": (
-                f"Name: {data.get('name','')}, Role: {data.get('role','')}, Date: {data.get('date','')}\n"
-                f"Raw notes:\n" + "\n".join(f"- {n}" for n in data.get("raw_notes", []))
-            )}
-        ],
+        messages=messages,
         tools=[{"type": "function", "function": SCHEMA}],
         tool_choice={"type": "function", "function": {"name": "report_output"}},
         temperature=0.4,
     )
+    if VERBOSE:
+        elapsed = time.perf_counter() - start
+        console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
@@ -91,7 +103,11 @@ def main():
     parser.add_argument("input_file", nargs="?")
     parser.add_argument("--export", "-e", choices=["json"])
     parser.add_argument("--export-out", default=None)
+    parser.add_argument("--verbose", "-v", action="store_true")
     parsed = parser.parse_args()
+
+    global VERBOSE
+    VERBOSE = parsed.verbose
 
     if not parsed.input_file:
         console.print("[dim]No file provided — using sample notes...[/dim]\n")
