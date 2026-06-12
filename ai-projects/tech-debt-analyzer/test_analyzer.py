@@ -41,11 +41,10 @@ def test_collect_code_empty_string_inputs(tmp_path, file_content):
     result = collect_code(str(p))
     assert isinstance(result, str)
 
-@pytest.mark.parametrize("path_input", [None])
-def test_collect_code_none_input(path_input):
+def test_collect_code_none_input():
     """Covers None path input handling for collect_code."""
     with pytest.raises((TypeError, ValueError, OSError, AttributeError)):
-        collect_code(path_input)
+        collect_code(None)
 
 @pytest.mark.parametrize("max_chars", [0, 1, 10])
 def test_collect_code_boundary_max_chars(tmp_path, max_chars):
