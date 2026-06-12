@@ -62,19 +62,18 @@ def print_usage(response):
     else:
         console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-def validate_environment():
+def validate_environment(input_path: str | None = None):
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
         sys.exit(1)
 
-    if len(sys.argv) >= 2:
-        path = sys.argv[1]
-        if not os.path.isfile(path):
-            console.print(f"[red]Error:[/red] Input file not found: {path}")
+    if input_path is not None:
+        if not os.path.isfile(input_path):
+            console.print(f"[red]Error:[/red] Input file not found: {input_path}")
             sys.exit(1)
-        if not os.access(path, os.R_OK):
-            console.print(f"[red]Error:[/red] Input file is not readable: {path}")
+        if not os.access(input_path, os.R_OK):
+            console.print(f"[red]Error:[/red] Input file is not readable: {input_path}")
             sys.exit(1)
 
     console.print("[green]Setup OK ✓[/green]")
@@ -136,22 +135,8 @@ def generate_notes(data: dict) -> dict:
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
-    validate_environment()
+    input_path = sys.argv[1] if len(sys.argv) >= 2 else None
+    validate_environment(input_path)
 
     if len(sys.argv) < 2:
-        console.print("[dim]No file provided — using sample release data[/dim]")
-        data = SAMPLE_ITEMS
-    else:
-        with open(sys.argv[1], "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-    notes = generate_notes(data)
-
-    console.print(Panel.fit(
-        Markdown(notes.get("full_markdown", "")),
-        title=f"Release Notes {notes.get('version', '')}",
-        border_style="green"
-    ))
-
-if __name__ == "__main__":
-    main()
+        console.print("[dim]No file provided — using sample release data")
