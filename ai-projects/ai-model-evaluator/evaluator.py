@@ -22,16 +22,34 @@ def retry_with_backoff(func=None, *, delays=(1, 2, 4), retry_exceptions=(Timeout
     def decorator(target):
         @wraps(target)
         def wrapper(*args, **kwargs):
+            started = time.time() if VERBOSE else None
+            if VERBOSE:
+                model = _extract_model_name(args, kwargs)
+                print(f"Model: {model}")
+                if DEBUG_SENSITIVE:
+                    input_value = _extract_input_text(args, kwargs)
+                    char_count = len(input_value) if isinstance(input_value, str) else len(str(input_value))
+                    token_count = _estimate_token_count(input_value)
+                    print(f"Input chars: {char_count}, tokens: {token_count}")
+                print("⏳ Calling OpenAI API...")
+
             last_exc = None
-            for attempt in range(len(delays) + 1):
-                try:
-                    return target(*args, **kwargs)
-                except retry_exceptions as exc:
-                    last_exc = exc
-                    if attempt == len(delays):
-                        raise
-                    time.sleep(delays[attempt])
-            raise last_exc
+            attempt_count = 0
+            try:
+                for attempt in range(len(delays) + 1):
+                    attempt_count = attempt + 1
+                    try:
+                        return target(*args, **kwargs)
+                    except retry_exceptions as exc:
+                        last_exc = exc
+                        if attempt == len(delays):
+                            raise
+                        time.sleep(delays[attempt])
+                raise last_exc
+            finally:
+                if VERBOSE:
+                    elapsed = time.time() - started
+                    print(f"✅ Done in {elapsed:.1f}s (attempts: {attempt_count})")
 
         return wrapper
 
@@ -83,22 +101,7 @@ def call_openai(*args, **kwargs):
 
     Replace the body with the real OpenAI invocation in this project.
     """
-    if VERBOSE:
-        model = _extract_model_name(args, kwargs)
-        print(f"Model: {model}")
-        if DEBUG_SENSITIVE:
-            input_value = _extract_input_text(args, kwargs)
-            char_count = len(input_value) if isinstance(input_value, str) else len(str(input_value))
-            token_count = _estimate_token_count(input_value)
-            print(f"Input chars: {char_count}, tokens: {token_count}")
-        print("⏳ Calling OpenAI API...")
-        started = time.time()
-    try:
-        raise NotImplementedError("Implement OpenAI API invocation here")
-    finally:
-        if VERBOSE:
-            elapsed = time.time() - started
-            print(f"✅ Done in {elapsed:.1f}s")
+    raise NotImplementedError("Implement OpenAI API invocation here")
 
 
 # ----------------------
