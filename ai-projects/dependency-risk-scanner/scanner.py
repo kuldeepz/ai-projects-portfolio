@@ -24,6 +24,7 @@ from rich.table import Table
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 
 def print_usage(response):
@@ -59,6 +60,9 @@ def validate_environment():
     while i < len(args):
         arg = args[i]
         if arg in ("--export", "-e"):
+            i += 1
+            continue
+        if arg in ("--verbose", "-v"):
             i += 1
             continue
         if arg.startswith("-"):
@@ -143,6 +147,36 @@ def parse_requirements(content: str, filename: str) -> str:
 
 @retry_with_backoff
 def _create_scan_response(dep_content: str):
+    if VERBOSE:
+        print(f"🔧 Model: {MODEL}")
+        print(f"📝 Input size: {len(dep_content)} chars")
+        print("⏳ Calling OpenAI API...")
+        started = time.time()
+        response = get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a security engineer specializing in supply chain security. "
+                    "Analyze dependency files for: known vulnerabilities (CVEs), deprecated packages, "
+                    "packages with no recent maintenance, overly broad version pins, and security-sensitive "
+                    "packages that need careful version management. Use your knowledge of package ecosystems "
+                    "up to your training cutoff."
+                )},
+                {"role": "user", "content": f"Scan these dependencies for risks:\n\n{dep_content}"}
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "dependency_report"}},
+            temperature=0.1,
+        )
+        elapsed = time.time() - started
+        print(f"✅ Done in {elapsed:.1f}s")
+        usage = getattr(response, "usage", None)
+        if usage:
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+            print(f"🔢 Input/Output tokens: {prompt_tokens}/{completion_tokens} (total {total_tokens})")
+        return response
     with console.status("[bold green]Processing..."):
         return get_client().chat.completions.create(
             model=MODEL,
@@ -176,12 +210,13 @@ def export_report(report: dict, output_path: str):
 
 
 if __name__ == "__main__":
+    VERBOSE = "--verbose" in sys.argv[1:] or "-v" in sys.argv[1:]
     validate_environment()
     export_enabled = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
 
-    args = [a for a in sys.argv[1:] if a not in ("--export", "-e") and not a.startswith("-")]
+    args = [a for a in sys.argv[1:] if a not in ("--export", "-e", "--verbose", "-v") and not a.startswith("-")]
     if not args:
-        print("Usage: python scanner.py <dependency-file> [--export|-e]")
+        print("Usage: python scanner.py <dependency-file> [--export|-e] [--verbose|-v]")
         sys.exit(1)
 
     input_path = args[0]
