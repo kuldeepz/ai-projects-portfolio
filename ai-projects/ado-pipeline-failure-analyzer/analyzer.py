@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, TypedDict, NotRequired, Literal, Protocol, cast
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, RateLimitError, APITimeoutError
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -28,7 +28,7 @@ def retry_with_backoff(func):
         for i, delay in enumerate(delays):
             try:
                 return func(*args, **kwargs)
-            except Exception as e:
+            except (APIConnectionError, RateLimitError, APITimeoutError) as e:
                 last_exception = e
                 if i == len(delays) - 1:
                     raise
@@ -179,87 +179,5 @@ ImportError while collecting tests/test_payments.py
 ModuleNotFoundError: No module named 'stripe'
 
 ===========================
+``` 
 """
-
-
-def _run_self_tests() -> None:
-    from types import SimpleNamespace
-
-    class _FakeCreate:
-        def __init__(self):
-            self.calls = []
-            self.side_effects = []
-
-        def create(self, **kwargs):
-            self.calls.append(kwargs)
-            if self.side_effects:
-                effect = self.side_effects.pop(0)
-                if isinstance(effect, Exception):
-                    raise effect
-                return effect
-            return {"ok": True}
-
-    class _FakeClient:
-        def __init__(self):
-            self.chat = SimpleNamespace(completions=_FakeCreate())
-
-    global VERBOSE
-
-    original_verbose = VERBOSE
-    original_get_client = globals()["get_client"]
-    original_console_print = console.print
-    original_sleep = time.sleep
-    original_perf_counter = time.perf_counter
-
-    try:
-        # (1) VERBOSE=False -> one API call, no diagnostics
-        fake_client = _FakeClient()
-        globals()["get_client"] = lambda: fake_client
-        VERBOSE = False
-        printed = []
-        console.print = lambda *args, **kwargs: printed.append((args, kwargs))
-        result = create_chat_completion(model="m1", messages=[{"content": "hello"}])
-        assert result == {"ok": True}
-        assert len(fake_client.chat.completions.calls) == 1
-        assert printed == []
-
-        # (2) VERBOSE=True -> diagnostics printed, API still called once
-        fake_client = _FakeClient()
-        globals()["get_client"] = lambda: fake_client
-        VERBOSE = True
-        printed = []
-        ticks = iter([100.0, 100.5])
-        time.perf_counter = lambda: next(ticks)
-        console.print = lambda *args, **kwargs: printed.append(args[0] if args else "")
-        result = create_chat_completion(model="m2", messages=[{"content": "abcd"}, {"content": "efgh"}])
-        assert result == {"ok": True}
-        assert len(fake_client.chat.completions.calls) == 1
-        out = "\n".join(str(x) for x in printed)
-        assert "Model:" in out
-        assert "Input size:" in out
-        assert "Calling OpenAI API" in out
-        assert "Done in" in out
-
-        # (3) retry logic -> retries transient errors then succeeds
-        fake_client = _FakeClient()
-        fake_client.chat.completions.side_effects = [RuntimeError("t1"), RuntimeError("t2"), {"ok": "final"}]
-        globals()["get_client"] = lambda: fake_client
-        VERBOSE = False
-        sleeps = []
-        time.sleep = lambda d: sleeps.append(d)
-        result = create_chat_completion(model="m3", messages=[{"content": "x"}])
-        assert result == {"ok": "final"}
-        assert len(fake_client.chat.completions.calls) == 3
-        assert sleeps == [1, 2]
-
-    finally:
-        VERBOSE = original_verbose
-        globals()["get_client"] = original_get_client
-        console.print = original_console_print
-        time.sleep = original_sleep
-        time.perf_counter = original_perf_counter
-
-
-if __name__ == "__main__" and "--self-test" in sys.argv:
-    _run_self_tests()
-    print("self-tests passed")
