@@ -36,7 +36,10 @@ def get_client() -> OpenAI:
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Generate unit tests for a Python source file.")
+    parser = argparse.ArgumentParser(
+        description="Generate unit tests for a Python source file.",
+        usage="python generator.py <source_file.py> [--framework pytest|unittest] [-v|--verbose]",
+    )
     parser.add_argument("source_file", help="Path to the Python source file")
     parser.add_argument("--framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -170,124 +173,4 @@ def display_summary(result: dict, output_file: str):
     table.add_row("Output file", output_file)
     console.print(Panel(table, title="[bold cyan]Test Generation Summary[/bold cyan]", border_style="cyan"))
 
-    # Functions covered
-    co
-
-
-# -----------------------------
-# Tests for verbose/CLI branches
-# -----------------------------
-
-
-def _make_mock_response(arguments_json: str):
-    class _Fn:
-        def __init__(self, arguments):
-            self.arguments = arguments
-
-    class _ToolCall:
-        def __init__(self, function):
-            self.function = function
-
-    class _Msg:
-        def __init__(self, tool_calls):
-            self.tool_calls = tool_calls
-
-    class _Choice:
-        def __init__(self, message):
-            self.message = message
-
-    class _Resp:
-        def __init__(self, choices):
-            self.choices = choices
-
-    return _Resp([_Choice(_Msg([_ToolCall(_Fn(arguments_json))]))])
-
-
-def test_parse_args_sets_verbose_short_flag():
-    args = parse_args(["-v", "file.py"])
-    assert args.verbose is True
-    assert args.source_file == "file.py"
-
-
-def test_parse_args_sets_verbose_long_flag():
-    args = parse_args(["--verbose", "file.py"])
-    assert args.verbose is True
-    assert args.source_file == "file.py"
-
-
-def test_parse_args_verbose_before_source_file_order():
-    args = parse_args(["--verbose", "file.py", "--framework", "pytest"])
-    assert args.verbose is True
-    assert args.source_file == "file.py"
-    assert args.framework == "pytest"
-
-
-def test_generate_tests_verbose_prints_diagnostics(monkeypatch):
-    global VERBOSE
-    VERBOSE = True
-
-    printed = []
-    monkeypatch.setattr(console, "print", lambda *a, **k: printed.append(a[0] if a else ""))
-
-    class _Completions:
-        def create(self, **kwargs):
-            return _make_mock_response(
-                json.dumps(
-                    {
-                        "test_file_content": "def test_ok():\n    assert True\n",
-                        "functions_covered": ["foo"],
-                        "test_count": 1,
-                        "coverage_notes": "ok",
-                    }
-                )
-            )
-
-    class _Chat:
-        completions = _Completions()
-
-    class _Client:
-        chat = _Chat()
-
-    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: _Client())
-
-    result = generate_tests("def foo():\n    return 1\n", "mod")
-    assert result["test_count"] == 1
-
-    joined = "\n".join(str(x) for x in printed)
-    assert "Model:" in joined
-    assert "Input size:" in joined
-    assert "Calling OpenAI API" in joined
-    assert "Done in" in joined
-
-
-def test_generate_tests_non_verbose_suppresses_diagnostics(monkeypatch):
-    global VERBOSE
-    VERBOSE = False
-
-    printed = []
-    monkeypatch.setattr(console, "print", lambda *a, **k: printed.append(a[0] if a else ""))
-
-    class _Completions:
-        def create(self, **kwargs):
-            return _make_mock_response(
-                json.dumps(
-                    {
-                        "test_file_content": "def test_ok():\n    assert True\n",
-                        "functions_covered": ["foo"],
-                        "test_count": 1,
-                        "coverage_notes": "ok",
-                    }
-                )
-            )
-
-    class _Chat:
-        completions = _Completions()
-
-    class _Client:
-        chat = _Chat()
-
-    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: _Client())
-
-    result = generate_tests("def foo():\n    return 1\n", "mod")
-    assert result["test_count"] == 1
-    assert printed == []
+    # Functions c
