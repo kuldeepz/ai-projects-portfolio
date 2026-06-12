@@ -4,7 +4,7 @@ Analyzes a product backlog (JSON) + team capacity/velocity and recommends
 the optimal sprint composition with story point distribution.
 """
 
-import os, sys, json
+import os, sys, json, time
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -14,6 +14,21 @@ from rich.table import Table
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                if i == len(delays) - 1:
+                    break
+                time.sleep(delay)
+        raise last_exc
+    return wrapper
 
 _client = None
 def get_client():
@@ -75,6 +90,7 @@ SAMPLE_BACKLOG = {
     ]
 }
 
+@retry_with_backoff
 def plan_sprint(data: dict) -> dict:
     response = get_client().chat.completions.create(
         model=MODEL,
