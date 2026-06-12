@@ -8,6 +8,7 @@ import sys
 import json
 import math
 import hashlib
+import time
 from pathlib import Path
 from typing import Any
 from datetime import datetime
@@ -27,6 +28,7 @@ CHUNK_OVERLAP = 50     # word overlap between chunks
 TOP_K = 4              # number of chunks to retrieve per query
 EMBED_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 
 def validate_environment() -> None:
@@ -44,6 +46,9 @@ def validate_environment() -> None:
             i += 1
             if i < len(args) and not args[i].startswith("-"):
                 i += 1
+            continue
+        if arg in ("--verbose", "-v"):
+            i += 1
             continue
         filtered_args.append(arg)
         i += 1
@@ -103,8 +108,16 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
 
 def get_embedding(text: str) -> list[float]:
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if VERBOSE:
+        print(Fore.CYAN + f"Model: {EMBED_MODEL}")
+        print(Fore.CYAN + f"Input size: {len(text)} chars, {len(text.split())} tokens")
+        print(Fore.CYAN + "⏳ Calling OpenAI API...")
+        start = time.time()
     with console.status("[bold green]Processing..."):
         response = client.embeddings.create(model=EMBED_MODEL, input=text)
+    if VERBOSE:
+        elapsed = time.time() - start
+        print(Fore.GREEN + f"✅ Done in {elapsed:.1f}s")
     return response.data[0].embedding
 
 
@@ -144,12 +157,21 @@ def answer_question(question: str, context_chunks: list[str], chat_history: list
     })
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if VERBOSE:
+        input_text = " ".join(str(m.get("content", "")) for m in messages)
+        print(Fore.CYAN + f"Model: {CHAT_MODEL}")
+        print(Fore.CYAN + f"Input size: {len(input_text)} chars, {len(input_text.split())} tokens")
+        print(Fore.CYAN + "⏳ Calling OpenAI API...")
+        start = time.time()
     with console.status("[bold green]Processing..."):
         response = client.chat.completions.create(
             model=CHAT_MODEL,
             messages=messages,
             temperature=0.2,
         )
+    if VERBOSE:
+        elapsed = time.time() - start
+        print(Fore.GREEN + f"✅ Done in {elapsed:.1f}s")
     return response.choices[0].message.content
 
 
@@ -179,8 +201,28 @@ def save_chat_history(chat_history: list[dict[str, Any]], output_path: str = "ch
 
 
 def main() -> None:
+    global VERBOSE
+    VERBOSE = "--verbose" in sys.argv[1:] or "-v" in sys.argv[1:]
+
     validate_environment()
-    pdf_path = sys.argv[1]
+
+    args = sys.argv[1:]
+    filtered_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--export", "-e"):
+            i += 1
+            if i < len(args) and not args[i].startswith("-"):
+                i += 1
+            continue
+        if arg in ("--verbose", "-v"):
+            i += 1
+            continue
+        filtered_args.append(arg)
+        i += 1
+
+    pdf_path = filtered_args[0]
 
     print(Style.BRIGHT + Fore.MAGENTA + "\n📄 PDF Chatbot with RAG")
     print(Fore.MAGENTA + f"Using file: {pdf_path}\n")
