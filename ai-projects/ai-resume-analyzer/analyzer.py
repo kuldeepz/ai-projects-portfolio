@@ -177,25 +177,65 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict:
     return json.loads(tool_call.function.arguments)
 
 
-def score_color(score: int) -> str:
-    if score >= 80:
-        return "green"
-    elif score >= 60:
-        return "yellow"
-    return "red"
+# ------------------------------
+# Unit tests for retry behavior
+# ------------------------------
+import unittest
+from unittest.mock import patch
 
 
-def display_results(analysis: dict):
-    console.print()
-    console.print(Panel.fit(
-        f"[bold white]{analysis['candidate_name']}[/bold white]\n"
-        f"[dim]{analysis['current_role']} · {analysis['years_experience']} yrs exp[/dim]",
-        title="[bold cyan]Resume Analysis Report[/bold cyan]",
-        border_style="cyan"
-    ))
+class TestRetryWithBackoff(unittest.TestCase):
+    def test_succeeds_immediately_no_sleep(self):
+        calls = {"n": 0}
 
-    # Scores
-    score_table = Table(show_header=False, box=None, padding=(0, 2))
-    score_table.add_column(style="dim")
+        def fn():
+            calls["n"] += 1
+            return "ok"
+
+        wrapped = retry_with_backoff(fn)
+        with patch("time.sleep") as sleep_mock:
+            result = wrapped()
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(calls["n"], 1)
+        sleep_mock.assert_not_called()
+
+    def test_fails_twice_then_succeeds(self):
+        calls = {"n": 0}
+
+        def fn():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise RuntimeError("temporary")
+            return "ok"
+
+        wrapped = retry_with_backoff(fn)
+        with patch("time.sleep") as sleep_mock:
+            result = wrapped()
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(calls["n"], 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+        sleep_mock.assert_any_call(1)
+        sleep_mock.assert_any_call(2)
+
+    def test_fails_all_attempts_exception_propagated(self):
+        calls = {"n": 0}
+
+        def fn():
+            calls["n"] += 1
+            raise ValueError("always fails")
+
+        wrapped = retry_with_backoff(fn)
+        with patch("time.sleep") as sleep_mock:
+            with self.assertRaises(ValueError):
+                wrapped()
+
+        self.assertEqual(calls["n"], 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+        sleep_mock.assert_any_call(1)
+        sleep_mock.assert_any_call(2)
 
 
+if __name__ == "__main__":
+    unittest.main()
