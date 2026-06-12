@@ -28,23 +28,30 @@ def test_dependency_present():
     print("  [PASS] Dependencies — all referenced IDs exist in backlog")
 
 
-@pytest.mark.parametrize(
-    "value",
-    ["", "   ", "\n"],
-)
-def test_empty_string_inputs_are_detectable(value):
-    """Covers empty/blank string input scenarios for sprint goal-style fields."""
-    assert isinstance(value, str)
-    assert value.strip() == ""
+@pytest.mark.parametrize("value", ["", "   ", "\n"])
+def test_schema_disallows_blank_for_required_string_fields(value):
+    """Schema-level check: required string-like outputs should not accept blank values."""
+    properties = SCHEMA["parameters"]["properties"]
+    required = set(SCHEMA["parameters"].get("required", []))
+
+    for field in required:
+        field_schema = properties.get(field, {})
+        field_type = field_schema.get("type")
+        if field_type == "string":
+            min_len = field_schema.get("minLength", 0)
+            assert min_len >= 1, f"Required string field '{field}' should enforce non-blank values"
 
 
-@pytest.mark.parametrize(
-    "value",
-    [None],
-)
-def test_none_inputs_where_applicable(value):
-    """Covers None input handling for optional or nullable planner inputs."""
-    assert value is None
+@pytest.mark.parametrize("field", ["sprint_goal", "recommended_items", "deferred_items", "total_points", "capacity_utilization_pct", "risks"])
+def test_schema_required_fields_are_not_nullable(field):
+    """Schema-level check: required output fields should not be nullable by type."""
+    field_schema = SCHEMA["parameters"]["properties"].get(field, {})
+    field_type = field_schema.get("type")
+
+    if isinstance(field_type, list):
+        assert "null" not in field_type, f"Required field '{field}' should not allow null"
+    else:
+        assert field_type != "null", f"Required field '{field}' should not be null type"
 
 
 @pytest.mark.parametrize(
