@@ -182,77 +182,84 @@ ModuleNotFoundError: No module named 'stripe'
 """
 
 
-def _run_verbose_diagnostics_tests() -> None:
-    global VERBOSE
+def _run_self_tests() -> None:
+    from types import SimpleNamespace
 
-    class _FakeCompletions:
-        def __init__(self, fail_times: int = 0):
-            self.calls = 0
-            self.fail_times = fail_times
+    class _FakeCreate:
+        def __init__(self):
+            self.calls = []
+            self.side_effects = []
 
         def create(self, **kwargs):
-            self.calls += 1
-            if self.calls <= self.fail_times:
-                raise RuntimeError("transient")
-            return {"ok": True, "kwargs": kwargs}
-
-    class _FakeChat:
-        def __init__(self, completions):
-            self.completions = completions
+            self.calls.append(kwargs)
+            if self.side_effects:
+                effect = self.side_effects.pop(0)
+                if isinstance(effect, Exception):
+                    raise effect
+                return effect
+            return {"ok": True}
 
     class _FakeClient:
-        def __init__(self, completions):
-            self.chat = _FakeChat(completions)
-
-    class _CaptureConsole:
         def __init__(self):
-            self.lines: list[str] = []
+            self.chat = SimpleNamespace(completions=_FakeCreate())
 
-        def print(self, *args, **kwargs):
-            self.lines.append(" ".join(str(a) for a in args))
+    global VERBOSE
 
-    original_get_client = globals()["get_client"]
-    original_console = globals()["console"]
-    original_sleep = time.sleep
     original_verbose = VERBOSE
+    original_get_client = globals()["get_client"]
+    original_console_print = console.print
+    original_sleep = time.sleep
+    original_perf_counter = time.perf_counter
 
     try:
-        # (1) VERBOSE=False: single API call, no diagnostics
-        cap = _CaptureConsole()
-        fake_comp = _FakeCompletions()
-        globals()["console"] = cast(Console, cap)
-        globals()["get_client"] = lambda: _FakeClient(fake_comp)  # type: ignore[assignment]
+        # (1) VERBOSE=False -> one API call, no diagnostics
+        fake_client = _FakeClient()
+        globals()["get_client"] = lambda: fake_client
         VERBOSE = False
-        create_chat_completion(model="x", messages=[{"content": "hello"}])
-        assert fake_comp.calls == 1
-        assert cap.lines == []
+        printed = []
+        console.print = lambda *args, **kwargs: printed.append((args, kwargs))
+        result = create_chat_completion(model="m1", messages=[{"content": "hello"}])
+        assert result == {"ok": True}
+        assert len(fake_client.chat.completions.calls) == 1
+        assert printed == []
 
-        # (2) VERBOSE=True: diagnostics printed, API still called once
-        cap = _CaptureConsole()
-        fake_comp = _FakeCompletions()
-        globals()["console"] = cast(Console, cap)
-        globals()["get_client"] = lambda: _FakeClient(fake_comp)  # type: ignore[assignment]
+        # (2) VERBOSE=True -> diagnostics printed, API still called once
+        fake_client = _FakeClient()
+        globals()["get_client"] = lambda: fake_client
         VERBOSE = True
-        create_chat_completion(model="x", messages=[{"content": "hello"}])
-        assert fake_comp.calls == 1
-        out = "\n".join(cap.lines)
+        printed = []
+        ticks = iter([100.0, 100.5])
+        time.perf_counter = lambda: next(ticks)
+        console.print = lambda *args, **kwargs: printed.append(args[0] if args else "")
+        result = create_chat_completion(model="m2", messages=[{"content": "abcd"}, {"content": "efgh"}])
+        assert result == {"ok": True}
+        assert len(fake_client.chat.completions.calls) == 1
+        out = "\n".join(str(x) for x in printed)
         assert "Model:" in out
         assert "Input size:" in out
         assert "Calling OpenAI API" in out
         assert "Done in" in out
 
-        # (3) retry logic: transient failures retried up to max attempts
-        cap = _CaptureConsole()
-        fake_comp = _FakeCompletions(fail_times=2)
-        globals()["console"] = cast(Console, cap)
-        globals()["get_client"] = lambda: _FakeClient(fake_comp)  # type: ignore[assignment]
-        time.sleep = lambda _: None  # type: ignore[assignment]
+        # (3) retry logic -> retries transient errors then succeeds
+        fake_client = _FakeClient()
+        fake_client.chat.completions.side_effects = [RuntimeError("t1"), RuntimeError("t2"), {"ok": "final"}]
+        globals()["get_client"] = lambda: fake_client
         VERBOSE = False
-        create_chat_completion(model="x", messages=[{"content": "hello"}])
-        assert fake_comp.calls == 3
+        sleeps = []
+        time.sleep = lambda d: sleeps.append(d)
+        result = create_chat_completion(model="m3", messages=[{"content": "x"}])
+        assert result == {"ok": "final"}
+        assert len(fake_client.chat.completions.calls) == 3
+        assert sleeps == [1, 2]
 
     finally:
-        globals()["get_client"] = original_get_client
-        globals()["console"] = original_console
-        time.sleep = original_sleep
         VERBOSE = original_verbose
+        globals()["get_client"] = original_get_client
+        console.print = original_console_print
+        time.sleep = original_sleep
+        time.perf_counter = original_perf_counter
+
+
+if __name__ == "__main__" and "--self-test" in sys.argv:
+    _run_self_tests()
+    print("self-tests passed")
