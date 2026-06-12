@@ -1,7 +1,7 @@
 """Sanity tests for sql-query-generator — no API key required."""
 import os, sys
 import pytest
-from jsonschema import validate, ValidationError
+from jsonschema import ValidationError, validate
 sys.path.insert(0, os.path.dirname(__file__))
 from generator import DIALECTS, SQL_SCHEMA
 
@@ -46,21 +46,24 @@ def test_mock_result():
     {"query": "", "explanation": "ok", "assumptions": []},
     {"query": "   ", "explanation": "ok", "assumptions": []},
     {"query": "\n\t", "explanation": "ok", "assumptions": []},
+    {"query": "SELECT 1", "explanation": "", "assumptions": []},
+    {"query": "SELECT 1", "explanation": "   ", "assumptions": []},
+    {"query": "SELECT 1", "explanation": "\n\t", "assumptions": []},
     {"query": None, "explanation": "ok", "assumptions": []},
     {"query": "SELECT 1", "explanation": None, "assumptions": []},
     {"query": "SELECT 1", "explanation": "ok", "assumptions": None},
 ])
 def test_invalid_required_fields(payload):
-    """Invalid required-field payloads should fail schema validation."""
+    """Required fields should reject nulls and empty-string-like values."""
     with pytest.raises(ValidationError):
         validate(instance=payload, schema=SQL_SCHEMA["parameters"])
 
 
-def test_valid_required_fields_payload_passes_schema_validation():
+def test_valid_required_fields_payload():
     """A valid payload should pass schema validation."""
     payload = {
         "query": "SELECT 1",
-        "explanation": "Returns a constant.",
+        "explanation": "Simple constant query.",
         "assumptions": []
     }
     validate(instance=payload, schema=SQL_SCHEMA["parameters"])
@@ -87,3 +90,4 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); sys.exit(1)
+
