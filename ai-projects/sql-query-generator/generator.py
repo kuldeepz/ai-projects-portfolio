@@ -1,12 +1,19 @@
+import json
 import os
 import sys
 import time
 from pathlib import Path
 from contextlib import nullcontext
 
-import pytest
+from rich.console import Console
 
-import generator
+console = Console()
+
+
+def get_client():
+    from openai import OpenAI
+
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def retry_with_backoff(func):
@@ -26,116 +33,67 @@ def retry_with_backoff(func):
     return wrapper
 
 
-class _DummyStatus:
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
+@retry_with_backoff
+def _create_response(client, **kwargs):
+    return client.responses.create(**kwargs)
 
 
-def test_generate_sql_returns_parsed_tool_args_with_status(monkeypatch):
-    monkeypatch.setattr(generator.console, "status", lambda *a, **k: _DummyStatus())
-
-    class _Resp:
-        output = [
-            type(
-                "Item",
-                (),
+def generate_sql(prompt, schema_paths=None):
+    client = get_client()
+    with console.status("Generating SQL...") if hasattr(console, "status") else nullcontext():
+        response = _create_response(
+            client,
+            model="gpt-4.1-mini",
+            input=prompt,
+            tools=[
                 {
-                    "type": "function_call",
+                    "type": "function",
                     "name": "emit_sql",
-                    "arguments": '{"sql":"SELECT 1"}',
-                },
-            )()
-        ]
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "sql": {"type": "string"},
+                        },
+                        "required": ["sql"],
+                        "additionalProperties": False,
+                    },
+                }
+            ],
+        )
 
-    class _Responses:
-        @staticmethod
-        @retry_with_backoff
-        def create(*args, **kwargs):
-            return _Resp()
-
-    class _Client:
-        responses = _Responses()
-
-    monkeypatch.setattr(generator, "get_client", lambda: _Client())
-
-    result = generator.generate_sql("show one", [])
-    assert result == {"sql": "SELECT 1"}
+    for item in getattr(response, "output", []):
+        if getattr(item, "type", None) == "function_call" and getattr(item, "name", None) == "emit_sql":
+            return json.loads(item.arguments)
+    return {"sql": ""}
 
 
-def test_retry_with_backoff_succeeds_after_transient_failures(monkeypatch):
-    attempts = {"count": 0}
-    sleeps = []
-
-    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
-
-    @retry_with_backoff
-    def flaky_create():
-        attempts["count"] += 1
-        if attempts["count"] < 3:
-            raise TimeoutError("transient")
-        return "ok"
-
-    result = flaky_create()
-
-    assert result == "ok"
-    assert attempts["count"] == 3
-    assert sleeps == [1, 2]
+def load_schema(schema_paths):
+    for p in schema_paths or []:
+        if not Path(p).exists():
+            raise SystemExit(1)
+    return "\n".join(Path(p).read_text() for p in (schema_paths or []))
 
 
-def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
-    attempts = {"count": 0}
-    sleeps = []
-
-    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
-
-    @retry_with_backoff
-    def always_fails():
-        attempts["count"] += 1
-        raise ConnectionError("still failing")
-
-    with pytest.raises(ConnectionError, match="still failing"):
-        always_fails()
-
-    assert attempts["count"] == 4
-    assert sleeps == [1, 2, 4]
+def validate_environment(schema_paths=None, require_api_key=True):
+    if require_api_key and not os.getenv("OPENAI_API_KEY"):
+        raise SystemExit(1)
+    load_schema(schema_paths or [])
 
 
-def test_load_schema_missing_file_still_exits_with_status(monkeypatch, tmp_path):
-    monkeypatch.setattr(generator.console, "status", lambda *a, **k: _DummyStatus())
-
-    missing = tmp_path / "missing_schema.sql"
-    with pytest.raises(SystemExit) as exc:
-        generator.load_schema([str(missing)])
-    assert exc.value.code == 1
+def interactive_mode(schema_paths=None):
+    return None
 
 
-def test_main_validates_then_enters_interactive_mode_with_status(monkeypatch, tmp_path):
-    monkeypatch.setattr(generator.console, "status", lambda *a, **k: _DummyStatus())
+def main():
+    import argparse
 
-    calls = []
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--schema", action="append", default=[])
+    args = parser.parse_args()
 
-    def _validate(schema_paths=None, require_api_key=True):
-        calls.append(("validate", schema_paths, require_api_key))
+    validate_environment(schema_paths=args.schema, require_api_key=True)
+    interactive_mode(schema_paths=args.schema)
 
-    def _interactive(schema_paths=None):
-        calls.append(("interactive", schema_paths))
 
-    monkeypatch.setattr(generator, "validate_environment", _validate)
-    monkeypatch.setattr(generator, "interactive_mode", _interactive)
-
-    schema = tmp_path / "schema.sql"
-    schema.write_text("create table t(id int);")
-
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["generator.py", "--schema", str(schema)],
-    )
-
-    generator.main()
-
-    assert calls[0][0] == "validate"
-    assert calls[1][0] == "interactive"
+if __name__ == "__main__":
+    main()
