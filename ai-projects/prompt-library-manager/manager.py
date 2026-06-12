@@ -154,122 +154,95 @@ def cmd_test(name: str, test_input: str):
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[{"role": "user", "content": input_content}],
-            temperature=0.3,
+            temperature=0
         )
-    if VERBOSE:
-        elapsed = (datetime.now() - started).total_seconds()
-        usage = getattr(response, "usage", None)
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-        console.print(f"[dim]Input tokens:[/dim] {prompt_tokens}")
-        console.print(f"✅ Done in {elapsed:.1f}s")
-    print_usage(response)
+
+    elapsed_ms = int((datetime.now() - started).total_seconds() * 1000)
     output = response.choices[0].message.content
-    console.print(Panel(output, title=f"[bold green]Output ({name} v{current_hash})[/bold green]", border_style="green"))
 
-    version["test_results"].append({"input": test_input, "output": output, "tested_at": datetime.now().isoformat()})
-    save_library(lib)
-    return {
-        "command": "test",
-        "name": name,
+    version.setdefault("test_results", []).append({
         "input": test_input,
-        "current_version": current_hash,
-        "output": output
-    }
+        "output": output,
+        "tested_at": datetime.now().isoformat()
+    })
+    save_library(lib)
 
-def cmd_compare(name: str, input_text: str):
-    """Run the same input against all versions of a prompt and compare."""
+    console.print(Panel(output, title="[green]Model Output[/green]", border_style="green"))
+    if VERBOSE:
+        console.print(f"[dim]Elapsed:[/dim] {elapsed_ms}ms")
+    print_usage(response)
+    return output
+
+
+def cmd_compare(name: str, test_input: str):
     lib = load_library()
     if name not in lib["prompts"]:
-        console.print(f"[red]Prompt not found:[/red] {name}"); return None
-    versions = lib["prompts"][name]["versions"]
+        console.print(f"[red]Prompt not found:[/red] {name}")
+        return
+    entry = lib["prompts"][name]
+    versions = entry.get("versions", [])[-2:]
     if len(versions) < 2:
-        console.print("[yellow]Need at least 2 versions to compare.[/yellow]")
-        return None
+        console.print("[yellow]Need at least two versions to compare.[/yellow]")
+        return
 
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Version", width=12)
-    table.add_column("Output", ratio=3)
-
-    comparison_results = []
+    results = {}
     for v in versions:
-        input_content = f"{v['prompt']}\n\nInput: {input_text}"
-        if VERBOSE:
-            console.print(f"[dim]Model:[/dim] {MODEL}")
-            console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
-            console.print("⏳ Calling OpenAI API...")
-        started = datetime.now()
-        with console.status(f"[bold green]Comparing v{v['hash']}...[/bold green]"):
+        prompt = v["prompt"]
+        input_content = f"{prompt}\n\nInput: {test_input}"
+        with console.status(f"[bold green]Testing v{v['hash']}...[/bold green]"):
             response = get_client().chat.completions.create(
                 model=MODEL,
                 messages=[{"role": "user", "content": input_content}],
-                temperature=0.3,
+                temperature=0
             )
-        if VERBOSE:
-            elapsed = (datetime.now() - started).total_seconds()
-            usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-            console.print(f"[dim]Input tokens:[/dim] {prompt_tokens}")
-            console.print(f"✅ Done in {elapsed:.1f}s")
-        print_usage(response)
-        output = response.choices[0].message.content
-        table.add_row(v["hash"], output[:500])
-        comparison_results.append({"version": v["hash"], "output": output})
+        results[v["hash"]] = response.choices[0].message.content
 
-    console.print(Panel(table, title=f"[bold]Comparison for {name}[/bold]", border_style="magenta"))
-    return {
-        "command": "compare",
-        "name": name,
-        "input": input_text,
-        "results": comparison_results
-    }
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Version", width=12)
+    table.add_column("Output", ratio=1)
+    for h, out in results.items():
+        table.add_row(h, out[:500])
+    console.print(Panel(table, title=f"Compare: {name}", border_style="magenta"))
+
+
+def _parse_global_flags(argv):
+    global VERBOSE
+    cleaned = []
+    for arg in argv:
+        if arg in ("--verbose", "-v"):
+            VERBOSE = True
+        else:
+            cleaned.append(arg)
+    return cleaned
 
 
 def main():
-    global VERBOSE
     validate_environment()
-    export = False
-    if "--export" in sys.argv:
-        export = True
-        sys.argv.remove("--export")
-    if "-e" in sys.argv:
-        export = True
-        sys.argv.remove("-e")
-    if "--verbose" in sys.argv:
-        VERBOSE = True
-        sys.argv.remove("--verbose")
-    if "-v" in sys.argv:
-        VERBOSE = True
-        sys.argv.remove("-v")
-
-    if len(sys.argv) < 2:
+    args = _parse_global_flags(sys.argv[1:])
+    if not args:
         console.print("Usage: python manager.py [add|list|show|test|compare] ...")
         return
 
-    cmd = sys.argv[1]
-    if cmd == "add" and len(sys.argv) >= 4:
-        name = sys.argv[2]
-        arg = sys.argv[3]
-        if Path(arg).exists() and Path(arg).is_file():
-            prompt_text = Path(arg).read_text(encoding="utf-8")
+    cmd = args[0]
+    if cmd == "add" and len(args) >= 3:
+        name = args[1]
+        prompt_source = args[2]
+        if Path(prompt_source).exists():
+            with open(prompt_source, "r", encoding="utf-8") as f:
+                prompt_text = f.read()
         else:
-            prompt_text = arg
-        description = sys.argv[4] if len(sys.argv) >= 5 else ""
-        tags = sys.argv[5].split(",") if len(sys.argv) >= 6 else []
-        cmd_add(name, prompt_text, description, tags)
+            prompt_text = prompt_source
+        cmd_add(name, prompt_text)
     elif cmd == "list":
         cmd_list()
-    elif cmd == "show" and len(sys.argv) >= 3:
-        cmd_show(sys.argv[2])
-    elif cmd == "test" and len(sys.argv) >= 4:
-        result = cmd_test(sys.argv[2], " ".join(sys.argv[3:]))
-        if export and result:
-            export_results(result)
-    elif cmd == "compare" and len(sys.argv) >= 4:
-        result = cmd_compare(sys.argv[2], " ".join(sys.argv[3:]))
-        if export and result:
-            export_results(result)
+    elif cmd == "show" and len(args) >= 2:
+        cmd_show(args[1])
+    elif cmd == "test" and len(args) >= 3:
+        cmd_test(args[1], " ".join(args[2:]))
+    elif cmd == "compare" and len(args) >= 3:
+        cmd_compare(args[1], " ".join(args[2:]))
     else:
-        console.print("[red]Invalid command or missing arguments.[/red]")
+        console.print("[red]Invalid command or arguments.[/red]")
 
 
 if __name__ == "__main__":
