@@ -133,68 +133,122 @@ def display(item: dict, analysis: dict):
     ))
 
 
-def test_validate_environment_missing_key(monkeypatch):
-    import types
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    args = types.SimpleNamespace(input=None)
-    try:
-        validate_environment(args)
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
+# -------------------- Tests --------------------
+
+def test_print_usage_normal_values(monkeypatch):
+    class Usage:
+        prompt_tokens = 1000
+        completion_tokens = 500
+        total_tokens = 1500
+
+    class Response:
+        usage = Usage()
+
+    captured = []
+    monkeypatch.setattr(console, "print", lambda msg: captured.append(msg))
+
+    print_usage(Response())
+
+    assert len(captured) == 1
+    assert "1000 in + 500 out = 1500 total" in captured[0]
+    assert "$0.0000" in captured[0]
 
 
-def test_validate_environment_blank_key(monkeypatch):
-    import types
-    monkeypatch.setenv("OPENAI_API_KEY", "   ")
-    args = types.SimpleNamespace(input=None)
-    try:
-        validate_environment(args)
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
+def test_print_usage_missing_usage_raises_attribute_error():
+    class Response:
+        pass
+
+    import pytest
+    with pytest.raises(AttributeError):
+        print_usage(Response())
 
 
-def test_validate_environment_missing_file(monkeypatch):
-    import types
-    monkeypatch.setenv("OPENAI_API_KEY", "k")
-    args = types.SimpleNamespace(input="/definitely/missing/file.json")
-    try:
-        validate_environment(args)
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
+def test_print_usage_zero_tokens(monkeypatch):
+    class Usage:
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+
+    class Response:
+        usage = Usage()
+
+    captured = []
+    monkeypatch.setattr(console, "print", lambda msg: captured.append(msg))
+
+    print_usage(Response())
+
+    assert "0 in + 0 out = 0 total" in captured[0]
+    assert "$0.0000" in captured[0]
 
 
-def test_validate_environment_not_file(monkeypatch, tmp_path):
-    import types
-    monkeypatch.setenv("OPENAI_API_KEY", "k")
-    args = types.SimpleNamespace(input=str(tmp_path))
-    try:
-        validate_environment(args)
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
+def test_print_usage_cost_formula_validation(monkeypatch):
+    class Usage:
+        prompt_tokens = 200000
+        completion_tokens = 100000
+        total_tokens = 300000
+
+    class Response:
+        usage = Usage()
+
+    captured = []
+    monkeypatch.setattr(console, "print", lambda msg: captured.append(msg))
+
+    print_usage(Response())
+
+    expected_cost = (200000 / 1000) * 0.000015 + (100000 / 1000) * 0.00006
+    assert f"${expected_cost:.4f}" in captured[0]
 
 
-def test_validate_environment_unreadable_file(monkeypatch, tmp_path):
-    import types
-    monkeypatch.setenv("OPENAI_API_KEY", "k")
-    p = tmp_path / "wi.json"
-    p.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(os, "access", lambda *_: False)
-    args = types.SimpleNamespace(input=str(p))
-    try:
-        validate_environment(args)
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
+def test_analyze_workitem_returns_tool_args_when_usage_print_runs(monkeypatch):
+    class Usage:
+        prompt_tokens = 10
+        completion_tokens = 5
+        total_tokens = 15
 
+    args = {
+        "ready_score": 80,
+        "missing_fields": [],
+        "acceptance_criteria_issues": [],
+        "improved_acceptance_criteria": "Given X When Y Then Z",
+        "story_point_suggestion": 3,
+        "risks": [],
+        "suggestions": ["Add edge cases"],
+        "summary": "Looks good"
+    }
 
-def test_validate_environment_success(monkeypatch, tmp_path):
-    import types
-    monkeypatch.setenv("OPENAI_API_KEY", "k")
-    p = tmp_path / "wi.json"
-    p.write_text("{}", encoding="utf-8")
-    args = types.SimpleNamespace(input=str(p))
-    validate_environment(args)
+    class Function:
+        arguments = json.dumps(args)
+
+    class ToolCall:
+        function = Function()
+
+    class Message:
+        tool_calls = [ToolCall()]
+
+    class Choice:
+        message = Message()
+
+    class Response:
+        usage = Usage()
+        choices = [Choice()]
+
+    class ChatCompletions:
+        @staticmethod
+        def create(**kwargs):
+            return Response()
+
+    class Chat:
+        completions = ChatCompletions()
+
+    class FakeClient:
+        chat = Chat()
+
+    monkeypatch.setattr(__import__(__name__), "get_client", lambda: FakeClient())
+
+    printed = []
+    monkeypatch.setattr(console, "print", lambda msg: printed.append(msg))
+
+    result = analyze_workitem(SAMPLE_WORK_ITEM)
+
+    assert result == args
+    assert any("Tokens:" in msg for msg in printed)
