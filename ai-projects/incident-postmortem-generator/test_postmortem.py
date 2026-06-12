@@ -89,14 +89,13 @@ def test_postmortem_required_fields_reject_empty_strings(value):
     assert all((not value or not value.strip()) for _ in required)
 
 
-@pytest.mark.parametrize("value", [None])
-def test_postmortem_required_fields_none_input(value):
+def test_postmortem_required_fields_none_input():
     """Covers None inputs for required postmortem fields where values are absent."""
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "incident-postmortem-generator"))
     from postmortem import SCHEMA
 
     required = SCHEMA["parameters"]["required"]
-    mock_payload = {field: value for field in required}
+    mock_payload = {field: None for field in required}
     assert all(mock_payload[field] is None for field in required)
 
 
