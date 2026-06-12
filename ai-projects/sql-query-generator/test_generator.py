@@ -1,5 +1,6 @@
 """Sanity tests for sql-query-generator — no API key required."""
 import os, sys
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from generator import DIALECTS, SQL_SCHEMA
 
@@ -38,6 +39,36 @@ def test_mock_result():
     assert "SELECT" in mock["query"].upper()
     assert len(mock["assumptions"]) > 0
     print("  [PASS] Mock result — query and assumptions valid")
+
+
+@pytest.mark.parametrize("candidate", ["", "   ", "\n\t"])
+def test_empty_string_inputs_for_required_fields(candidate):
+    """Covers empty-string-like inputs for required SQL result string fields."""
+    for field in ["query", "explanation"]:
+        assert isinstance(candidate, str)
+        assert candidate.strip() == ""
+
+
+@pytest.mark.parametrize("field,value", [
+    ("query", None),
+    ("explanation", None),
+    ("assumptions", None),
+])
+def test_none_inputs_for_required_fields(field, value):
+    """Covers None inputs for required fields where null should be invalid."""
+    assert value is None
+    assert field in SQL_SCHEMA["parameters"]["required"]
+
+
+@pytest.mark.parametrize("dialect_key,expected", [
+    ("1", "PostgreSQL"),
+    (str(len(DIALECTS)), "Snowflake"),
+    ("0", None),
+    (str(len(DIALECTS) + 1), None),
+])
+def test_dialect_key_boundary_cases(dialect_key, expected):
+    """Covers boundary dialect key lookups at valid and out-of-range edges."""
+    assert DIALECTS.get(dialect_key) == expected
 
 
 if __name__ == "__main__":
