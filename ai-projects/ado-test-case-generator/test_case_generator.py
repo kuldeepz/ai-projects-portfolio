@@ -71,8 +71,9 @@ SAMPLE_STORY = {
     )
 }
 
-def generate_test_cases(story: dict) -> dict:
-    response = get_client().chat.completions.create(
+def generate_test_cases(story: dict, client=None) -> dict:
+    client = client or get_client()
+    response = client.chat.completions.create(
         model=MODEL,
         messages=[
             {"role": "system", "content": (
