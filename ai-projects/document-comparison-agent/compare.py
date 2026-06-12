@@ -9,6 +9,8 @@ import sys
 import json
 import time
 from pathlib import Path
+import unittest
+from unittest.mock import patch, Mock
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -167,25 +169,78 @@ def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, co
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
-def similarity_bar(score: int) -> str:
-    filled = score // 5
-    bar = "█" * filled + "░" * (20 - filled)
-    color = "green" if score >= 70 else "yellow" if score >= 40 else "red"
-    return f"[{color}]{bar}[/{color}] [bold]{score}%[/bold]"
+class RetryWithBackoffTests(unittest.TestCase):
+    class _RetryableError(Exception):
+        def __init__(self, status_code=429):
+            super().__init__("retryable")
+            self.status_code = status_code
+
+    @patch("time.sleep")
+    def test_retry_success_first_try_no_sleep(self, sleep_mock):
+        fn = Mock(return_value="ok")
+        wrapped = retry_with_backoff(fn)
+
+        result = wrapped()
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(fn.call_count, 1)
+        sleep_mock.assert_not_called()
+
+    @patch("time.sleep")
+    def test_retry_success_after_retries_uses_backoff_sequence(self, sleep_mock):
+        fn = Mock(side_effect=[self._RetryableError(429), self._RetryableError(500), "ok"])
+        wrapped = retry_with_backoff(fn)
+
+        result = wrapped()
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(fn.call_count, 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+        sleep_mock.assert_any_call(1)
+        sleep_mock.assert_any_call(2)
+
+    @patch("time.sleep")
+    def test_retry_exhausted_retries_propagates_final_exception(self, sleep_mock):
+        err = self._RetryableError(503)
+        fn = Mock(side_effect=[err, err, err, err])
+        wrapped = retry_with_backoff(fn)
+
+        with self.assertRaises(self._RetryableError):
+            wrapped()
+
+        self.assertEqual(fn.call_count, 4)
+        self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2, 4])
 
 
-def display_report(report: dict, doc1_name: str, doc2_name: str):
-    console.print()
-    console.print(Panel.fit(
-        f"[bold white]Document Comparison Report[/bold white]\n"
-        f"[dim]{doc1_name}[/dim] [white]vs[/white] [dim]{doc2_name}[/dim]\n"
-        f"Similarity: {similarity_bar(report['overall_similarity'])}",
-        title="[bold cyan]Comparison Results[/bold cyan]",
-        border_style="cyan"
-    ))
+class CompareDocumentsRetryIntegrationTests(unittest.TestCase):
+    class _RetryableError(Exception):
+        def __init__(self, status_code=429):
+            super().__init__("retryable")
+            self.status_code = status_code
 
-    # Summaries side by side
-    summary_table = Table(show_header=True, header_style="bold")
-    summary_table.add_column(f"[cyan]{doc1_name}[/cyan]", ratio=1)
-    summary_table.add_column(f"[magenta]{doc2_name}[/magenta]", ratio=1)
-    summary_table.a
+    @patch("time.sleep")
+    @patch(__name__ + ".get_client")
+    def test_compare_documents_retries_then_succeeds(self, get_client_mock, sleep_mock):
+        final_payload = {"doc1_summary": "a", "doc2_summary": "b", "overall_similarity": 90,
+                         "common_themes": [], "unique_to_doc1": [], "unique_to_doc2": [],
+                         "conflicts": [], "recommendation": "ok"}
+
+        response_mock = Mock()
+        response_mock.choices = [
+            Mock(message=Mock(tool_calls=[Mock(function=Mock(arguments=json.dumps(final_payload)))]))
+        ]
+
+        create_mock = Mock(side_effect=[self._RetryableError(429), response_mock])
+        get_client_mock.return_value = Mock(
+            chat=Mock(completions=Mock(create=create_mock))
+        )
+
+        result = compare_documents("t1", "t2", "d1", "d2")
+
+        self.assertEqual(result, final_payload)
+        self.assertEqual(create_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(1)
+
+
+if __name__ == "__main__":
+    unittest.main()
