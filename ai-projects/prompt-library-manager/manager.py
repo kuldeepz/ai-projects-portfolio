@@ -26,6 +26,16 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 def validate_environment():
     cmd = sys.argv[1] if len(sys.argv) >= 2 else None
 
@@ -130,6 +140,7 @@ def cmd_test(name: str, test_input: str):
             messages=[{"role": "user", "content": f"{prompt}\n\nInput: {test_input}"}],
             temperature=0.3,
         )
+    print_usage(response)
     output = response.choices[0].message.content
     console.print(Panel(output, title=f"[bold green]Output ({name} v{current_hash})[/bold green]", border_style="green"))
 
@@ -153,6 +164,7 @@ def cmd_compare(name: str, input_text: str):
                 messages=[{"role": "user", "content": f"{v['prompt']}\n\nInput: {input_text}"}],
                 temperature=0.1,
             )
+        print_usage(r)
         outputs.append((v["hash"], r.choices[0].message.content))
 
     for h, out in outputs:
