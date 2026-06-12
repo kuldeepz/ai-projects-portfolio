@@ -157,35 +157,49 @@ def cmd_compare(name: str, input_text: str):
     for h, out in outputs:
         console.print(Panel(out[:500], title=f"[bold]Version {h}[/bold]", border_style="cyan"))
 
-def main():
+
+# Tests for validate_environment branches
+
+def test_validate_environment_valid_add_file(monkeypatch, tmp_path):
+    file_path = tmp_path / "prompt.txt"
+    file_path.write_text("hello")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(sys, "argv", ["manager.py", "add", "name", str(file_path)])
+
     validate_environment()
-    cmds = {"add": "add <name> <prompt_file> [description]",
-            "list": "list", "show": "show <name>",
-            "test": "test <name> <input_text>",
-            "compare": "compare <name> <input_text>"}
 
-    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
-        console.print("[yellow]Prompt Library Manager[/yellow]")
-        for cmd, usage in cmds.items():
-            console.print(f"  [cyan]{cmd}[/cyan]  {usage}")
-        sys.exit(0)
 
-    cmd = sys.argv[1]
-    if cmd == "list":
-        cmd_list()
-    elif cmd == "show" and len(sys.argv) >= 3:
-        cmd_show(sys.argv[2])
-    elif cmd == "add" and len(sys.argv) >= 4:
-        with open(sys.argv[3]) as f:
-            prompt_text = f.read()
-        desc = sys.argv[4] if len(sys.argv) > 4 else ""
-        cmd_add(sys.argv[2], prompt_text, desc)
-    elif cmd == "test" and len(sys.argv) >= 4:
-        cmd_test(sys.argv[2], sys.argv[3])
-    elif cmd == "compare" and len(sys.argv) >= 4:
-        cmd_compare(sys.argv[2], sys.argv[3])
-    else:
-        console.print("[red]Invalid arguments.[/red]"); sys.exit(1)
+def test_validate_environment_invalid_add_file_path(monkeypatch, tmp_path):
+    missing_file = tmp_path / "missing.txt"
 
-if __name__ == "__main__":
-    main()
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(sys, "argv", ["manager.py", "add", "name", str(missing_file)])
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit for missing file path"
+    except SystemExit as e:
+        assert e.code == 1
+
+
+def test_validate_environment_missing_api_key_required_command(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(sys, "argv", ["manager.py", "test", "name", "input"])
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit for missing OPENAI_API_KEY"
+    except SystemExit as e:
+        assert e.code == 1
+
+
+def test_validate_environment_local_command_without_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(sys, "argv", ["manager.py", "list"])
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit for missing OPENAI_API_KEY"
+    except SystemExit as e:
+        assert e.code == 1
