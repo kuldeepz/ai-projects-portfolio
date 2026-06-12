@@ -84,6 +84,28 @@ def print_usage(response) -> None:
     )
 
 
+def validate_environment() -> None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("❌ Missing OPENAI_API_KEY. Set it in your environment or .env file.")
+        sys.exit(1)
+
+    file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    for file_path in file_args:
+        path = Path(file_path)
+        if not path.exists():
+            console.print(f"❌ File not found: {file_path}")
+            sys.exit(1)
+        if not path.is_file():
+            console.print(f"❌ Not a file: {file_path}")
+            sys.exit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"❌ File is not readable: {file_path}")
+            sys.exit(1)
+
+    console.print("Setup OK ✓")
+
+
 COMPARE_SCHEMA = {
     "name": "comparison_report",
     "description": "Structured comparison between two documents",
@@ -183,6 +205,10 @@ def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, co
     )
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+
+
+def main():
+    validate_environment()
 
 
 class RetryWithBackoffTests(unittest.TestCase):
