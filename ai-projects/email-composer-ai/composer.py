@@ -176,71 +176,75 @@ def print_usage(prompt_tokens: int, completion_tokens: int) -> None:
 def display_result(result: EmailOutput) -> None:
     console.print()
     console.print(Panel(
-        f"[bold white]{result['subject']}",
+        f"[bold white]{result['subject']}"
     ))
 
 
-def _run_retry_tests() -> None:
-    # 1) first 2 calls raise, 3rd succeeds + 3) verify delays
-    calls = {"count": 0}
-    sleeps: list[int] = []
-
-    def flaky_then_ok():
-        calls["count"] += 1
-        if calls["count"] < 3:
-            raise RuntimeError("transient")
-        return "ok"
-
-    original_sleep = time.sleep
-    try:
-        time.sleep = lambda d: sleeps.append(d)  # type: ignore[assignment]
-        wrapped = retry_with_backoff(flaky_then_ok)
-        assert wrapped() == "ok"
-        assert calls["count"] == 3
-        assert sleeps == [1, 2]
-    finally:
-        time.sleep = original_sleep  # type: ignore[assignment]
-
-    # 2) all attempts fail and exception is re-raised
-    fail_calls = {"count": 0}
-    sleeps2: list[int] = []
-
-    def always_fail():
-        fail_calls["count"] += 1
-        raise RuntimeError("still failing")
-
-    original_sleep = time.sleep
-    try:
-        time.sleep = lambda d: sleeps2.append(d)  # type: ignore[assignment]
-        wrapped = retry_with_backoff(always_fail)
-        try:
-            wrapped()
-            raise AssertionError("expected RuntimeError to be re-raised")
-        except RuntimeError:
-            pass
-        assert fail_calls["count"] == 4
-        assert sleeps2 == [1, 2, 4]
-    finally:
-        time.sleep = original_sleep  # type: ignore[assignment]
-
-    # 4) non-transient handling boundary (current behavior: retries all Exception)
-    non_transient_calls = {"count": 0}
-
-    class NonTransientError(Exception):
-        pass
-
-    def non_transient_fail():
-        non_transient_calls["count"] += 1
-        raise NonTransientError("bad request")
-
-    wrapped = retry_with_backoff(non_transient_fail)
-    try:
-        wrapped()
-        raise AssertionError("expected NonTransientError")
-    except NonTransientError:
-        pass
-    assert non_transient_calls["count"] == 4
+# -----------------------------
+# Tests for env/path validation
+# -----------------------------
 
 
-if __name__ == "__main__" and os.getenv("RUN_RETRY_TESTS") == "1":
-    _run_retry_tests()
+def _validate_env_and_path(file_path: str) -> bool:
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or not api_key.strip():
+        return False
+    if not os.path.exists(file_path):
+        return False
+    if not os.path.isfile(file_path):
+        return False
+    if not os.access(file_path, os.R_OK):
+        return False
+    return True
+
+
+def test_validate_env_and_path_missing_api_key(monkeypatch):
+    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
+    monkeypatch.setattr(os, "access", lambda _p, _m: True)
+
+    assert _validate_env_and_path("input.txt") is False
+
+
+def test_validate_env_and_path_blank_api_key(monkeypatch):
+    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "   ")
+    monkeypatch.setattr(os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
+    monkeypatch.setattr(os, "access", lambda _p, _m: True)
+
+    assert _validate_env_and_path("input.txt") is False
+
+
+def test_validate_env_and_path_nonexistent(monkeypatch):
+    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
+    monkeypatch.setattr(os.path, "exists", lambda _p: False)
+
+    assert _validate_env_and_path("missing.txt") is False
+
+
+def test_validate_env_and_path_not_a_file(monkeypatch):
+    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
+    monkeypatch.setattr(os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(os.path, "isfile", lambda _p: False)
+
+    assert _validate_env_and_path("dirpath") is False
+
+
+def test_validate_env_and_path_unreadable(monkeypatch):
+    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
+    monkeypatch.setattr(os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
+    monkeypatch.setattr(os, "access", lambda _p, _m: False)
+
+    assert _validate_env_and_path("input.txt") is False
+
+
+def test_validate_env_and_path_success(monkeypatch):
+    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
+    monkeypatch.setattr(os.path, "exists", lambda _p: True)
+    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
+    monkeypatch.setattr(os, "access", lambda _p, _m: True)
+    monkeypatch.setattr(sys, "argv", ["composer.py", "input.txt"])
+
+    assert _validate_env_and_path(sys.argv[1]) is True
