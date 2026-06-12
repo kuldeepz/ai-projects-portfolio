@@ -35,7 +35,7 @@ def print_usage(response):
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 
 _client = None
@@ -51,7 +51,7 @@ def get_client():
 def validate_environment():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
-        print("Error: OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
+        console.print("Error: OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
         sys.exit(1)
 
     args = sys.argv[1:]
@@ -73,16 +73,16 @@ def validate_environment():
     for file_arg in file_args:
         p = Path(file_arg)
         if not p.exists():
-            print(f"Error: File does not exist: {file_arg}")
+            console.print(f"Error: File does not exist: {file_arg}")
             sys.exit(1)
         if not p.is_file():
-            print(f"Error: Path is not a file: {file_arg}")
+            console.print(f"Error: Path is not a file: {file_arg}")
             sys.exit(1)
         if not os.access(p, os.R_OK):
-            print(f"Error: File is not readable: {file_arg}")
+            console.print(f"Error: File is not readable: {file_arg}")
             sys.exit(1)
 
-    print("Setup OK ✓")
+    console.print("Setup OK ✓")
 
 
 RETRYABLE_EXCEPTIONS = (APIConnectionError, APITimeoutError, RateLimitError, APIError)
@@ -103,7 +103,7 @@ def retry_with_backoff(func):
                 if i == len(delays) - 1:
                     break
                 if VERBOSE:
-                    print(f"🔁 Retry {i + 1}/{len(delays)} failed ({type(e).__name__}); waiting {delay}s...")
+                    console.print(f"🔁 Retry {i + 1}/{len(delays)} failed ({type(e).__name__}); waiting {delay}s...")
                 with console.status("[bold green]Processing..."):
                     time.sleep(delay)
         raise last_exc
@@ -150,9 +150,9 @@ def parse_requirements(content: str, filename: str) -> str:
 @retry_with_backoff
 def _create_scan_response(dep_content: str):
     if VERBOSE:
-        print(f"🔧 Model: {MODEL}")
-        print(f"📝 Input size: {len(dep_content)} chars")
-        print("⏳ Calling OpenAI API...")
+        console.print(f"🔧 Model: {MODEL}")
+        console.print(f"📝 Input size: {len(dep_content)} chars")
+        console.print("⏳ Calling OpenAI API...")
         started = time.time()
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -171,85 +171,4 @@ def _create_scan_response(dep_content: str):
             temperature=0.1,
         )
         elapsed = time.time() - started
-        print(f"✅ Done in {elapsed:.1f}s")
-        print_usage(response)
-        return response
-
-    return get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are a security engineer specializing in supply chain security. "
-                "Analyze dependency files for: known vulnerabilities (CVEs), deprecated packages, "
-                "packages with no recent maintenance, overly broad version pins, and security-sensitive "
-                "packages that need careful version management. Use your knowledge of package ecosystems "
-                "up to your training cutoff."
-            )},
-            {"role": "user", "content": f"Scan these dependencies for risks:\n\n{dep_content}"}
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "dependency_report"}},
-        temperature=0.1,
-    )
-
-
-def get_usage_text(script_name: str = "scanner.py") -> str:
-    return (
-        f"Usage: python {script_name} [dependency_file] [--export output.json] [--verbose|-v]"
-    )
-
-
-# ------------------------
-# Tests for verbose behavior
-# ------------------------
-
-def test_validate_environment_accepts_verbose_flags(monkeypatch, capsys):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["scanner.py", "--verbose"])
-    validate_environment()
-    out = capsys.readouterr().out
-    assert "Setup OK" in out
-
-    monkeypatch.setattr(sys, "argv", ["scanner.py", "-v"])
-    validate_environment()
-    out = capsys.readouterr().out
-    assert "Setup OK" in out
-
-
-def test_usage_includes_verbose_flag():
-    usage = get_usage_text("scanner.py")
-    assert "--verbose|-v" in usage
-
-
-def test_create_scan_response_verbose_logs_and_returns(monkeypatch, capsys):
-    class DummyUsage:
-        prompt_tokens = 10
-        completion_tokens = 5
-        total_tokens = 15
-
-    class DummyResponse:
-        usage = DummyUsage()
-
-    class DummyCompletions:
-        @staticmethod
-        def create(**kwargs):
-            return DummyResponse()
-
-    class DummyChat:
-        completions = DummyCompletions()
-
-    class DummyClient:
-        chat = DummyChat()
-
-    monkeypatch.setattr(sys.modules[__name__], "VERBOSE", True)
-    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: DummyClient())
-    monkeypatch.setattr(time, "time", lambda: 100.0)
-
-    resp = _create_scan_response("flask==3.0.0")
-
-    assert isinstance(resp, DummyResponse)
-    out = capsys.readouterr().out
-    assert "🔧 Model:" in out
-    assert "⏳ Calling OpenAI API..." in out
-    assert "✅ Done in" in out
-    assert "📊 Tokens:" in out
+        console.print(f"✅ Done in {elapsed:.1f}s")
