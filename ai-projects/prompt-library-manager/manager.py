@@ -26,6 +26,31 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please set it in your environment or .env file.")
+        sys.exit(1)
+
+    cmd = sys.argv[1] if len(sys.argv) >= 2 else None
+    file_args = []
+    if cmd == "add" and len(sys.argv) >= 4:
+        file_args.append(sys.argv[3])
+
+    for file_arg in file_args:
+        p = Path(file_arg)
+        if not p.exists():
+            console.print(f"[red]Error:[/red] File path does not exist: {file_arg}")
+            sys.exit(1)
+        if not p.is_file():
+            console.print(f"[red]Error:[/red] Path is not a file: {file_arg}")
+            sys.exit(1)
+        if not os.access(p, os.R_OK):
+            console.print(f"[red]Error:[/red] File is not readable: {file_arg}")
+            sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
 def load_library() -> dict:
     if Path(LIBRARY_FILE).exists():
         with open(LIBRARY_FILE) as f:
@@ -133,6 +158,7 @@ def cmd_compare(name: str, input_text: str):
         console.print(Panel(out[:500], title=f"[bold]Version {h}[/bold]", border_style="cyan"))
 
 def main():
+    validate_environment()
     cmds = {"add": "add <name> <prompt_file> [description]",
             "list": "list", "show": "show <name>",
             "test": "test <name> <input_text>",
