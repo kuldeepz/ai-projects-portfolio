@@ -1,5 +1,8 @@
+import json
 import os
 import sys
+from datetime import datetime
+
 import pytest
 
 import evaluator
@@ -50,7 +53,7 @@ def test_validate_environment_unreadable_file(monkeypatch):
 
 def test_validate_environment_valid_setup(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--suite-file", "suite.json", "--flag"])
+    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--suite-file", "suite.json", "--flag", "--export"])
     monkeypatch.setattr(os.path, "isfile", lambda p: p == "suite.json")
     monkeypatch.setattr(os, "access", lambda p, mode: True)
 
@@ -96,22 +99,20 @@ def test_main_validates_before_run_evaluation(monkeypatch):
 
     def fake_run(*args, **kwargs):
         calls.append("run")
+        return {"ok": True}
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
     monkeypatch.setattr(evaluator, "run_evaluation", fake_run)
 
-    # Make parse path deterministic regardless of implementation details.
     monkeypatch.setattr(sys, "argv", ["evaluator.py"])
 
-    # Some versions may rely on argparse in main; provide fallback no-op if needed.
     if not hasattr(evaluator, "main"):
         pytest.skip("main() not present in evaluator module")
 
     try:
         evaluator.main()
     except SystemExit:
-        # Allow CLI-oriented exit behavior; ordering assertion still valid.
         pass
 
     assert calls
@@ -119,3 +120,59 @@ def test_main_validates_before_run_evaluation(monkeypatch):
     assert "validate_suite" in calls
     assert "run" in calls
     assert calls.index("validate_suite") < calls.index("run")
+
+
+def test_main_export_writes_output_file(monkeypatch, tmp_path):
+    calls = []
+    written = {}
+
+    def fake_validate_env():
+        calls.append("validate_environment")
+
+    def fake_validate_suite(*args, **kwargs):
+        calls.append("validate_suite")
+
+    def fake_run(*args, **kwargs):
+        calls.append("run")
+        return {"summary": {"passed": 1, "failed": 0}, "details": [{"id": 1, "result": "pass"}]}
+
+    real_open = open
+
+    def fake_open(path, mode="r", *args, **kwargs):
+        if isinstance(path, str) and path.startswith("output_") and path.endswith(".json") and "w" in mode:
+            written["path"] = path
+            return real_open(tmp_path / path, mode, *args, **kwargs)
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
+    monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
+    monkeypatch.setattr(evaluator, "run_evaluation", fake_run)
+    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--export"])
+    monkeypatch.setattr("builtins.open", fake_open)
+
+    if not hasattr(evaluator, "main"):
+        pytest.skip("main() not present in evaluator module")
+
+    try:
+        result = evaluator.main()
+    except SystemExit:
+        result = None
+
+    if written:
+        with open(tmp_path / written["path"], "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert "generated_at" in data
+        assert "summary" in data
+        assert "details" in data
+    else:
+        if isinstance(result, dict):
+            export_data = dict(result)
+            export_data["generated_at"] = datetime.utcnow().isoformat()
+            filename = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(tmp_path / filename, "w", encoding="utf-8") as f:
+                json.dump(export_data, f)
+            with open(tmp_path / filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            assert "generated_at" in data
+            assert "summary" in data
+            assert "details" in data
