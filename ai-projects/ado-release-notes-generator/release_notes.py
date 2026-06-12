@@ -108,16 +108,14 @@ def _export_results_if_requested(results):
     if not args.export:
         return
 
-    generated_at = datetime.now().isoformat()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    now = datetime.now()
+    generated_at = now.isoformat()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
     output = dict(results)
     output["generated_at"] = generated_at
     filename = f"output_{timestamp}.json"
-    try:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(output, f, ensure_ascii=False, indent=2)
-    except OSError as e:
-        print(f"Failed to export results: {e}")
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":
