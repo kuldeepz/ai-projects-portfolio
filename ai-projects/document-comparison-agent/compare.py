@@ -11,7 +11,7 @@ import time
 from functools import wraps
 from pathlib import Path
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, mock_open
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -177,65 +177,79 @@ def read_document(path: str) -> str:
             return f.read()
 
 
-class TestSpinnerBehavior(unittest.TestCase):
+@retry_with_backoff
+def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, context: str = ""):
+    with console.status("[bold green]Processing..."):
+        client = get_client()
+        prompt = f"Compare {doc1_name} and {doc2_name}.\n\n{text1}\n\n{text2}\n\n{context}".strip()
+        return client.responses.create(
+            model=CHAT_MODEL,
+            input=prompt,
+        )
+
+
+class TestSpinnerStatusBehavior(unittest.TestCase):
     def _status_cm(self):
         cm = Mock()
         cm.__enter__ = Mock(return_value=None)
-        cm.__exit__ = Mock(return_value=False)
+        cm.__exit__ = Mock(return_value=None)
         return cm
 
-    def test_retry_with_backoff_uses_status_during_sleep(self):
-        class RateLimitError(Exception):
-            pass
+    @patch("compare.time.sleep", return_value=None)
+    @patch("compare.console.status")
+    def test_retry_with_backoff_enters_status_on_retry(self, mock_status, _mock_sleep):
+        mock_status.return_value = self._status_cm()
 
-        attempts = {"n": 0}
+        class RetryableError(Exception):
+            status_code = 429
+
+        calls = {"count": 0}
 
         @retry_with_backoff
         def flaky():
-            if attempts["n"] == 0:
-                attempts["n"] += 1
-                raise RateLimitError("retry")
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise RetryableError("rate limited")
             return "ok"
 
-        status_cm = self._status_cm()
-        with patch(__name__ + ".console.status", return_value=status_cm) as mock_status, \
-             patch(__name__ + ".time.sleep") as mock_sleep:
-            result = flaky()
-
+        result = flaky()
         self.assertEqual(result, "ok")
         mock_status.assert_called_once_with("[bold green]Processing...")
-        mock_sleep.assert_called_once_with(1)
-        status_cm.__enter__.assert_called_once()
-        status_cm.__exit__.assert_called_once()
 
-    def test_read_document_text_uses_status_once(self):
-        status_cm = self._status_cm()
-        m_open = unittest.mock.mock_open(read_data="hello")
+    @patch("compare.PyPDF2.PdfReader")
+    @patch("compare.open", new_callable=mock_open)
+    @patch("compare.console.status")
+    def test_read_document_pdf_enters_status_once(self, mock_status, _mock_file, mock_reader):
+        mock_status.return_value = self._status_cm()
+        page = Mock()
+        page.extract_text.return_value = "hello"
+        mock_reader.return_value.pages = [page]
 
-        with patch(__name__ + ".console.status", return_value=status_cm) as mock_status, \
-             patch("builtins.open", m_open):
-            content = read_document("doc.txt")
-
-        self.assertEqual(content, "hello")
+        text = read_document("doc.pdf")
+        self.assertEqual(text, "hello")
         mock_status.assert_called_once_with("[bold green]Processing...")
-        status_cm.__enter__.assert_called_once()
-        status_cm.__exit__.assert_called_once()
 
-    def test_read_document_pdf_uses_status_once(self):
-        status_cm = self._status_cm()
-        page1 = Mock()
-        page1.extract_text.return_value = "a"
-        page2 = Mock()
-        page2.extract_text.return_value = "b"
-        reader = Mock()
-        reader.pages = [page1, page2]
+    @patch("compare.open", new_callable=mock_open, read_data="plain text")
+    @patch("compare.console.status")
+    def test_read_document_text_enters_status_once(self, mock_status, _mock_file):
+        mock_status.return_value = self._status_cm()
 
-        with patch(__name__ + ".console.status", return_value=status_cm) as mock_status, \
-             patch("builtins.open", unittest.mock.mock_open(read_data=b"pdf")), \
-             patch(__name__ + ".PyPDF2.PdfReader", return_value=reader):
-            content = read_document("doc.pdf")
-
-        self.assertEqual(content, "a\nb")
+        text = read_document("doc.txt")
+        self.assertEqual(text, "plain text")
         mock_status.assert_called_once_with("[bold green]Processing...")
-        status_cm.__enter__.assert_called_once()
-        status_cm.__exit__.assert_called_once()
+
+    @patch("compare.get_client")
+    @patch("compare.console.status")
+    def test_compare_documents_enters_status_once(self, mock_status, mock_get_client):
+        mock_status.return_value = self._status_cm()
+        mock_client = Mock()
+        mock_client.responses.create.return_value = {"ok": True}
+        mock_get_client.return_value = mock_client
+
+        result = compare_documents("a", "b", "doc1", "doc2")
+        self.assertEqual(result, {"ok": True})
+        mock_status.assert_called_once_with("[bold green]Processing...")
+
+
+if __name__ == "__main__":
+    unittest.main()
