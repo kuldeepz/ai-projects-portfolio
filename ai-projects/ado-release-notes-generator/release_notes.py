@@ -1,4 +1,7 @@
+import argparse
+import json
 import unittest
+from datetime import datetime
 from functools import wraps
 from unittest.mock import patch, call
 
@@ -97,5 +100,30 @@ class CreateChatCompletionTests(unittest.TestCase):
         mock_sleep.assert_called_once_with(1)
 
 
+def _export_results_if_requested(results):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-e", "--export", action="store_true")
+    args, _ = parser.parse_known_args()
+
+    if not args.export:
+        return
+
+    generated_at = datetime.now().isoformat()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output = dict(results)
+    output["generated_at"] = generated_at
+    filename = f"output_{timestamp}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+
+
 if __name__ == "__main__":
-    unittest.main()
+    test_program = unittest.main(exit=False)
+    test_results = {
+        "tests_run": test_program.result.testsRun,
+        "failures": len(test_program.result.failures),
+        "errors": len(test_program.result.errors),
+        "skipped": len(test_program.result.skipped),
+        "successful": test_program.result.wasSuccessful(),
+    }
+    _export_results_if_requested(test_results)
