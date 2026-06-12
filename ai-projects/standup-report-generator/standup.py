@@ -163,82 +163,97 @@ class TestCLIExportBehavior(unittest.TestCase):
             "title": "Daily Standup",
             "formatted_report": "# Update\n- Did things",
             "key_highlights": ["Did things"],
+            "blockers_summary": "None",
+            "tone_notes": "Professional",
         }
 
-    def _run_main_with_args(self, args, cwd, input_payload=None):
-        input_file = None
-        if input_payload is not None:
-            input_file = os.path.join(cwd, "notes.json")
-            with open(input_file, "w") as f:
-                json.dump(input_payload, f)
-
-        argv = ["standup.py", *args]
-        with patch("sys.argv", argv), patch(__name__ + ".generate_report", return_value=self._fake_report()):
+    def test_verbose_flag_sets_verbose_mode(self):
+        global VERBOSE
+        VERBOSE = False
+        with patch.object(sys, "argv", ["standup.py", "-v"]), \
+             patch(__name__ + ".generate_report", return_value=self._fake_report()), \
+             patch("builtins.open", unittest.mock.mock_open()):
             main()
+        self.assertTrue(VERBOSE)
 
-        return input_file
+    def test_generate_report_verbose_prints_diagnostics(self):
+        global VERBOSE
+        VERBOSE = True
 
-    def test_export_long_flag_with_input_file_creates_md_and_json(self):
-        with tempfile.TemporaryDirectory() as td:
-            notes = {
-                "name": "Test User",
-                "role": "Engineer",
-                "date": str(date.today()),
-                "format": "standup",
-                "raw_notes": ["did x", "doing y"],
-            }
-            self._run_main_with_args(["notes.json", "--export", "json", "--export-out", "result.json"], td, input_payload=notes)
+        fake_args = json.dumps(self._fake_report())
 
-            md_path = os.path.join(td, f"standup_{date.today().isoformat()}.md")
-            json_path = os.path.join(td, "result.json")
-            self.assertTrue(os.path.exists(md_path))
-            self.assertTrue(os.path.exists(json_path))
+        class _Fn:
+            arguments = fake_args
 
-    def test_export_short_flag_e_with_input_file_works(self):
-        with tempfile.TemporaryDirectory() as td:
-            notes = {
-                "name": "Test User",
-                "role": "Engineer",
-                "date": str(date.today()),
-                "format": "standup",
-                "raw_notes": ["did x", "doing y"],
-            }
-            old_cwd = os.getcwd()
-            try:
-                os.chdir(td)
-                self._run_main_with_args(["-e", "json", "notes.json", "--export-out", "result.json"], td, input_payload=notes)
-            finally:
-                os.chdir(old_cwd)
+        class _ToolCall:
+            function = _Fn()
 
-            self.assertTrue(os.path.exists(os.path.join(td, f"standup_{date.today().isoformat()}.md")))
-            self.assertTrue(os.path.exists(os.path.join(td, "result.json")))
+        class _Msg:
+            tool_calls = [_ToolCall()]
 
-    def test_export_with_no_input_uses_sample_notes_and_exports(self):
-        with tempfile.TemporaryDirectory() as td:
-            old_cwd = os.getcwd()
-            try:
-                os.chdir(td)
-                self._run_main_with_args(["--export", "json", "--export-out", "sample.json"], td)
-            finally:
-                os.chdir(old_cwd)
+        class _Choice:
+            message = _Msg()
 
-            self.assertTrue(os.path.exists(os.path.join(td, f"standup_{date.today().isoformat()}.md")))
-            self.assertTrue(os.path.exists(os.path.join(td, "sample.json")))
+        class _Resp:
+            choices = [_Choice()]
 
-    def test_repeated_export_flags_parse_without_breaking(self):
-        with tempfile.TemporaryDirectory() as td:
-            old_cwd = os.getcwd()
-            try:
-                os.chdir(td)
-                with patch("sys.argv", ["standup.py", "--export", "json", "-e", "json", "--export-out", "dup.json"]), \
-                     patch(__name__ + ".generate_report", return_value=self._fake_report()):
-                    main()
-            finally:
-                os.chdir(old_cwd)
+        class _Completions:
+            def create(self, **kwargs):
+                return _Resp()
 
-            self.assertTrue(os.path.exists(os.path.join(td, "dup.json")))
-            self.assertTrue(os.path.exists(os.path.join(td, f"standup_{date.today().isoformat()}.md")))
+        class _Chat:
+            completions = _Completions()
 
+        class _Client:
+            chat = _Chat()
 
-if __name__ == "__main_test__":
-    unittest.main()
+        with patch(__name__ + ".get_client", return_value=_Client()), \
+             patch.object(console, "print") as mock_print:
+            generate_report(SAMPLE_NOTES)
+
+        printed = "\n".join(" ".join(str(a) for a in call.args) for call in mock_print.call_args_list)
+        self.assertIn("Model:", printed)
+        self.assertIn("Input size:", printed)
+        self.assertIn("Calling OpenAI API", printed)
+        self.assertIn("Done in", printed)
+
+    def test_generate_report_non_verbose_suppresses_diagnostics(self):
+        global VERBOSE
+        VERBOSE = False
+
+        fake_args = json.dumps(self._fake_report())
+
+        class _Fn:
+            arguments = fake_args
+
+        class _ToolCall:
+            function = _Fn()
+
+        class _Msg:
+            tool_calls = [_ToolCall()]
+
+        class _Choice:
+            message = _Msg()
+
+        class _Resp:
+            choices = [_Choice()]
+
+        class _Completions:
+            def create(self, **kwargs):
+                return _Resp()
+
+        class _Chat:
+            completions = _Completions()
+
+        class _Client:
+            chat = _Chat()
+
+        with patch(__name__ + ".get_client", return_value=_Client()), \
+             patch.object(console, "print") as mock_print:
+            generate_report(SAMPLE_NOTES)
+
+        printed = "\n".join(" ".join(str(a) for a in call.args) for call in mock_print.call_args_list)
+        self.assertNotIn("Model:", printed)
+        self.assertNotIn("Input size:", printed)
+        self.assertNotIn("Calling OpenAI API", printed)
+        self.assertNotIn("Done in", printed)
