@@ -166,13 +166,123 @@ def display_notes(notes: dict):
         dec_text = "\n".join(f"  [green]✔[/green] {d}" for d in notes["decisions"])
         console.print(Panel(dec_text, title="[bold green]Decisions Made[/bold green]", border_style="green"))
     else:
-        console.print(Panel("[dim]No explicit decisions recorded",
-        title="[bold green]Decisions Made[/bold green]", border_style="green"))
+        console.print(Panel("[dim]No explicit decisions recorded[/dim]", title="[bold green]Decisions Made[/bold green]", border_style="green"))
 
 
-def export_json(notes: dict, stem: str) -> Path:
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    export_file = f"notes_{stem}_{stamp}.json"
-    out_path = Path(export_file)
-    out_path.write_text(json.dumps(notes, indent=2), encoding="utf-8")
-    return out_path
+def _run_cli_tests():
+    import tempfile
+
+    sample_notes = {
+        "title": "Weekly Sync",
+        "duration_estimate": "30m",
+        "attendees": ["Alice", "Bob"],
+        "executive_summary": "Quick status updates and next steps.",
+        "key_topics": [{"topic": "Roadmap", "discussion": "Reviewed milestones."}],
+        "decisions": ["Ship v1 Friday"],
+        "action_items": [{"task": "Prepare release notes", "owner": "Alice", "due": "Friday"}],
+        "blockers": [],
+        "follow_up_meetings": [],
+        "sentiment": "positive",
+    }
+
+    original_summarize = summarize_transcript
+    original_display = display_notes
+    original_argv = sys.argv[:]
+    original_stdin = sys.stdin
+
+    def fake_summarize(_):
+        return sample_notes
+
+    def fake_display(_):
+        return None
+
+    try:
+        globals()["summarize_transcript"] = fake_summarize
+        globals()["display_notes"] = fake_display
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            transcript_file = td_path / "transcript.txt"
+            transcript_file.write_text("Alice: update", encoding="utf-8")
+
+            # (1) --export writes JSON
+            export1 = td_path / "notes1.json"
+            rc = main([str(transcript_file), "--export", str(export1)])
+            assert rc == 0 and export1.exists()
+            p1 = json.loads(export1.read_text(encoding="utf-8"))
+            assert "generated_at" in p1 and p1["notes"] == sample_notes
+
+            # (2) -e works equivalently
+            export2 = td_path / "notes2.json"
+            rc = main([str(transcript_file), "-e", str(export2)])
+            assert rc == 0 and export2.exists()
+            p2 = json.loads(export2.read_text(encoding="utf-8"))
+            assert "generated_at" in p2 and p2["notes"] == sample_notes
+
+            # (3) no export flag skips JSON write
+            before = {p.name for p in td_path.glob("*.json")}
+            rc = main([str(transcript_file)])
+            after = {p.name for p in td_path.glob("*.json")}
+            assert rc == 0 and before == after
+
+            # (4) missing transcript arg after flag shows usage/exit 1
+            rc = main(["--export", str(td_path / "oops.json")])
+            assert rc == 1
+
+            # (5) stdin mode - --export
+            export3 = td_path / "notes3.json"
+            sys.stdin = type("_S", (), {"read": lambda self: "stdin transcript"})()
+            rc = main(["-", "--export", str(export3)])
+            assert rc == 0 and export3.exists()
+
+        return 0
+    finally:
+        globals()["summarize_transcript"] = original_summarize
+        globals()["display_notes"] = original_display
+        sys.argv = original_argv
+        sys.stdin = original_stdin
+
+
+def main(argv=None):
+    args = list(argv if argv is not None else sys.argv[1:])
+
+    if args and args[0] == "--run-cli-tests":
+        return _run_cli_tests()
+
+    export_path = None
+    i = 0
+    while i < len(args):
+        if args[i] in ("--export", "-e"):
+            if i + 1 >= len(args):
+                print("Usage: summarizer.py <transcript_file|-> [--export|-e output.json]")
+                return 1
+            export_path = args[i + 1]
+            del args[i:i + 2]
+            continue
+        i += 1
+
+    if len(args) != 1:
+        print("Usage: summarizer.py <transcript_file|-> [--export|-e output.json]")
+        return 1
+
+    source = args[0]
+    if source == "-":
+        transcript = sys.stdin.read()
+    else:
+        transcript = Path(source).read_text(encoding="utf-8")
+
+    notes = summarize_transcript(transcript)
+    display_notes(notes)
+
+    if export_path:
+        payload = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "notes": notes,
+        }
+        Path(export_path).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
