@@ -7,6 +7,7 @@ structured meeting notes: summary, action items, decisions, key topics, attendee
 import os
 import sys
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +22,7 @@ load_dotenv()
 
 console = Console()
 CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 
@@ -134,6 +136,12 @@ NOTES_SCHEMA = {
 
 def summarize_transcript(transcript: str) -> dict:
     with console.status("[bold green]Processing..."):
+        if VERBOSE:
+            console.print(f"[dim]Model:[/dim] {CHAT_MODEL}")
+            prompt_text = f"Summarize this meeting transcript:\n\n{transcript}"
+            console.print(f"[dim]Input chars:[/dim] {len(prompt_text)}")
+            console.print("⏳ Calling OpenAI API...")
+            start = time.time()
         response = get_client().chat.completions.create(
             model=CHAT_MODEL,
             messages=[
@@ -155,6 +163,16 @@ def summarize_transcript(transcript: str) -> dict:
             tool_choice={"type": "function", "function": {"name": "meeting_notes"}},
             temperature=0.2,
         )
+        if VERBOSE:
+            elapsed = time.time() - start
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            if prompt_tokens is not None or completion_tokens is not None:
+                in_tok = prompt_tokens or 0
+                out_tok = completion_tokens or 0
+                console.print(f"[dim]Input/output tokens:[/dim] {in_tok}/{out_tok}")
+            console.print(f"✅ Done in {elapsed:.1f}s")
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
@@ -178,6 +196,10 @@ def display_notes(notes: dict):
 
 if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
     pass
+
+
+if "--verbose" in sys.argv or "-v" in sys.argv:
+    VERBOSE = True
 
 
 def _run_print_usage_tests():
