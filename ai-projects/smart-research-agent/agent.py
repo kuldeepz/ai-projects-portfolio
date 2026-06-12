@@ -35,6 +35,17 @@ MAX_PAGE_CHARS = 4000
 MAX_SEARCH_RESULTS = 5
 
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", 0) or 0
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+
 # ─── Tool implementations ────────────────────────────────────────────────────
 
 def web_search(query: str, max_results: int = MAX_SEARCH_RESULTS) -> list[dict]:
@@ -100,6 +111,7 @@ def summarize_text(text: str, focus: str) -> str:
         temperature=0.2,
         max_tokens=400,
     )
+    print_usage(response)
     return response.choices[0].message.content
 
 
@@ -194,6 +206,7 @@ def run_agent(topic: str, depth: str = "standard") -> str:
             tool_choice="auto",
             temperature=0.3,
         )
+        print_usage(response)
 
         msg = response.choices[0].message
 
