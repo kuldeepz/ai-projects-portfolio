@@ -75,7 +75,7 @@ def configure_verbose(argv=None):
     global VERBOSE, DEBUG_SENSITIVE
     args, _ = parse_args(argv)
     VERBOSE = args.verbose
-    DEBUG_SENSITIVE = args.debug_sensitive
+    DEBUG_SENSITIVE = args.verbose and args.debug_sensitive
 
 
 @retry_with_backoff
@@ -86,13 +86,13 @@ def call_openai(*args, **kwargs):
     """
     if VERBOSE:
         model = _extract_model_name(args, kwargs)
-        print(f"Model: {model}")
+        print("⏳ Calling OpenAI API...")
+        print(f"Request model: {model}")
         if DEBUG_SENSITIVE:
             input_value = _extract_input_text(args, kwargs)
             char_count = len(input_value) if isinstance(input_value, str) else len(str(input_value))
             token_count = _estimate_token_count(input_value)
             print(f"Input chars: {char_count}, tokens: {token_count}")
-        print("⏳ Calling OpenAI API...")
         started = time.time()
     try:
         raise NotImplementedError("Implement OpenAI API invocation here")
@@ -102,83 +102,97 @@ def call_openai(*args, **kwargs):
             print(f"✅ Done in {elapsed:.1f}s")
 
 
-# ----------------------
-# Unit tests (pytest)
-# ----------------------
-
-def test_parse_args_verbose_true():
-    args, unknown = parse_args(["--verbose"])
-    assert args.verbose is True
-    assert args.debug_sensitive is False
-    assert unknown == []
-
-
-def test_configure_verbose_mutates_global_state():
+def _reset_verbose_for_tests(value=False, debug_sensitive=False):
+    """Test helper: reset global verbose flags deterministically."""
     global VERBOSE, DEBUG_SENSITIVE
-    VERBOSE = False
-    DEBUG_SENSITIVE = False
-    configure_verbose(["--verbose", "--debug-sensitive"])
-    assert VERBOSE is True
-    assert DEBUG_SENSITIVE is True
-    configure_verbose([])
-    assert VERBOSE is False
-    assert DEBUG_SENSITIVE is False
+    VERBOSE = value
+    DEBUG_SENSITIVE = debug_sensitive
 
 
-def test_helper_extraction_behavior():
-    assert _extract_model_name(("gpt-4o-mini",), {}) == "gpt-4o-mini"
-    assert _extract_model_name((), {"model": "gpt-4.1"}) == "gpt-4.1"
-    assert _extract_model_name((1, 2), {}) == "unknown"
+if __name__ == "__main__":
+    import io
+    import contextlib
+    import unittest
 
-    assert _extract_input_text((), {"input": "hello"}) == "hello"
-    assert _extract_input_text((), {"prompt": "hi"}) == "hi"
-    assert _extract_input_text((), {"messages": [{"role": "user", "content": "x"}]}) == [{"role": "user", "content": "x"}]
-    assert _extract_input_text(("fallback",), {}) == "fallback"
-    assert _extract_input_text((), {}) == ""
+    class TestEvaluatorCLIAndVerbose(unittest.TestCase):
+        def setUp(self):
+            _reset_verbose_for_tests(False)
 
-    assert _estimate_token_count("") == 0
-    assert _estimate_token_count("abcd") == 1
-    assert _estimate_token_count("abcdefgh") == 2
-    assert _estimate_token_count([1, 2, 3]) >= 1
+        def tearDown(self):
+            _reset_verbose_for_tests(False)
 
+        def test_parse_args_verbose_flag(self):
+            args, unknown = parse_args(["--verbose"])
+            self.assertTrue(args.verbose)
+            self.assertFalse(args.debug_sensitive)
+            self.assertEqual(unknown, [])
 
-def test_call_openai_verbose_logging_emitted(capsys):
-    global VERBOSE, DEBUG_SENSITIVE
-    VERBOSE = True
-    DEBUG_SENSITIVE = False
-    try:
-        call_openai("gpt-4o-mini", input="hello world")
-    except NotImplementedError:
-        pass
-    out = capsys.readouterr().out
-    assert "Model:" in out
-    assert "Input chars:" not in out
-    assert "Calling OpenAI API" in out
-    assert "Done in" in out
+        def test_parse_args_debug_sensitive_flag(self):
+            args, unknown = parse_args(["--verbose", "--debug-sensitive"])
+            self.assertTrue(args.verbose)
+            self.assertTrue(args.debug_sensitive)
+            self.assertEqual(unknown, [])
 
+        def test_configure_verbose_mutates_global_state(self):
+            self.assertFalse(VERBOSE)
+            self.assertFalse(DEBUG_SENSITIVE)
+            configure_verbose(["--verbose"])
+            self.assertTrue(VERBOSE)
+            self.assertFalse(DEBUG_SENSITIVE)
+            configure_verbose(["--verbose", "--debug-sensitive"])
+            self.assertTrue(VERBOSE)
+            self.assertTrue(DEBUG_SENSITIVE)
+            configure_verbose([])
+            self.assertFalse(VERBOSE)
+            self.assertFalse(DEBUG_SENSITIVE)
 
-def test_call_openai_verbose_sensitive_logging_emitted(capsys):
-    global VERBOSE, DEBUG_SENSITIVE
-    VERBOSE = True
-    DEBUG_SENSITIVE = True
-    try:
-        call_openai("gpt-4o-mini", input="hello world")
-    except NotImplementedError:
-        pass
-    out = capsys.readouterr().out
-    assert "Model:" in out
-    assert "Input chars:" in out
-    assert "Calling OpenAI API" in out
-    assert "Done in" in out
+        def test_helper_extractors_and_token_estimator(self):
+            self.assertEqual(_extract_model_name(("gpt-4",), {}), "gpt-4")
+            self.assertEqual(_extract_model_name((), {"model": "gpt-4o"}), "gpt-4o")
+            self.assertEqual(_extract_model_name((123, object()), {}), "unknown")
 
+            self.assertEqual(_extract_input_text((), {"input": "abc"}), "abc")
+            self.assertEqual(_extract_input_text((), {"prompt": "p"}), "p")
+            self.assertEqual(_extract_input_text((), {"messages": [{"role": "user", "content": "x"}]}), [{"role": "user", "content": "x"}])
+            self.assertEqual(_extract_input_text(("fallback",), {}), "fallback")
+            self.assertEqual(_extract_input_text((), {}), "")
 
-def test_call_openai_verbose_logging_suppressed(capsys):
-    global VERBOSE, DEBUG_SENSITIVE
-    VERBOSE = False
-    DEBUG_SENSITIVE = False
-    try:
-        call_openai("gpt-4o-mini", input="hello world")
-    except NotImplementedError:
-        pass
-    out = capsys.readouterr().out
-    assert out == ""
+            self.assertEqual(_estimate_token_count(""), 0)
+            self.assertEqual(_estimate_token_count("abcd"), 1)
+            self.assertEqual(_estimate_token_count("abcdefgh"), 2)
+            self.assertEqual(_estimate_token_count(None), 0)
+            self.assertGreaterEqual(_estimate_token_count({"k": "v"}), 1)
+
+        def test_verbose_logging_emitted_without_sensitive_metrics(self):
+            configure_verbose(["--verbose"])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(NotImplementedError):
+                    call_openai(model="gpt-4o", input="hello world")
+            output = buf.getvalue()
+            self.assertIn("Request model: gpt-4o", output)
+            self.assertNotIn("Input chars:", output)
+            self.assertIn("⏳ Calling OpenAI API...", output)
+            self.assertIn("✅ Done in", output)
+
+        def test_verbose_logging_emitted_with_sensitive_metrics_when_enabled(self):
+            configure_verbose(["--verbose", "--debug-sensitive"])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(NotImplementedError):
+                    call_openai(model="gpt-4o", input="hello world")
+            output = buf.getvalue()
+            self.assertIn("Request model: gpt-4o", output)
+            self.assertIn("Input chars:", output)
+            self.assertIn("⏳ Calling OpenAI API...", output)
+            self.assertIn("✅ Done in", output)
+
+        def test_verbose_logging_suppressed(self):
+            configure_verbose([])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(NotImplementedError):
+                    call_openai(model="gpt-4o", input="hello world")
+            self.assertEqual(buf.getvalue(), "")
+
+    unittest.main()
