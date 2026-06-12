@@ -179,4 +179,53 @@ NOTES_SCHEMA: dict[str, Any] = {
 
 
 def summarize_transcript(transcript: str) -> dict[str, Any]:
-    raise NotImplementedError("Implementation unchanged in this patch")
+    raise NotImplementedError("summarize_transcript implementation is outside this change")
+
+
+# -----------------------------
+# Type-contract regression tests
+# -----------------------------
+
+def _run_type_contract_tests() -> int:
+    """Minimal runtime checks that validate typed interfaces stay usable."""
+    from tempfile import TemporaryDirectory
+    from types import SimpleNamespace
+
+    # validate_environment: accepts None and argument objects with known attrs
+    original_key = os.getenv("OPENAI_API_KEY")
+    os.environ["OPENAI_API_KEY"] = "test-key"
+
+    try:
+        validate_environment(None)
+
+        with TemporaryDirectory() as tmp:
+            p = Path(tmp) / "transcript.txt"
+            p.write_text("hello", encoding="utf-8")
+            validate_environment(SimpleNamespace(file=str(p)))
+            validate_environment(SimpleNamespace(input_file=str(p)))
+            validate_environment(SimpleNamespace(transcript_file=str(p)))
+            validate_environment(SimpleNamespace(path=str(p)))
+
+        # print_usage: works with response-like object carrying usage attributes
+        class _Usage:
+            prompt_tokens = 100
+            completion_tokens = 50
+            total_tokens = 150
+
+        class _Response:
+            usage = _Usage()
+
+        print_usage(_Response())
+        print_usage(SimpleNamespace(usage=None))
+
+    finally:
+        if original_key is None:
+            os.environ.pop("OPENAI_API_KEY", None)
+        else:
+            os.environ["OPENAI_API_KEY"] = original_key
+
+    return 0
+
+
+if __name__ == "__main__" and os.getenv("SUMMARIZER_RUN_TYPE_TESTS") == "1":
+    raise SystemExit(_run_type_contract_tests())
