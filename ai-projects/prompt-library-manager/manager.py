@@ -37,6 +37,23 @@ def print_usage(response):
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
+def call_openai(input_content: str, temperature: float = 0):
+    if VERBOSE:
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
+        console.print("⏳ Calling OpenAI API...")
+    started = datetime.now()
+    response = get_client().chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": input_content}],
+        temperature=temperature,
+    )
+    if VERBOSE:
+        elapsed_ms = int((datetime.now() - started).total_seconds() * 1000)
+        console.print(f"[dim]Latency:[/dim] {elapsed_ms} ms")
+        print_usage(response)
+    return response
+
 def validate_environment():
     cmd = sys.argv[1] if len(sys.argv) >= 2 else None
 
@@ -145,15 +162,5 @@ def cmd_test(name: str, test_input: str):
 
     prompt = version["prompt"]
     input_content = f"{prompt}\n\nInput: {test_input}"
-    if VERBOSE:
-        console.print(f"[dim]Model:[/dim] {MODEL}")
-        console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
-        console.print("⏳ Calling OpenAI API...")
-    started = datetime.now()
     with console.status(f"[bold green]Testing prompt '{name}'...[/bold green]"):
-        response = get_client().chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "user", "content": input_content}],
-            temperature=0
-        )
-    return response
+        response = call_openai(input_content, temperature=0)
