@@ -6,6 +6,10 @@ from functools import wraps
 VERBOSE = False
 DEBUG_SENSITIVE = False
 
+PRICING = {
+    "gpt-4.1-mini": {"in": 0.000015, "out": 0.00006},
+}
+
 
 def retry_with_backoff(func=None, *, delays=(1, 2, 4), retry_exceptions=(TimeoutError, ConnectionError)):
     """Retry wrapper for transient OpenAI/runtime call failures.
@@ -69,7 +73,7 @@ def _estimate_token_count(value):
     return max(1, len(str(value)) // 4) if value else 0
 
 
-def print_usage(response):
+def print_usage(response, model):
     usage = getattr(response, "usage", None)
     if usage is None and isinstance(response, dict):
         usage = response.get("usage")
@@ -90,7 +94,11 @@ def print_usage(response):
     if total_tokens is None:
         total_tokens = prompt_tokens + completion_tokens
 
-    cost = (prompt_tokens / 1000.0) * 0.000015 + (completion_tokens / 1000.0) * 0.00006
+    rates = PRICING.get(model)
+    if not rates:
+        return
+
+    cost = (prompt_tokens / 1000.0) * rates["in"] + (completion_tokens / 1000.0) * rates["out"]
     print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 
