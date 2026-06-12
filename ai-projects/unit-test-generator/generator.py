@@ -31,6 +31,32 @@ def get_client() -> OpenAI:
     return _client
 
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
+        sys.exit(1)
+
+    if len(sys.argv) < 2:
+        console.print("[yellow]Usage:[/yellow] python generator.py <source_file.py> [--framework pytest|unittest]")
+        console.print("[dim]Example: python generator.py my_module.py[/dim]")
+        sys.exit(1)
+
+    source_path = sys.argv[1]
+    path = Path(source_path)
+    if not path.exists():
+        console.print(f"[red]File not found:[/red] {source_path}")
+        sys.exit(1)
+    if not path.is_file():
+        console.print(f"[red]Path is not a file:[/red] {source_path}")
+        sys.exit(1)
+    if not os.access(path, os.R_OK):
+        console.print(f"[red]File is not readable:[/red] {source_path}")
+        sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
+
 TEST_SCHEMA = {
     "name": "test_output",
     "description": "Generated pytest test suite",
@@ -144,10 +170,7 @@ def display_summary(result: dict, output_file: str):
 
 
 def main():
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python generator.py <source_file.py> [--framework pytest|unittest]")
-        console.print("[dim]Example: python generator.py my_module.py[/dim]")
-        sys.exit(1)
+    validate_environment()
 
     source_path = sys.argv[1]
     framework = "pytest"
