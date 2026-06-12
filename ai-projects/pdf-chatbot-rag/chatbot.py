@@ -178,12 +178,16 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     if cache_path.exists():
         print(Fore.YELLOW + "  Loading cached embeddings...")
         with open(cache_path, "r", encoding="utf-8") as f:
-            cache = json.load(f)
-        return cache["chunks"], cache["embeddings"]
+            cached = json.load(f)
+        return cached["chunks"], cached["embeddings"]
 
     print(Fore.CYAN + "  Extracting text from PDF...")
     text = extract_text_from_pdf(pdf_path)
+
+    print(Fore.CYAN + "  Chunking text...")
     chunks = chunk_text(text)
+
+    print(Fore.CYAN + "  Creating embeddings...")
     embeddings = get_embeddings(chunks)
 
     with open(cache_path, "w", encoding="utf-8") as f:
@@ -192,9 +196,16 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     return chunks, embeddings
 
 
-def export_results(*args, **kwargs):
-    return None
+def export_results(results: dict, enabled: bool, output_path: Path | None = None) -> Path | None:
+    """Export results to JSON when enabled."""
+    if not enabled:
+        return None
 
+    if output_path is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = Path(f"output_{timestamp}.json")
 
-if __name__ == "__main__":
-    validate_environment()
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    return output_path
