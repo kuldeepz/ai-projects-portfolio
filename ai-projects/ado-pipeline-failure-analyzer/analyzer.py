@@ -27,6 +27,7 @@ VERBOSE: bool = False
 def parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="Show OpenAI call diagnostics")
+    parser.add_argument("--export", "-e", nargs="?", const=True, default=False, help="Export diagnosis JSON (optionally provide output file path)")
     return parser.parse_args()
 
 
@@ -185,30 +186,18 @@ SCHEMA: JsonSchema = {
     }
 }
 
-SAMPLE_LOG: str = """
-##[section]Starting: Run tests
-==============================================================================
-Task         : Bash
-Description  : Run a Bash script on macOS, Linux, or Windows
-==============================================================================
-/usr/bin/bash /home/vsts/work/1/s/run_tests.sh
-+ pytest tests/ --cov=src --cov-report=xml
-============================= test session starts ==============================
-platform linux -- Python 3.11.4
-collected 142 items
 
-tests/test_auth.py::test_login_valid PASSED
-tests/test_auth.py::test_login_invalid PASSED
-tests/test_api.py::test_create_user PASSED
-tests/test_api.py::test_delete_user FAILED
+def export_diagnosis_json(diagnosis: dict[str, Any], export_arg: object) -> None:
+    if not export_arg:
+        return
 
-FAILED 
-```
-"""
+    if isinstance(export_arg, str):
+        out_file = Path(export_arg)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_dir = Path("exports")
+        out_dir.mkdir(exist_ok=True)
+        out_file = out_dir / f"diagnosis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
-def main() -> None:
-    validate_environment()
-
-
-if __name__ == "__main__":
-    main()
+    out_file.write_text(json.dumps(diagnosis, indent=2), encoding="utf-8")
+    console.print(f"[green]Exported JSON:[/green] {out_file}")
