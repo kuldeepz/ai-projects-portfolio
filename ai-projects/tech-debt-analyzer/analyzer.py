@@ -75,21 +75,22 @@ def collect_code(target: str, max_chars: int = 8000) -> str:
 
 def analyze(code: str, context: str = "") -> dict:
     ctx = f"\nContext: {context}" if context else ""
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are a senior software architect specializing in code quality and technical debt. "
-                "Identify all forms of technical debt: code smells, missing tests, poor architecture, "
-                "outdated dependencies, security vulnerabilities, and documentation gaps. "
-                "Provide realistic remediation effort estimates in dev-days."
-            )},
-            {"role": "user", "content": f"Analyze this code for technical debt:{ctx}\n\n```\n{code}\n```"}
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "tech_debt_report"}},
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a senior software architect specializing in code quality and technical debt. "
+                    "Identify all forms of technical debt: code smells, missing tests, poor architecture, "
+                    "outdated dependencies, security vulnerabilities, and documentation gaps. "
+                    "Provide realistic remediation effort estimates in dev-days."
+                )},
+                {"role": "user", "content": f"Analyze this code for technical debt:{ctx}\n\n```\n{code}\n```"}
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "tech_debt_report"}},
+            temperature=0.2,
+        )
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 SEV_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim"}
@@ -145,7 +146,8 @@ def main():
         console.print(f"[red]Error:[/red] Target '{args.target}' does not exist.")
         sys.exit(1)
 
-    code = collect_code(args.target)
+    with console.status("[bold green]Processing..."):
+        code = collect_code(args.target)
     if not code.strip():
         console.print("[red]Error:[/red] No analyzable Python code found in target.")
         sys.exit(1)
@@ -154,7 +156,8 @@ def main():
     display(report)
 
     out_path = Path(args.out)
-    out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    with console.status("[bold green]Processing..."):
+        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     console.print(f"[green]Saved report to:[/green] {out_path}")
 
 if __name__ == "__main__":
