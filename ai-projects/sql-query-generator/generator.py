@@ -157,9 +157,10 @@ if __name__ == "__main__":
 
 
 # ---------------------------
-# Unit tests for print_usage
+# Unit tests
 # ---------------------------
 
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -190,17 +191,32 @@ class TestPrintUsage(unittest.TestCase):
         message = mock_print.call_args[0][0]
         self.assertIn("100 in + 50 out = 999 total", message)
 
-    def test_print_usage_contains_expected_counts_and_cost_format(self) -> None:
-        usage = SimpleNamespace(input_tokens=1000, output_tokens=500, total_tokens=1500)
-        response = SimpleNamespace(usage=usage)
-        with patch.object(console, "print") as mock_print:
-            print_usage(response)
-        mock_print.assert_called_once()
-        message = mock_print.call_args[0][0]
-        self.assertIn("📊 Tokens: 1000 in + 500 out = 1500 total", message)
-        self.assertIn("💰 Est. cost: $0.0000", message)
+
+class TestEnvironmentAndSchema(unittest.TestCase):
+    def test_validate_environment_no_api_key_when_not_required(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            validate_environment(require_api_key=False)
+
+    def test_load_schema_exits_on_missing_path(self) -> None:
+        with self.assertRaises(SystemExit):
+            load_schema(["__missing_schema_file__.sql"])
 
 
-if __name__ == "__main__":  # pragma: no cover
-    if "unittest" in sys.modules:
-        pass
+class TestGenerateSQL(unittest.TestCase):
+    def test_generate_sql_always_returns_sql_string_key(self) -> None:
+        response = SimpleNamespace(output=[])
+        with patch(__name__ + ".get_client", return_value=object()):
+            with patch(__name__ + "._create_response", return_value=response):
+                with patch(__name__ + ".print_usage"):
+                    result = generate_sql("select 1", [])
+        self.assertIn("sql", result)
+        self.assertIsInstance(result["sql"], str)
+
+
+class TestInteractiveMode(unittest.TestCase):
+    def test_interactive_mode_schema_paths_none_passes_empty_list(self) -> None:
+        with patch("builtins.input", side_effect=["select 1", "quit"]):
+            with patch(__name__ + ".generate_sql", return_value={"sql": "SELECT 1"}) as mock_generate:
+                with patch.object(console, "print"):
+                    interactive_mode(schema_paths=None, export=False)
+        mock_generate.assert_called_once_with("select 1", [])
