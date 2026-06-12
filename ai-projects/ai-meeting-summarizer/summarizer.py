@@ -174,66 +174,69 @@ def display_notes(notes: dict):
     console.print(
         Panel.fit(
             f"[bold white]{notes['title']}[/bold white]\n"
-            f"[dim]Attendees: {', '.join(notes['attendees']) or 'Not identified'}[/dim]\n"
-            f"[dim]Duration: {notes.get('duration_estimate', 'Unknown')}[/dim]  "
-            f"[{sentiment_color}]● {notes.get('sentiment', 'neutral').title()}[/{sentiment_color}]",
-            title="[bold cyan]Meeting Notes[/bold cyan]",
+            f"[dim]Attendees: {', '.join(notes.get('attendees', []))}[/dim]",
             border_style="cyan",
+            title="📝 Meeting Notes",
         )
     )
 
-    console.print(
-        Panel(
-            f"[italic]{notes['executive_summary']}[/italic]",
-            title="[bold]Executive Summary[/bold]",
-            border_style="dim",
-        )
-    )
+    console.print(Markdown(f"### Executive Summary\n{notes.get('executive_summary', '')}"))
 
+    topics = notes.get("key_topics", [])
+    if topics:
+        table = Table(title="Key Topics", show_header=True, header_style="bold magenta")
+        table.add_column("Topic", style="cyan", no_wrap=True)
+        table.add_column("Discussion", style="white")
+        for item in topics:
+            table.add_row(item.get("topic", ""), item.get("discussion", ""))
+        console.print(table)
 
-def _usage() -> str:
-    return "Usage: python summarizer.py [--export|-e] <transcript_file|->"
-
-
-def _parse_args(argv: list[str]) -> tuple[bool, str]:
-    export = False
-    args = list(argv)
-    if args and args[0] in {"--export", "-e"}:
-        export = True
-        args = args[1:]
-    if len(args) != 1:
-        raise ValueError(_usage())
-    return export, args[0]
-
-
-def main() -> int:
-    export, source = _parse_args(sys.argv[1:])
-
-    with console.status("[bold green]Processing..."):
-        if source == "-":
-            transcript = sys.stdin.read().strip()
-            source_path = Path("stdin")
+    for section_title, key in [
+        ("Decisions", "decisions"),
+        ("Action Items", "action_items"),
+        ("Blockers", "blockers"),
+        ("Follow Up Meetings", "follow_up_meetings"),
+    ]:
+        value = notes.get(key, [])
+        if not value:
+            continue
+        console.print(f"\n[bold]{section_title}[/bold]")
+        if key == "action_items":
+            for ai in value:
+                console.print(f" • {ai.get('task', '')} — owner: {ai.get('owner', 'TBD')}, due: {ai.get('due', 'Not specified')}")
         else:
-            source_path = Path(source)
-            transcript = source_path.read_text(encoding="utf-8").strip()
+            for row in value:
+                console.print(f" • {row}")
 
+    sentiment = notes.get("sentiment", "neutral")
+    console.print(f"\nSentiment: [{sentiment_color}]{sentiment}[/{sentiment_color}]")
+
+
+def _read_source_text(source: str) -> str:
+    if source == "-":
+        with console.status("[bold green]Reading from stdin..."):
+            return sys.stdin.read()
+    with console.status(f"[bold green]Reading file: {source}..."):
+        return Path(source).read_text(encoding="utf-8")
+
+
+def main(argv=None):
+    argv = argv or sys.argv[1:]
+    if not argv:
+        console.print("Usage: python summarizer.py <transcript.txt|->")
+        return 1
+
+    source = argv[0]
+    transcript = _read_source_text(source)
     notes = summarize_transcript(transcript)
     display_notes(notes)
 
-    if export:
-        with console.status("[bold green]Processing..."):
-            now = datetime.now()
-            stamp = now.strftime("%Y%m%d_%H%M%S")
-            stem = source_path.stem if source_path.stem else "meeting"
-
-            notes_file = Path(f"notes_{stem}_{stamp}.md")
-            notes_md = f"# {notes.get('title', 'Meeting Notes')}\n\n{notes.get('executive_summary', '')}\n"
-            notes_file.write_text(notes_md, encoding="utf-8")
-
-            export_file = Path(f"output_{stamp}.json")
-            export_payload = {**notes, "generated_at": now.isoformat()}
-            export_file.write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
-
+    out_dir = Path("outputs")
+    out_dir.mkdir(exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = out_dir / f"meeting_notes_{stamp}.json"
+    out_path.write_text(json.dumps(notes, indent=2), encoding="utf-8")
+    console.print(f"\nSaved JSON: {out_path}")
     return 0
 
 
