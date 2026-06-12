@@ -135,10 +135,14 @@ def display(data: dict, plan: dict):
             dt.add_row(item["id"], item["title"], item["reason"])
         console.print(Panel(dt, title="[bold]Deferred Items[/bold]", border_style="yellow"))
 
+    if plan["risks"]:
+        console.print(Panel("\n".join(f"• {r}" for r in plan["risks"]), title="[bold red]Risks[/bold red]", border_style="red"))
+
+    if plan["recommendations"]:
+        console.print(Panel("\n".join(f"• {r}" for r in plan["recommendations"]), title="[bold cyan]Recommendations[/bold cyan]", border_style="cyan"))
 
 def main():
     export = "--export" in sys.argv
-
     data = SAMPLE_BACKLOG
     plan = plan_sprint(data)
     display(data, plan)
@@ -146,9 +150,8 @@ def main():
     if export:
         filename = f"sprint_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(filename, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
+            json.dump({"backlog": data, "plan": plan}, f, indent=2)
         console.print(f"[green]Exported plan to {filename}[/green]")
-
 
 if __name__ == "__main__":
     main()
