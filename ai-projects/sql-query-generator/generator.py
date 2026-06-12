@@ -37,6 +37,19 @@ def _create_response(client, **kwargs):
     return client.responses.create(**kwargs)
 
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "input_tokens", 0) or 0
+    completion_tokens = getattr(usage, "output_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+    )
+
+
 def get_client():
     return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
@@ -88,6 +101,7 @@ def generate_sql(prompt, schema_paths):
                 }
             ],
         )
+    print_usage(response)
 
     for item in getattr(response, "output", []):
         if getattr(item, "type", None) == "function_call" and getattr(item, "name", None) == "emit_sql":
