@@ -25,6 +25,21 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                if i == len(delays) - 1:
+                    break
+                time.sleep(delay)
+        raise last_exc
+    return wrapper
+
 def print_usage(response):
     usage = response.usage
     prompt_tokens = usage.prompt_tokens
@@ -92,6 +107,7 @@ Concerns raised:
 Action: Use pgvector. Raj to upgrade RDS and create migration. Sarah to update the embedding pipeline.
 """
 
+@retry_with_backoff
 def create_adr(discussion: str, adr_number: str = "001") -> dict:
     if VERBOSE:
         prompt = f"Create an ADR (number: {adr_number}) from this discussion:\n\n{discussion}"
