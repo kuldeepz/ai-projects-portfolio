@@ -6,6 +6,7 @@ single points of failure, scalability concerns, and security gaps.
 
 import os, sys, json
 import time
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -151,6 +152,31 @@ def display(review: dict):
                             title="[bold green]Strengths[/bold green]"))
 
 
+def main():
+    args = sys.argv[1:]
+    export = False
+    if "--export" in args or "-e" in args:
+        export = True
+        args = [a for a in args if a not in ("--export", "-e")]
+
+    if args and Path(args[0]).exists():
+        design = Path(args[0]).read_text(encoding="utf-8")
+    elif args:
+        design = " ".join(args)
+    else:
+        design = SAMPLE_DESIGN
+
+    review = review_architecture(design)
+    display(review)
+
+    if export:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"output_{ts}.json"
+        payload = dict(review)
+        payload["generated_at"] = datetime.now().isoformat()
+        Path(filename).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 class TestRetryWithBackoff(unittest.TestCase):
     def test_success_first_try_no_sleep(self):
         fn = Mock(return_value="ok")
@@ -191,3 +217,7 @@ class TestRetryWithBackoff(unittest.TestCase):
         sleep_mock.assert_any_call(1)
         sleep_mock.assert_any_call(2)
         sleep_mock.assert_any_call(4)
+
+
+if __name__ == "__main__":
+    main()
