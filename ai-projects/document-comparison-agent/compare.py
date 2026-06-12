@@ -25,6 +25,7 @@ load_dotenv()
 
 console = Console()
 CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 
@@ -96,7 +97,11 @@ def validate_environment() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("doc1")
     parser.add_argument("doc2")
+    parser.add_argument("-v", "--verbose", action="store_true")
     args, _ = parser.parse_known_args(sys.argv[1:])
+
+    global VERBOSE
+    VERBOSE = args.verbose
 
     for file_path in (args.doc1, args.doc2):
         path = Path(file_path)
