@@ -133,41 +133,38 @@ def display(data: dict, plan: dict):
         dt.add_column("ID"); dt.add_column("Title", ratio=2); dt.add_column("Reason", ratio=2, style="dim")
         for item in plan["deferred_items"]:
             dt.add_row(item["id"], item["title"], item["reason"])
-        console.print(Panel(dt, title="[bold dim]Deferred to Next Sprint[/bold dim]", border_style="dim"))
+        console.print(Panel(dt, title="[bold]Deferred Items[/bold]", border_style="yellow"))
 
-    if plan["risks"]:
-        console.print(Panel("\n".join(f"  [red]⚡[/red] {r}" for r in plan["risks"]), title="[bold red]Risks[/bold red]", border_style="red"))
-    console.print(Panel("\n".join(f"  [cyan]→[/cyan] {r}" for r in plan["recommendations"]), title="[bold]Recommendations[/bold]", border_style="blue"))
-    console.print()
 
-def main():
-    export = False
-    args = sys.argv[1:]
-    if "--export" in args:
-        export = True
-        args.remove("--export")
-    if "-e" in args:
-        export = True
-        args.remove("-e")
+def _run_retry_tests():
+    from unittest.mock import Mock, patch, call
 
-    if len(args) < 1:
-        console.print("[dim]No file provided — running with sample backlog...[/dim]\n")
-        data = SAMPLE_BACKLOG
-    else:
-        with open(args[0]) as f:
-            data = json.load(f)
+    @retry_with_backoff
+    def _ok():
+        return "ok"
 
-    with console.status("[bold green]Planning sprint...[/bold green]"):
-        plan = plan_sprint(data)
-    display(data, plan)
+    with patch("time.sleep") as sleep_mock:
+        assert _ok() == "ok"
+        sleep_mock.assert_not_called()
 
-    if export:
-        generated_at = datetime.utcnow().isoformat() + "Z"
-        output = dict(plan)
-        output["generated_at"] = generated_at
-        filename = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, "w") as f:
-            json.dump(output, f, indent=2)
+    flaky = Mock(side_effect=[RuntimeError("e1"), RuntimeError("e2"), "done"])
+    wrapped_flaky = retry_with_backoff(flaky)
+    with patch("time.sleep") as sleep_mock:
+        assert wrapped_flaky() == "done"
+        assert sleep_mock.call_args_list == [call(1), call(2)]
+
+    final_exc = ValueError("boom")
+    always_fail = Mock(side_effect=[RuntimeError("e1"), RuntimeError("e2"), final_exc])
+    wrapped_fail = retry_with_backoff(always_fail)
+    with patch("time.sleep") as sleep_mock:
+        try:
+            wrapped_fail()
+            raise AssertionError("Expected exception to be raised")
+        except ValueError as e:
+            assert e is final_exc
+        assert sleep_mock.call_args_list == [call(1), call(2)]
 
 if __name__ == "__main__":
-    main()
+    if "--run-retry-tests" in sys.argv:
+        _run_retry_tests()
+        console.print("[green]retry_with_backoff tests passed[/green]")
