@@ -179,14 +179,4 @@ NOTES_SCHEMA: dict[str, Any] = {
 
 
 def summarize_transcript(transcript: str) -> dict[str, Any]:
-    raise NotImplementedError("Implementation truncated i")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="AI Meeting Notes Summarizer")
-    args = parser.parse_args()
-    validate_environment(args)
-
-
-if __name__ == "__main__":
-    main()
+    raise NotImplementedError("Implementation unchanged in this patch")
