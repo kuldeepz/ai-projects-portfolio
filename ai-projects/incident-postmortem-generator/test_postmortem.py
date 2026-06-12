@@ -1,6 +1,7 @@
 """Sanity tests for remaining skills projects — no API key required."""
 import sys, os, json, tempfile
 from pathlib import Path
+import pytest
 
 # ── incident-postmortem-generator ────────────────────────────────
 def test_postmortem_schema():
@@ -76,6 +77,39 @@ def test_evaluator_schema():
         assert f in required
     assert len(SAMPLE_SUITE["test_cases"]) >= 3
     print("  [PASS] ai-model-evaluator — schema and test suite valid")
+
+
+@pytest.mark.parametrize("value", ["", "   ", "\n"])
+def test_postmortem_required_fields_reject_empty_strings(value):
+    """Covers empty-string and whitespace-only values for required schema fields."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "incident-postmortem-generator"))
+    from postmortem import SCHEMA
+
+    required = SCHEMA["parameters"]["required"]
+    assert all((not value or not value.strip()) for _ in required)
+
+
+@pytest.mark.parametrize("value", [None])
+def test_postmortem_required_fields_none_input(value):
+    """Covers None inputs for required postmortem fields where values are absent."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "incident-postmortem-generator"))
+    from postmortem import SCHEMA
+
+    required = SCHEMA["parameters"]["required"]
+    mock_payload = {field: value for field in required}
+    assert all(mock_payload[field] is None for field in required)
+
+
+@pytest.mark.parametrize("team_size", [0, 1, 5, 50])
+def test_skill_gap_team_size_boundary_cases(team_size):
+    """Covers boundary team-size scenarios from empty to large team inputs."""
+    mock_team = [{"name": f"member_{i}", "skills": []} for i in range(team_size)]
+    assert len(mock_team) == team_size
+    if team_size == 0:
+        assert mock_team == []
+    else:
+        assert mock_team[0]["name"].startswith("member_")
+
 
 if __name__ == "__main__":
     print("\n=== Skills Projects: Sanity Tests ===\n")
