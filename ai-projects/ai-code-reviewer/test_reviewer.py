@@ -89,6 +89,10 @@ def test_language_detection_none_input(invalid_input):
 @pytest.mark.parametrize("score", [0, 100])
 def test_issue_schema_overall_score_boundaries(score):
     """Covers boundary overall_score values allowed by the review schema."""
+    score_schema = REVIEW_SCHEMA["parameters"]["properties"]["overall_score"]
+    assert score_schema.get("minimum") == 0
+    assert score_schema.get("maximum") == 100
+
     mock_review = {
         "language": "python",
         "overall_score": score,
@@ -96,7 +100,7 @@ def test_issue_schema_overall_score_boundaries(score):
         "security_issues": [],
         "bugs": [],
     }
-    assert 0 <= mock_review["overall_score"] <= 100
+    assert score_schema["minimum"] <= mock_review["overall_score"] <= score_schema["maximum"]
 
 
 if __name__ == "__main__":
