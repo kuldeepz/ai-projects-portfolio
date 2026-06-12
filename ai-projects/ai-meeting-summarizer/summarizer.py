@@ -167,34 +167,26 @@ def summarize_transcript(transcript: str) -> dict:
         if VERBOSE:
             elapsed = time.time() - start
             usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-            total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
             console.print(
-                f"[dim]API call:[/dim] {elapsed:.2f}s | "
-                f"tokens {prompt_tokens}+{completion_tokens}={total_tokens}"
+                f"[dim]Done in {elapsed:.2f}s | Tokens: {prompt_tokens} in, {completion_tokens} out[/dim]"
             )
 
-    tool_calls = response.choices[0].message.tool_calls or []
+    tool_calls = response.choices[0].message.tool_calls
     if not tool_calls:
-        raise RuntimeError("Model did not return structured meeting notes")
+        raise RuntimeError("Model did not return structured notes")
 
     arguments = tool_calls[0].function.arguments
     return json.loads(arguments)
 
 
-def parse_args(argv=None):
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args, remaining = parser.parse_known_args(argv)
-    return args, remaining
-
-
 def main() -> None:
     global VERBOSE
-    args, remaining = parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args = parser.parse_args()
     VERBOSE = args.verbose
-    sys.argv = [sys.argv[0], *remaining]
 
 
 if __name__ == "__main__":
