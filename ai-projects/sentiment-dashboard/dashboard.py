@@ -11,9 +11,9 @@ import csv
 import io
 import time
 import random
+from functools import wraps
 from pathlib import Path
 from datetime import datetime
-from functools import wraps
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -42,18 +42,22 @@ def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, j
     def deco(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
+            last_exc = None
             for attempt in range(retries + 1):
                 try:
                     return f(*args, **kwargs)
-                except Exception:
+                except Exception as e:
+                    last_exc = e
                     if attempt == retries:
                         raise
                     delay = min(max_delay, base_delay * (2 ** attempt))
                     delay *= random.uniform(1 - jitter, 1 + jitter)
                     time.sleep(delay)
+            raise last_exc
+
         return wrapper
 
-    return deco(func) if func else deco
+    return deco(func) if func is not None else deco
 
 
 SENTIMENT_SCHEMA = {
