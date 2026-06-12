@@ -32,6 +32,19 @@ def get_client() -> OpenAI:
     return _client
 
 
+def print_usage(response) -> None:
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+    )
+
+
 NOTES_SCHEMA = {
     "name": "meeting_notes",
     "description": "Structured meeting notes extracted from a transcript",
@@ -141,6 +154,7 @@ def summarize_transcript(transcript: str) -> dict:
         tool_choice={"type": "function", "function": {"name": "meeting_notes"}},
         temperature=0.2,
     )
+    print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
