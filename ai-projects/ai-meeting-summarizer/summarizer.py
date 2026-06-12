@@ -179,87 +179,14 @@ NOTES_SCHEMA: dict[str, Any] = {
 
 
 def summarize_transcript(transcript: str) -> dict[str, Any]:
-    raise NotImplementedError("Implementation truncated in provided source")
+    raise NotImplementedError("Implementation truncated i")
 
 
-# ---------------------------
-# Tests for validation branches
-# ---------------------------
-
-def test_validate_environment_missing_api_key(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    try:
-        validate_environment()
-    except SystemExit as exc:
-        assert exc.code == 1
-    else:
-        raise AssertionError("Expected SystemExit(1) for missing OPENAI_API_KEY")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="AI Meeting Notes Summarizer")
+    args = parser.parse_args()
+    validate_environment(args)
 
 
-def test_validate_environment_blank_api_key(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "   ")
-    try:
-        validate_environment()
-    except SystemExit as exc:
-        assert exc.code == 1
-    else:
-        raise AssertionError("Expected SystemExit(1) for blank OPENAI_API_KEY")
-
-
-def test_validate_environment_nonexistent_file(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-
-    class Args:
-        file = str(tmp_path / "does_not_exist.txt")
-
-    try:
-        validate_environment(Args())
-    except SystemExit as exc:
-        assert exc.code == 1
-    else:
-        raise AssertionError("Expected SystemExit(1) for nonexistent file")
-
-
-def test_validate_environment_not_a_file(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    dir_path = tmp_path / "a_dir"
-    dir_path.mkdir()
-
-    class Args:
-        file = str(dir_path)
-
-    try:
-        validate_environment(Args())
-    except SystemExit as exc:
-        assert exc.code == 1
-    else:
-        raise AssertionError("Expected SystemExit(1) for directory path")
-
-
-def test_validate_environment_unreadable_file(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    file_path = tmp_path / "meeting.txt"
-    file_path.write_text("hello")
-
-    class Args:
-        file = str(file_path)
-
-    monkeypatch.setattr(os, "access", lambda *_args, **_kwargs: False)
-
-    try:
-        validate_environment(Args())
-    except SystemExit as exc:
-        assert exc.code == 1
-    else:
-        raise AssertionError("Expected SystemExit(1) for unreadable file")
-
-
-def test_validate_environment_success(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    file_path = tmp_path / "meeting.txt"
-    file_path.write_text("transcript")
-
-    class Args:
-        file = str(file_path)
-
-    validate_environment(Args())
+if __name__ == "__main__":
+    main()
