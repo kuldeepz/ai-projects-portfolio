@@ -1,3 +1,4 @@
+import random
 import time
 from unittest.mock import Mock
 
@@ -26,12 +27,13 @@ def test_retry_with_backoff_retry_then_success(monkeypatch):
 
     monkeypatch.setattr(analyzer, "get_client", lambda: Mock(chat=Mock(completions=Mock(create=create_mock))))
     monkeypatch.setattr(analyzer.time, "sleep", sleep_mock)
+    monkeypatch.setattr(analyzer.random, "uniform", lambda a, b: 0.25)
 
     result = analyzer.create_chat_completion(model="gpt-4o-mini", messages=[])
 
     assert result == {"ok": True}
     assert create_mock.call_count == 2
-    sleep_mock.assert_called_once_with(1)
+    sleep_mock.assert_called_once_with(1.25)
 
 
 def test_retry_with_backoff_exhaust_retries_and_raise(monkeypatch):
@@ -40,11 +42,12 @@ def test_retry_with_backoff_exhaust_retries_and_raise(monkeypatch):
 
     monkeypatch.setattr(analyzer, "get_client", lambda: Mock(chat=Mock(completions=Mock(create=create_mock))))
     monkeypatch.setattr(analyzer.time, "sleep", sleep_mock)
+    monkeypatch.setattr(analyzer.random, "uniform", lambda a, b: 0.25)
 
     with pytest.raises(Exception, match="always fails"):
         analyzer.create_chat_completion(model="gpt-4o-mini", messages=[])
 
     assert create_mock.call_count == 3
     assert sleep_mock.call_count == 2
-    sleep_mock.assert_any_call(1)
-    sleep_mock.assert_any_call(2)
+    sleep_mock.assert_any_call(1.25)
+    sleep_mock.assert_any_call(2.25)
