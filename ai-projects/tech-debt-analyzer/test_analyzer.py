@@ -40,6 +40,7 @@ def test_collect_code_empty_string_inputs(tmp_path, file_content):
     p.write_text(file_content)
     result = collect_code(str(p))
     assert isinstance(result, str)
+    assert result.strip() == ""
 
 def test_collect_code_none_input():
     """Covers None path input handling for collect_code."""
@@ -64,3 +65,4 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); sys.exit(1)
+
