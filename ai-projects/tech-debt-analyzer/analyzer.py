@@ -17,6 +17,7 @@ from rich.table import Table
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -75,6 +76,13 @@ def collect_code(target: str, max_chars: int = 8000) -> str:
 
 def analyze(code: str, context: str = "") -> dict:
     ctx = f"\nContext: {context}" if context else ""
+    user_content = f"Analyze this code for technical debt:{ctx}\n\n```\n{code}\n```"
+    if VERBOSE:
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input chars:[/dim] {len(user_content)}")
+        console.print(f"[dim]Estimated input tokens:[/dim] {max(1, len(user_content) // 4)}")
+        console.print("⏳ Calling OpenAI API...")
+    start = datetime.now()
     with console.status("[bold green]Analyzing technical debt with AI..."):
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -85,12 +93,15 @@ def analyze(code: str, context: str = "") -> dict:
                     "outdated dependencies, security vulnerabilities, and documentation gaps. "
                     "Provide realistic remediation effort estimates in dev-days."
                 )},
-                {"role": "user", "content": f"Analyze this code for technical debt:{ctx}\n\n```\n{code}\n```"}
+                {"role": "user", "content": user_content}
             ],
             tools=[{"type": "function", "function": SCHEMA}],
             tool_choice={"type": "function", "function": {"name": "tech_debt_report"}},
             temperature=0.2,
         )
+    if VERBOSE:
+        elapsed = (datetime.now() - start).total_seconds()
+        console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 SEV_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim"}
@@ -127,6 +138,12 @@ def display(report: dict):
     console.print()
 
 def validate_environment(argv):
+    global VERBOSE
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args, _ = parser.parse_known_args(argv)
+    VERBOSE = args.verbose
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
