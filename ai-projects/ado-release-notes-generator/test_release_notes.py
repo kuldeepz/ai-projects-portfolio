@@ -1,8 +1,11 @@
 """Sanity tests for ado-release-notes-generator — no API key required."""
 import sys, os
 import pytest
+import re
+
 sys.path.insert(0, os.path.dirname(__file__))
 from release_notes import SCHEMA, SAMPLE_ITEMS
+
 
 def test_schema():
     required = SCHEMA["parameters"]["required"]
@@ -10,15 +13,17 @@ def test_schema():
         assert f in required
     print("  [PASS] Schema — required fields present")
 
+
 def test_sample_has_all_types():
     types = {i["type"] for i in SAMPLE_ITEMS["completed_items"]}
     assert "User Story" in types and "Bug" in types and "Tech Debt" in types
     print("  [PASS] Sample — contains User Stories, Bugs, and Tech Debt items")
 
+
 def test_version_format():
-    import re
-    assert re.match(r"v\d+\.\d+\.\d+", SAMPLE_ITEMS["version"]), "Version should follow vX.Y.Z"
+    assert re.fullmatch(r"v\d+\.\d+\.\d+", SAMPLE_ITEMS["version"]), "Version should follow vX.Y.Z"
     print("  [PASS] Version — follows semantic versioning format")
+
 
 @pytest.mark.parametrize(
     "value",
@@ -29,6 +34,7 @@ def test_empty_string_inputs(value):
     assert isinstance(value, str)
     assert value.strip() == ""
 
+
 @pytest.mark.parametrize(
     "value",
     [None, None, None],
@@ -36,6 +42,7 @@ def test_empty_string_inputs(value):
 def test_none_inputs_where_applicable(value):
     """Covers None inputs for optional/nullable-like handling expectations."""
     assert value is None
+
 
 @pytest.mark.parametrize(
     "version, expected_match",
@@ -48,9 +55,9 @@ def test_none_inputs_where_applicable(value):
 )
 def test_version_boundary_edge_cases(version, expected_match):
     """Covers boundary and malformed version-string edge cases."""
-    import re
-    matched = bool(re.match(r"^v\d+\.\d+\.\d+$", version))
+    matched = bool(re.fullmatch(r"v\d+\.\d+\.\d+", version))
     assert matched is expected_match
+
 
 if __name__ == "__main__":
     print("\n=== ado-release-notes-generator: Sanity Tests ===\n")
