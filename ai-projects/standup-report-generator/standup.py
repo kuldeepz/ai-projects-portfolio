@@ -131,3 +131,98 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# -----------------------------
+# CLI tests for export behavior
+# -----------------------------
+import unittest
+import tempfile
+from unittest.mock import patch
+
+
+class TestCLIExportBehavior(unittest.TestCase):
+    def _fake_report(self):
+        return {
+            "title": "Daily Standup",
+            "formatted_report": "# Update\n- Did things",
+            "key_highlights": ["Did things"],
+        }
+
+    def _run_main_with_args(self, args, cwd, input_payload=None):
+        input_file = None
+        if input_payload is not None:
+            input_file = os.path.join(cwd, "notes.json")
+            with open(input_file, "w") as f:
+                json.dump(input_payload, f)
+
+        argv = ["standup.py", *args]
+        with patch("sys.argv", argv), patch(__name__ + ".generate_report", return_value=self._fake_report()):
+            main()
+
+        return input_file
+
+    def test_export_long_flag_with_input_file_creates_md_and_json(self):
+        with tempfile.TemporaryDirectory() as td:
+            notes = {
+                "name": "Test User",
+                "role": "Engineer",
+                "date": str(date.today()),
+                "format": "standup",
+                "raw_notes": ["did x", "doing y"],
+            }
+            self._run_main_with_args(["notes.json", "--export", "json", "--export-out", "result.json"], td, input_payload=notes)
+
+            md_path = os.path.join(td, f"standup_{date.today().isoformat()}.md")
+            json_path = os.path.join(td, "result.json")
+            self.assertTrue(os.path.exists(md_path))
+            self.assertTrue(os.path.exists(json_path))
+
+    def test_export_short_flag_e_with_input_file_works(self):
+        with tempfile.TemporaryDirectory() as td:
+            notes = {
+                "name": "Test User",
+                "role": "Engineer",
+                "date": str(date.today()),
+                "format": "standup",
+                "raw_notes": ["did x", "doing y"],
+            }
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(td)
+                self._run_main_with_args(["-e", "json", "notes.json", "--export-out", "result.json"], td, input_payload=notes)
+            finally:
+                os.chdir(old_cwd)
+
+            self.assertTrue(os.path.exists(os.path.join(td, f"standup_{date.today().isoformat()}.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "result.json")))
+
+    def test_export_with_no_input_uses_sample_notes_and_exports(self):
+        with tempfile.TemporaryDirectory() as td:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(td)
+                self._run_main_with_args(["--export", "json", "--export-out", "sample.json"], td)
+            finally:
+                os.chdir(old_cwd)
+
+            self.assertTrue(os.path.exists(os.path.join(td, f"standup_{date.today().isoformat()}.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "sample.json")))
+
+    def test_repeated_export_flags_parse_without_breaking(self):
+        with tempfile.TemporaryDirectory() as td:
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(td)
+                with patch("sys.argv", ["standup.py", "--export", "json", "-e", "json", "--export-out", "dup.json"]), \
+                     patch(__name__ + ".generate_report", return_value=self._fake_report()):
+                    main()
+            finally:
+                os.chdir(old_cwd)
+
+            self.assertTrue(os.path.exists(os.path.join(td, "dup.json")))
+            self.assertTrue(os.path.exists(os.path.join(td, f"standup_{date.today().isoformat()}.md")))
+
+
+if __name__ == "__main_test__":
+    unittest.main()
