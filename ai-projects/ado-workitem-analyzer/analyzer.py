@@ -129,7 +129,7 @@ def main():
         item = SAMPLE_WORK_ITEM
     else:
         with console.status("[bold green]Loading work item JSON...[/bold green]"):
-            with open(sys.argv[1]) as f:
+            with open(sys.argv[1], "r", encoding="utf-8") as f:
                 item = json.load(f)
 
     analysis = analyze_workitem(item)
