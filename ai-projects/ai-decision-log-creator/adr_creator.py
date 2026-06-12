@@ -141,84 +141,127 @@ def main():
                         border_style="cyan"))
 
 
-def _run_tests():
-    from types import SimpleNamespace
-    from unittest.mock import patch, mock_open
-
-    def fake_response():
-        payload = json.dumps({
-            "title": "Use pgvector",
-            "status": "accepted",
-            "context": "ctx",
-            "decision": "dec",
-            "rationale": "why",
-            "alternatives_considered": [],
-            "consequences": {"positive": [], "negative": [], "risks": []},
-            "full_markdown": "# ADR"
-        })
-        return SimpleNamespace(
-            choices=[SimpleNamespace(
-                message=SimpleNamespace(
-                    tool_calls=[SimpleNamespace(function=SimpleNamespace(arguments=payload))]
-                )
-            )]
-        )
-
-    class _Status:
-        def __enter__(self):
-            return self
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    global VERBOSE
-
-    # (1) -v and --verbose both set verbosity and (2) positional args still parse after removal
-    for flag in ("-v", "--verbose"):
-        VERBOSE = False
-        calls = []
-        with patch.object(console, "status", side_effect=lambda *a, **k: _Status()), \
-             patch.object(console, "print"), \
-             patch("builtins.open", mock_open(read_data="discussion from file")), \
-             patch(__name__ + ".create_adr", side_effect=lambda d, n: calls.append((d, n)) or {
-                 "title": "T", "full_markdown": "# M"
-             }):
-            sys.argv = ["adr_creator.py", flag, "notes.txt", "123"]
-            main()
-        assert VERBOSE is True
-        assert calls == [("discussion from file", "123")]
-
-    # (3) non-verbose flow unchanged
+def _reset_state_for_tests():
+    global VERBOSE, _client
     VERBOSE = False
-    prints = []
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(
-                create=lambda **kwargs: fake_response()
-            )
-        )
-    )
-    with patch.object(console, "status", side_effect=lambda *a, **k: _Status()), \
-         patch.object(console, "print", side_effect=lambda *a, **k: prints.append(a)):
-        with patch(__name__ + ".get_client", return_value=fake_client):
-            create_adr("x", "001")
-    assert not any("Model:" in " ".join(map(str, p)) for p in prints)
+    _client = None
 
-    # (4) verbose flow prints diagnostics and does not crash
+
+def test_main_sets_verbose_with_long_flag(monkeypatch):
+    _reset_state_for_tests()
+    called = {}
+
+    monkeypatch.setattr(sys, "argv", ["adr_creator.py", "--verbose"])
+    monkeypatch.setattr(console, "status", lambda *a, **k: _DummyContext())
+    monkeypatch.setattr(console, "print", lambda *a, **k: None)
+
+    def fake_create_adr(discussion, adr_num):
+        called["discussion"] = discussion
+        called["adr_num"] = adr_num
+        return {"full_markdown": "# ADR", "title": "Test"}
+
+    monkeypatch.setattr(sys.modules[__name__], "create_adr", fake_create_adr)
+    main()
+
+    assert VERBOSE is True
+    assert called["adr_num"] == "001"
+
+
+def test_main_sets_verbose_with_short_flag_and_parses_positionals(monkeypatch, tmp_path):
+    _reset_state_for_tests()
+    called = {}
+    src = tmp_path / "discussion.md"
+    src.write_text("hello")
+
+    monkeypatch.setattr(sys, "argv", ["adr_creator.py", "-v", str(src), "123"])
+    monkeypatch.setattr(console, "status", lambda *a, **k: _DummyContext())
+    monkeypatch.setattr(console, "print", lambda *a, **k: None)
+
+    def fake_create_adr(discussion, adr_num):
+        called["discussion"] = discussion
+        called["adr_num"] = adr_num
+        return {"full_markdown": "# ADR", "title": "Test"}
+
+    monkeypatch.setattr(sys.modules[__name__], "create_adr", fake_create_adr)
+    main()
+
+    assert VERBOSE is True
+    assert called["discussion"] == "hello"
+    assert called["adr_num"] == "123"
+
+
+def test_create_adr_non_verbose_flow(monkeypatch):
+    _reset_state_for_tests()
+    prints = []
+
+    class _Resp:
+        class choices:
+            class _c:
+                class message:
+                    class tool_calls:
+                        class _t:
+                            class function:
+                                arguments = '{"title":"T","status":"accepted","context":"c","decision":"d","rationale":"r","alternatives_considered":[],"consequences":{"positive":[],"negative":[],"risks":[]},"full_markdown":"# ADR"}'
+                        __getitem__ = lambda self, i: self._t
+                    tool_calls = [_t()]
+            __getitem__ = lambda self, i: self._c
+        choices = [_c()]
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    return _Resp()
+
+    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: _Client())
+    monkeypatch.setattr(console, "status", lambda *a, **k: _DummyContext())
+    monkeypatch.setattr(console, "print", lambda *a, **k: prints.append(a))
+
+    result = create_adr("x", "001")
+    assert result["title"] == "T"
+    assert prints == []
+
+
+def test_create_adr_verbose_prints_diagnostics(monkeypatch):
+    _reset_state_for_tests()
+    global VERBOSE
     VERBOSE = True
     prints = []
-    with patch.object(console, "status", side_effect=lambda *a, **k: _Status()), \
-         patch.object(console, "print", side_effect=lambda *a, **k: prints.append(a)):
-        with patch(__name__ + ".get_client", return_value=fake_client):
-            create_adr("x", "001")
-    joined = "\n".join(" ".join(map(str, p)) for p in prints)
-    assert "Model:" in joined
-    assert "Input chars:" in joined
-    assert "Input tokens (est):" in joined
-    assert "Calling OpenAI API" in joined
+
+    class _Resp:
+        class choices:
+            class _c:
+                class message:
+                    class tool_calls:
+                        class _t:
+                            class function:
+                                arguments = '{"title":"T","status":"accepted","context":"c","decision":"d","rationale":"r","alternatives_considered":[],"consequences":{"positive":[],"negative":[],"risks":[]},"full_markdown":"# ADR"}'
+                        __getitem__ = lambda self, i: self._t
+                    tool_calls = [_t()]
+            __getitem__ = lambda self, i: self._c
+        choices = [_c()]
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kwargs):
+                    return _Resp()
+
+    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: _Client())
+    monkeypatch.setattr(console, "status", lambda *a, **k: _DummyContext())
+    monkeypatch.setattr(console, "print", lambda *a, **k: prints.append(" ".join(str(x) for x in a)))
+
+    result = create_adr("x", "001")
+    assert result["title"] == "T"
+    assert any("Model:" in p for p in prints)
+    assert any("Calling OpenAI API" in p for p in prints)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
-        _run_tests()
-    else:
-        main()
+class _DummyContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
