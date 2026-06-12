@@ -128,26 +128,24 @@ def main():
     parser.add_argument("file", nargs="?", help="Discussion file path")
     parser.add_argument("adr_num", nargs="?", default="001")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-e", "--export", action="store_true", help="Export ADR markdown to file")
+    parser.add_argument("-e", "--export", action="store_true")
     ns = parser.parse_args()
     VERBOSE = ns.verbose
 
     if not ns.file:
         console.print("[dim]No file provided — using sample discussion...[/dim]")
-        discussion = SAMPLE_DISCUSSION
+        discussion = SAMPLE_DISCUSSION.strip()
     else:
-        discussion = Path(ns.file).read_text(encoding="utf-8")
+        discussion = Path(ns.file).read_text(encoding="utf-8").strip()
 
-    adr = create_adr(discussion, ns.adr_num)
+    result = create_adr(discussion, ns.adr_num)
 
     if ns.export:
-        out_dir = Path("adrs")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_file = out_dir / f"ADR-{ns.adr_num}.md"
-        out_file.write_text(adr["full_markdown"], encoding="utf-8")
-        console.print(f"✅ Exported ADR to [bold]{out_file}[/bold]")
+        out = Path(ns.file).with_suffix('.adr.json') if ns.file else Path(f'adr-{ns.adr_num}.json')
+        out.write_text(json.dumps(result, indent=2), encoding='utf-8')
+        console.print(f"Exported JSON to {out}")
     else:
-        console.print(Panel(Markdown(adr["full_markdown"]), title=f"ADR {ns.adr_num}"))
+        console.print(Panel(Markdown(result.get("full_markdown", "")), title=f"ADR {ns.adr_num}"))
 
 if __name__ == "__main__":
     main()
