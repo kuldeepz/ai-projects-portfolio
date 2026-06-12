@@ -1,5 +1,6 @@
 """Sanity tests for sentiment-dashboard — no API key required."""
 import os, sys, csv, tempfile
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from dashboard import SENTIMENT_SCHEMA, SENTIMENT_COLORS, SENTIMENT_ICONS, score_bar, save_batch_csv, process_batch_file
 
@@ -64,6 +65,66 @@ def test_process_batch_file():
         assert texts == ["Great product!", "Terrible service"]
         assert labels == ["rev1", "rev2"]
         print("  [PASS] Process batch file — texts and labels parsed correctly")
+    finally:
+        os.unlink(tmp)
+
+
+@pytest.mark.parametrize(
+    "value,expected_color",
+    [
+        (1.0, "green"),
+        (-1.0, "red"),
+        (0.0, "blue"),
+    ],
+)
+def test_score_bar_boundary_values(value, expected_color):
+    """Covers boundary sentiment scores at min, max, and neutral midpoint."""
+    bar = score_bar(value)
+    assert expected_color in bar
+
+
+@pytest.mark.parametrize(
+    "text,label",
+    [
+        ("", "empty_text"),
+        (None, "none_text"),
+        ("Normal text", "normal_text"),
+    ],
+)
+def test_process_batch_file_empty_and_none_text_inputs(text, label):
+    """Covers batch parsing behavior for empty, None, and normal text values."""
+    rows = [["text", "label"], [text, label]]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(rows)
+        tmp = f.name
+    try:
+        texts, labels = process_batch_file(tmp)
+        expected_text = "" if text is None else text
+        assert texts == [expected_text]
+        assert labels == [label]
+    finally:
+        os.unlink(tmp)
+
+
+@pytest.mark.parametrize(
+    "result,label,expected_sentiment",
+    [
+        ({"sentiment": "neutral", "score": 0.0, "confidence": 50, "emotions": [], "summary": ""}, "" , "neutral"),
+        ({"sentiment": "mixed", "score": 0.01, "confidence": 0, "emotions": [], "summary": "Edge summary"}, None, "mixed"),
+        ({"sentiment": "positive", "score": 1.0, "confidence": 100, "emotions": [{"emotion": "joy", "intensity": "high"}], "summary": "Best case"}, "max_case", "positive"),
+    ],
+)
+def test_save_batch_csv_edge_and_none_labels(result, label, expected_sentiment):
+    """Covers CSV saving with empty labels, None labels, and score boundaries."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        tmp = f.name
+    try:
+        save_batch_csv([result], [label], tmp)
+        with open(tmp) as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 1
+        assert rows[0]["sentiment"] == expected_sentiment
     finally:
         os.unlink(tmp)
 
