@@ -158,12 +158,44 @@ def main():
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg in ("-e", "--export"):
-            if i + 1 < len(args) and not args[i + 1].startswith("-"):
-                export = args[i + 1]
-                i += 1
-            else:
-                export = True
-        else:
-            cleaned_args.append(arg)
-        i += 1
+
+
+class PrintUsageTests(unittest.TestCase):
+    def test_print_usage_no_usage_no_output(self):
+        response = Mock()
+        response.usage = None
+
+        with patch("builtins.print") as mock_print:
+            print_usage(response)
+
+        mock_print.assert_not_called()
+
+    def test_print_usage_with_explicit_total_tokens(self):
+        usage = Mock()
+        usage.prompt_tokens = 1000
+        usage.completion_tokens = 500
+        usage.total_tokens = 1600
+        response = Mock()
+        response.usage = usage
+
+        with patch("builtins.print") as mock_print:
+            print_usage(response)
+
+        mock_print.assert_called_once_with(
+            "📊 Tokens: 1000 in + 500 out = 1600 total | 💰 Est. cost: $0.0000"
+        )
+
+    def test_print_usage_fallback_total_tokens_when_missing(self):
+        usage = Mock()
+        usage.prompt_tokens = 200
+        usage.completion_tokens = 300
+        usage.total_tokens = None
+        response = Mock()
+        response.usage = usage
+
+        with patch("builtins.print") as mock_print:
+            print_usage(response)
+
+        mock_print.assert_called_once_with(
+            "📊 Tokens: 200 in + 300 out = 500 total | 💰 Est. cost: $0.0000"
+        )
