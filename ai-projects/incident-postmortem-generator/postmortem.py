@@ -17,7 +17,7 @@ def test_validate_environment_exits_when_api_key_missing(monkeypatch):
     assert any("OPENAI_API_KEY is not set" in m for m in printed)
 
 
-def test_validate_environment_exits_when_no_input_files(monkeypatch):
+def test_validate_environment_exits_when_no_input_files_provided(monkeypatch):
     monkeypatch.setattr(postmortem.os, "getenv", lambda k: "key" if k == "OPENAI_API_KEY" else None)
     monkeypatch.setattr(postmortem.sys, "argv", ["postmortem.py", "-v", "--verbose"])
 
