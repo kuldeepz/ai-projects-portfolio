@@ -18,3 +18,8 @@ def validate_environment():
             sys.exit(1)
 
     console.print("[bold green]Setup OK ✓[/bold green]")
+
+
+if __name__ == "__main__":
+    validate_environment()
+    main()
