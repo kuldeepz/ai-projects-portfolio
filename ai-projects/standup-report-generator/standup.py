@@ -148,4 +148,4 @@ def generate_report(data: dict, verbose: bool = False) -> dict:
             tool_choice={"type": "function", "function": {"name": "report_output"}},
             temperature=0.4,
         )
-    print_usage(response)
+    print_
