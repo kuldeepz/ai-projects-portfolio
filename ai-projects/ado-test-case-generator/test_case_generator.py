@@ -23,7 +23,7 @@ def get_client():
     return _client
 
 def is_locked_out(attempts: int) -> bool:
-    """Return True when OTP attempts reach the lockout threshold (3)."""
+    """Return True when OTP failed attempts meet or exceed lockout threshold."""
     return attempts >= 3
 
 SCHEMA = {
