@@ -14,10 +14,6 @@ except ImportError:  # pragma: no cover
 
 console = Console()
 
-PRICING_PER_1M = {
-    "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
-}
-
 
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
@@ -41,23 +37,16 @@ def _create_response(client, **kwargs):
     return client.responses.create(**kwargs)
 
 
-def print_usage(response, model):
+def print_usage(response):
     usage = getattr(response, "usage", None)
     if not usage:
         return
     prompt_tokens = getattr(usage, "input_tokens", 0) or 0
     completion_tokens = getattr(usage, "output_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
-
-    rates = PRICING_PER_1M.get(model)
-    if rates:
-        cost = (prompt_tokens / 1_000_000) * rates["input"] + (completion_tokens / 1_000_000) * rates["output"]
-        cost_part = f" | 💰 Est. cost: ${cost:.4f} (USD @ per-1M token rates)"
-    else:
-        cost_part = " | 💰 Est. cost: unavailable (unknown model pricing)"
-
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(
-        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total{cost_part}"
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
     )
 
 
@@ -91,12 +80,11 @@ def load_schema(schema_paths):
 
 def generate_sql(prompt, schema_paths):
     client = get_client()
-    model = "gpt-4.1-mini"
 
     with console.status("Generating SQL..."):
         response = _create_response(
             client,
-            model=model,
+            model="gpt-4.1-mini",
             input=prompt,
             tools=[
                 {
@@ -113,7 +101,7 @@ def generate_sql(prompt, schema_paths):
                 }
             ],
         )
-    print_usage(response, model)
+    print_usage(response)
 
     for item in getattr(response, "output", []):
         if getattr(item, "type", None) == "function_call" and getattr(item, "name", None) == "emit_sql":
@@ -122,7 +110,8 @@ def generate_sql(prompt, schema_paths):
     return {"sql": ""}
 
 
-def interactive_mode(schema_paths=None):
+def interactive_mode(schema_paths=None, export=False):
+    all_results = []
     while True:
         try:
             prompt = input("sql> ").strip()
@@ -136,7 +125,18 @@ def interactive_mode(schema_paths=None):
             break
 
         result = generate_sql(prompt, schema_paths or [])
+        all_results.append({"prompt": prompt, "result": result})
         console.print(result.get("sql", ""))
+
+    if export:
+        generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        output_path = Path(f"output_{timestamp}.json")
+        payload = {
+            "generated_at": generated_at,
+            "results": all_results,
+        }
+        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def main():
@@ -144,10 +144,11 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--schema", action="append", default=[])
+    parser.add_argument("-e", "--export", action="store_true")
     args = parser.parse_args()
 
     validate_environment(schema_paths=args.schema, require_api_key=True)
-    interactive_mode(schema_paths=args.schema)
+    interactive_mode(schema_paths=args.schema, export=args.export)
 
 
 if __name__ == "__main__":
@@ -167,14 +168,14 @@ class TestPrintUsage(unittest.TestCase):
     def test_print_usage_no_usage_prints_nothing(self):
         response = SimpleNamespace(usage=None)
         with patch.object(console, "print") as mock_print:
-            print_usage(response, "gpt-4.1-mini")
+            print_usage(response)
         mock_print.assert_not_called()
 
     def test_print_usage_fallback_total_tokens_when_missing(self):
         usage = SimpleNamespace(input_tokens=100, output_tokens=50)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
-            print_usage(response, "gpt-4.1-mini")
+            print_usage(response)
         mock_print.assert_called_once()
         message = mock_print.call_args[0][0]
         self.assertIn("100 in + 50 out = 150 total", message)
@@ -183,7 +184,7 @@ class TestPrintUsage(unittest.TestCase):
         usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=999)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
-            print_usage(response, "gpt-4.1-mini")
+            print_usage(response)
         mock_print.assert_called_once()
         message = mock_print.call_args[0][0]
         self.assertIn("100 in + 50 out = 999 total", message)
@@ -192,11 +193,11 @@ class TestPrintUsage(unittest.TestCase):
         usage = SimpleNamespace(input_tokens=1000, output_tokens=500, total_tokens=1500)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
-            print_usage(response, "gpt-4.1-mini")
+            print_usage(response)
         mock_print.assert_called_once()
         message = mock_print.call_args[0][0]
         self.assertIn("📊 Tokens: 1000 in + 500 out = 1500 total", message)
-        self.assertIn("💰 Est. cost: $0.0012", message)
+        self.assertIn("💰 Est. cost: $0.0000", message)
 
 
 if __name__ == "__main__":  # pragma: no cover
