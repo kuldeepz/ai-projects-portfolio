@@ -29,7 +29,7 @@ console: Console = Console()
 
 CHAT_MODEL: str = "gpt-4o-mini"
 
-# USD pricing rates per 1M tokens (input/output) by model.
+# USD pricing per 1M tokens by model
 PRICING_PER_1M: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
 }
@@ -114,6 +114,27 @@ def compose_email(
 
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
+
+
+def print_usage(prompt_tokens: int, completion_tokens: int) -> None:
+    rates = PRICING_PER_1M.get(CHAT_MODEL)
+    if rates is None:
+        console.print(
+            f"[dim]Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={prompt_tokens + completion_tokens} tokens[/dim]"
+        )
+        console.print(
+            f"[yellow]Cost estimate unavailable: no pricing configured for model '{CHAT_MODEL}'.[/yellow]"
+        )
+        return
+
+    cost = (
+        (prompt_tokens / 1_000_000) * rates["input"]
+        + (completion_tokens / 1_000_000) * rates["output"]
+    )
+    console.print(
+        f"[dim]Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={prompt_tokens + completion_tokens} tokens | "
+        f"Estimated cost (${rates['input']}/1M in, ${rates['output']}/1M out): ${cost:.6f}[/dim]"
+    )
 
 
 def display_result(result: dict[str, Any]) -> None:
