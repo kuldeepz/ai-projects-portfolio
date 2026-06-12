@@ -4,7 +4,7 @@ Takes an incident timeline + impact description and generates a structured
 blameless post-mortem with root cause analysis and action items.
 """
 
-import os, sys, json
+import os, sys, json, time
 from datetime import date
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -16,6 +16,7 @@ from rich.markdown import Markdown
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -83,21 +84,33 @@ SAMPLE_INCIDENT = {
 }
 
 def generate_postmortem(incident: dict) -> dict:
+    user_content = f"Write a post-mortem for this incident:\n\n{json.dumps(incident, indent=2)}"
+    messages = [
+        {"role": "system", "content": (
+            "You are an SRE lead writing a blameless post-mortem. "
+            "Focus on systemic issues, not individuals. Use the 5-Whys approach for root cause. "
+            "Action items must be specific, assigned, and prioritized. "
+            "The document should prevent recurrence, not assign blame."
+        )},
+        {"role": "user", "content": user_content}
+    ]
+    if VERBOSE:
+        total_chars = sum(len(m["content"]) for m in messages)
+        approx_tokens = total_chars // 4
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{approx_tokens} tokens)")
+        console.print("⏳ Calling OpenAI API...")
+    started = time.time()
     response = get_client().chat.completions.create(
         model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are an SRE lead writing a blameless post-mortem. "
-                "Focus on systemic issues, not individuals. Use the 5-Whys approach for root cause. "
-                "Action items must be specific, assigned, and prioritized. "
-                "The document should prevent recurrence, not assign blame."
-            )},
-            {"role": "user", "content": f"Write a post-mortem for this incident:\n\n{json.dumps(incident, indent=2)}"}
-        ],
+        messages=messages,
         tools=[{"type": "function", "function": SCHEMA}],
         tool_choice={"type": "function", "function": {"name": "postmortem"}},
         temperature=0.3,
     )
+    if VERBOSE:
+        elapsed = time.time() - started
+        console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def display(pm: dict):
@@ -117,11 +130,15 @@ def display(pm: dict):
     console.print(f"\n[green]Saved:[/green] {out}\n")
 
 def main():
-    if len(sys.argv) < 2:
+    global VERBOSE
+    args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v")]
+    VERBOSE = any(a in ("--verbose", "-v") for a in sys.argv[1:])
+
+    if len(args) < 1:
         console.print("[dim]No file provided — using sample incident...[/dim]\n")
         incident = SAMPLE_INCIDENT
     else:
-        with open(sys.argv[1]) as f:
+        with open(args[0]) as f:
             incident = json.load(f)
 
     with console.status("[bold green]Generating post-mortem...[/bold green]"):
