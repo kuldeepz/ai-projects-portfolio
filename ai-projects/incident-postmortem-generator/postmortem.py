@@ -25,6 +25,26 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Setup error:[/red] OPENAI_API_KEY is not set. Please set it in your environment or .env file.")
+        sys.exit(1)
+
+    args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v")]
+    for path in args:
+        if not os.path.exists(path):
+            console.print(f"[red]Setup error:[/red] File not found: {path}")
+            sys.exit(1)
+        if not os.path.isfile(path):
+            console.print(f"[red]Setup error:[/red] Not a file: {path}")
+            sys.exit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"[red]Setup error:[/red] File is not readable: {path}")
+            sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
 SCHEMA = {
     "name": "postmortem",
     "description": "Blameless post-mortem document",
@@ -131,6 +151,7 @@ def display(pm: dict):
 
 def main():
     global VERBOSE
+    validate_environment()
     args = [a for a in sys.argv[1:] if a not in ("--verbose", "-v")]
     VERBOSE = any(a in ("--verbose", "-v") for a in sys.argv[1:])
 
