@@ -61,8 +61,8 @@ def test_none_inputs_for_required_fields(field, value):
 
 
 @pytest.mark.parametrize("dialect_key,expected", [
-    ("1", "PostgreSQL"),
-    (str(len(DIALECTS)), "Snowflake"),
+    ("1", DIALECTS["1"]),
+    (str(len(DIALECTS)), DIALECTS[str(len(DIALECTS))]),
     ("0", None),
     (str(len(DIALECTS) + 1), None),
 ])
