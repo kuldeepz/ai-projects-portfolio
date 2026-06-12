@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import time
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
@@ -114,6 +115,7 @@ def validate_environment() -> None:
     parser.add_argument("doc1")
     parser.add_argument("doc2")
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-e", "--export", action="store_true")
     args, _ = parser.parse_known_args(sys.argv[1:])
 
     global VERBOSE
@@ -196,3 +198,13 @@ def read_document(path: str) -> str:
             with open(path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
                 return
+
+
+def export_results(results: dict) -> None:
+    generated_at = datetime.now().isoformat()
+    payload = dict(results)
+    payload["generated_at"] = generated_at
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"output_{timestamp}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
