@@ -24,6 +24,21 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def retry_with_backoff(fn):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for i in range(len(delays) + 1):
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                if i < len(delays):
+                    time.sleep(delays[i])
+                else:
+                    raise last_exc
+    return wrapper
+
 FORMATS = {
     "1": ("standup", "Daily standup (Yesterday / Today / Blockers)"),
     "2": ("weekly", "Weekly status report (Accomplishments / Plan / Risks)"),
@@ -63,6 +78,10 @@ SAMPLE_NOTES = {
     ]
 }
 
+@retry_with_backoff
+def _create_chat_completion(**kwargs):
+    return get_client().chat.completions.create(**kwargs)
+
 def generate_report(data: dict) -> dict:
     fmt = data.get("format", "standup")
     fmt_desc = next((v[1] for v in FORMATS.values() if v[0] == fmt), fmt)
@@ -86,7 +105,7 @@ def generate_report(data: dict) -> dict:
         console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{est_tokens} tokens)")
         console.print("⏳ Calling OpenAI API...")
         start = time.perf_counter()
-    response = get_client().chat.completions.create(
+    response = _create_chat_completion(
         model=MODEL,
         messages=messages,
         tools=[{"type": "function", "function": SCHEMA}],
