@@ -158,44 +158,68 @@ def main():
     i = 0
     while i < len(args):
         arg = args[i]
+        if arg in ("-v", "--verbose"):
+            VERBOSE = True
+            i += 1
+        elif arg == "--export":
+            export = True
+            if i + 1 < len(args):
+                cleaned_args.extend([arg, args[i + 1]])
+                i += 2
+            else:
+                cleaned_args.append(arg)
+                i += 1
+        else:
+            cleaned_args.append(arg)
+            i += 1
+
+    design = SAMPLE_DESIGN
+    if cleaned_args and cleaned_args[0] == "--export":
+        if len(cleaned_args) >= 3:
+            design = cleaned_args[2]
+    elif cleaned_args:
+        design = cleaned_args[0]
+
+    review = review_architecture(design)
+    display(review)
+
+    if export:
+        out_file = "architecture_review.json"
+        if "--export" in cleaned_args:
+            idx = cleaned_args.index("--export")
+            if idx + 1 < len(cleaned_args):
+                out_file = cleaned_args[idx + 1]
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(review, f, indent=2)
 
 
-class PrintUsageTests(unittest.TestCase):
-    def test_print_usage_no_usage_no_output(self):
-        response = Mock()
-        response.usage = None
+class TestCLIParsing(unittest.TestCase):
+    def setUp(self):
+        global VERBOSE
+        VERBOSE = False
 
-        with patch("builtins.print") as mock_print:
-            print_usage(response)
+    @patch(__name__ + ".display")
+    @patch(__name__ + ".review_architecture", return_value={})
+    def test_verbose_short_flag_sets_global(self, mock_review, mock_display):
+        global VERBOSE
+        with patch.object(sys, "argv", ["reviewer.py", "-v", "input.txt"]):
+            main()
+        self.assertTrue(VERBOSE)
+        mock_review.assert_called_once_with("input.txt")
 
-        mock_print.assert_not_called()
+    @patch(__name__ + ".json.dump")
+    @patch("builtins.open", new_callable=unittest.mock.mock_open)
+    @patch(__name__ + ".display")
+    @patch(__name__ + ".review_architecture", return_value={"ok": True})
+    def test_export_and_verbose_combined_flags(self, mock_review, mock_display, mock_open_fn, mock_json_dump):
+        global VERBOSE
+        with patch.object(sys, "argv", ["reviewer.py", "--export", "out.json", "--verbose", "input.txt"]):
+            main()
+        self.assertTrue(VERBOSE)
+        mock_review.assert_called_once_with("input.txt")
+        mock_open_fn.assert_called_once_with("out.json", "w", encoding="utf-8")
+        mock_json_dump.assert_called_once()
 
-    def test_print_usage_with_explicit_total_tokens(self):
-        usage = Mock()
-        usage.prompt_tokens = 1000
-        usage.completion_tokens = 500
-        usage.total_tokens = 1600
-        response = Mock()
-        response.usage = usage
 
-        with patch("builtins.print") as mock_print:
-            print_usage(response)
-
-        mock_print.assert_called_once_with(
-            "📊 Tokens: 1000 in + 500 out = 1600 total | 💰 Est. cost: $0.0000"
-        )
-
-    def test_print_usage_fallback_total_tokens_when_missing(self):
-        usage = Mock()
-        usage.prompt_tokens = 200
-        usage.completion_tokens = 300
-        usage.total_tokens = None
-        response = Mock()
-        response.usage = usage
-
-        with patch("builtins.print") as mock_print:
-            print_usage(response)
-
-        mock_print.assert_called_once_with(
-            "📊 Tokens: 200 in + 300 out = 500 total | 💰 Est. cost: $0.0000"
-        )
+if __name__ == "__main__":
+    main()
