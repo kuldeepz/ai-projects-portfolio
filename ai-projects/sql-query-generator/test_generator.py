@@ -1,6 +1,7 @@
 """Sanity tests for sql-query-generator — no API key required."""
 import os, sys
 import pytest
+from jsonschema import validate, ValidationError
 sys.path.insert(0, os.path.dirname(__file__))
 from generator import DIALECTS, SQL_SCHEMA
 
@@ -41,23 +42,28 @@ def test_mock_result():
     print("  [PASS] Mock result — query and assumptions valid")
 
 
-@pytest.mark.parametrize("candidate", ["", "   ", "\n\t"])
-def test_empty_string_inputs_for_required_fields(candidate):
-    """Covers empty-string-like inputs for required SQL result string fields."""
-    for field in ["query", "explanation"]:
-        assert isinstance(candidate, str)
-        assert candidate.strip() == ""
-
-
-@pytest.mark.parametrize("field,value", [
-    ("query", None),
-    ("explanation", None),
-    ("assumptions", None),
+@pytest.mark.parametrize("payload", [
+    {"query": "", "explanation": "ok", "assumptions": []},
+    {"query": "   ", "explanation": "ok", "assumptions": []},
+    {"query": "\n\t", "explanation": "ok", "assumptions": []},
+    {"query": None, "explanation": "ok", "assumptions": []},
+    {"query": "SELECT 1", "explanation": None, "assumptions": []},
+    {"query": "SELECT 1", "explanation": "ok", "assumptions": None},
 ])
-def test_none_inputs_for_required_fields(field, value):
-    """Covers None inputs for required fields where null should be invalid."""
-    assert value is None
-    assert field in SQL_SCHEMA["parameters"]["required"]
+def test_invalid_required_fields(payload):
+    """Invalid required-field payloads should fail schema validation."""
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=SQL_SCHEMA["parameters"])
+
+
+def test_valid_required_fields_payload_passes_schema_validation():
+    """A valid payload should pass schema validation."""
+    payload = {
+        "query": "SELECT 1",
+        "explanation": "Returns a constant.",
+        "assumptions": []
+    }
+    validate(instance=payload, schema=SQL_SCHEMA["parameters"])
 
 
 @pytest.mark.parametrize("dialect_key,expected", [
