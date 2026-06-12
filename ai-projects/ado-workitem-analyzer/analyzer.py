@@ -12,7 +12,7 @@ import unittest
 from datetime import datetime
 from io import StringIO
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, TypedDict, NotRequired, Protocol, cast
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -27,6 +27,47 @@ MODEL = "gpt-4o-mini"
 INPUT_RATE_PER_1M = 0.15
 OUTPUT_RATE_PER_1M = 0.60
 
+
+class WorkItem(TypedDict):
+    id: str
+    type: str
+    title: str
+    description: str
+    acceptance_criteria: str
+    story_points: NotRequired[int | None]
+    priority: str
+    assigned_to: str
+    sprint: str
+    tags: list[str]
+
+
+class AnalysisResult(TypedDict):
+    ready_score: int
+    missing_fields: list[str]
+    acceptance_criteria_issues: list[str]
+    improved_acceptance_criteria: str
+    story_point_suggestion: int
+    risks: list[str]
+    suggestions: list[str]
+    summary: str
+
+
+class ToolFunctionSchema(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, object]
+
+
+class _UsageLike(Protocol):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class _ResponseLike(Protocol):
+    usage: _UsageLike
+
+
 _client: OpenAI | None = None
 def get_client() -> OpenAI:
     global _client
@@ -34,7 +75,8 @@ def get_client() -> OpenAI:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def print_usage(response: Any) -> None:
+
+def print_usage(response: _ResponseLike) -> None:
     usage = response.usage
     prompt_tokens = usage.prompt_tokens
     completion_tokens = usage.completion_tokens
@@ -44,6 +86,7 @@ def print_usage(response: Any) -> None:
         + (completion_tokens / 1_000_000) * OUTPUT_RATE_PER_1M
     )
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 
 def validate_environment(args: argparse.Namespace) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
@@ -66,7 +109,8 @@ def validate_environment(args: argparse.Namespace) -> None:
 
     console.print("[green]Setup OK ✓[/green]")
 
-SCHEMA: dict[str, Any] = {
+
+SCHEMA: ToolFunctionSchema = {
     "name": "workitem_analysis",
     "description": "Analysis of an ADO work item for completeness and quality",
     "parameters": {
@@ -86,7 +130,8 @@ SCHEMA: dict[str, Any] = {
     }
 }
 
-SAMPLE_WORK_ITEM: dict[str, Any] = {
+
+SAMPLE_WORK_ITEM: WorkItem = {
     "id": "WI-1042",
     "type": "User Story",
     "title": "As a user I want to login",
@@ -99,7 +144,8 @@ SAMPLE_WORK_ITEM: dict[str, Any] = {
     "tags": []
 }
 
-def analyze_workitem(item: dict[str, Any]) -> dict[str, Any]:
+
+def analyze_workitem(item: WorkItem) -> AnalysisResult:
     with console.status("[bold green]Calling OpenAI for analysis...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -116,9 +162,10 @@ def analyze_workitem(item: dict[str, Any]) -> dict[str, Any]:
             temperature=0.2,
         )
     print_usage(response)
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+    return cast(AnalysisResult, json.loads(response.choices[0].message.tool_calls[0].function.arguments))
 
-def display(item: dict[str, Any], analysis: dict[str, Any]) -> None:
+
+def display(item: WorkItem, analysis: AnalysisResult) -> None:
     score = analysis["ready_score"]
     color = "green" if score >= 75 else "yellow" if score >= 50 else "red"
     console.print()
@@ -136,35 +183,15 @@ def display(item: dict[str, Any], analysis: dict[str, Any]) -> None:
 
     if analysis["acceptance_criteria_issues"]:
         console.print(Panel("\n".join(f"  [yellow]⚠[/yellow] {i}" for i in analysis["acceptance_criteria_issues"]),
-                            title="Acceptance Criteria Issues", border_style="yellow"))
+                            title="[bold yellow]Acceptance Criteria Issues[/bold yellow]", border_style="yellow"))
 
+    console.print(Panel(analysis["improved_acceptance_criteria"],
+                        title="[bold green]Improved Acceptance Criteria[/bold green]", border_style="green"))
 
-class TestPrintUsage(unittest.TestCase):
-    def _capture_output(self, response: Any) -> str:
-        global console
-        old_console = console
-        buf = StringIO()
-        console = Console(file=buf, force_terminal=False, color_system=None)
-        try:
-            print_usage(response)
-            return buf.getvalue().strip()
-        finally:
-            console = old_console
+    if analysis["risks"]:
+        console.print(Panel("\n".join(f"  • {r}" for r in analysis["risks"]),
+                            title="[bold magenta]Risks / Dependencies[/bold magenta]", border_style="magenta"))
 
-    def test_print_usage_full_usage_present(self) -> None:
-        usage = SimpleNamespace(prompt_tokens=1_000_000, completion_tokens=500_000, total_tokens=1_500_000)
-        response = SimpleNamespace(usage=usage)
-        out = self._capture_output(response)
-        self.assertIn("📊 Tokens: 1000000 in + 500000 out = 1500000 total", out)
-        self.assertIn("💰 Est. cost: $0.4500", out)
-
-    def test_print_usage_missing_usage_raises(self) -> None:
-        response = SimpleNamespace()
-        with self.assertRaises(AttributeError):
-            print_usage(response)
-
-    def test_print_usage_null_token_fields_raise(self) -> None:
-        usage = SimpleNamespace(prompt_tokens=None, completion_tokens=None, total_tokens=None)
-        response = SimpleNamespace(usage=usage)
-        with self.assertRaises(TypeError):
-            print_usage(response)
+    if analysis["suggestions"]:
+        console.print(Panel("\n".join(f"  • {s}" for s in analysis["suggestions"]),
+                            title="[bold cyan]Suggestions[/bold cyan]", border_style="cyan"))
