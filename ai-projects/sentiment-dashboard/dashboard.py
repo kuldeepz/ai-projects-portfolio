@@ -24,6 +24,7 @@ load_dotenv()
 
 console = Console()
 CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 
@@ -109,6 +110,11 @@ SENTIMENT_SCHEMA = {
 
 @retry_with_backoff
 def analyze_sentiment(text: str) -> dict:
+    if VERBOSE:
+        console.print(f"[dim]Model: {CHAT_MODEL}[/dim]")
+        console.print(f"[dim]Input size: {len(text)} chars, ~{max(1, len(text) // 4)} tokens[/dim]")
+        console.print("⏳ Calling OpenAI API...")
+        started = time.time()
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
         messages=[
@@ -126,6 +132,8 @@ def analyze_sentiment(text: str) -> dict:
         tool_choice={"type": "function", "function": {"name": "sentiment_result"}},
         temperature=0.1,
     )
+    if VERBOSE:
+        console.print(f"✅ Done in {time.time() - started:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
@@ -261,5 +269,9 @@ if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
             self.assertEqual(create_mock.call_count, 3)
             self.assertEqual([c.args[0] for c in sleep_mock.call_args_list], [1, 2])
             self.assertEqual(result["sentiment"], "positive")
+
+    if "--verbose" in sys.argv or "-v" in sys.argv:
+        VERBOSE = True
+        sys.argv = [arg for arg in sys.argv if arg not in ("--verbose", "-v")]
 
     unittest.main()
