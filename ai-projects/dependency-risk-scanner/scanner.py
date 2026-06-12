@@ -175,9 +175,23 @@ def export_report(report: dict, output_path: str):
         json.dump(payload, f, indent=2)
 
 
-def main():
+if __name__ == "__main__":
+    validate_environment()
     export_enabled = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
 
+    args = [a for a in sys.argv[1:] if a not in ("--export", "-e") and not a.startswith("-")]
+    if not args:
+        print("Usage: python scanner.py [--export|-e] <dependency-file>")
+        sys.exit(1)
 
-if __name__ == "__main__":
-    main()
+    file_path = args[0]
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    dep_content = parse_requirements(content, file_path)
+    report = scan(dep_content)
+
+    if export_enabled:
+        path = "dependency-risk-report.json"
+        export_report(report, path)
+        print(f"Exported report to {path}")
