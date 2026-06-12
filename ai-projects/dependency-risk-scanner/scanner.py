@@ -16,6 +16,16 @@ load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 _client = None
 def get_client():
     global _client
@@ -90,6 +100,7 @@ def scan(dep_content: str) -> dict:
         tool_choice={"type": "function", "function": {"name": "dependency_report"}},
         temperature=0.1,
     )
+    print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 RISK_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim yellow", "ok": "green"}
