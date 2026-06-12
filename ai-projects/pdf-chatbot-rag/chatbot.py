@@ -21,11 +21,13 @@ init(autoreset=True)
 
 _client = None
 
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
 
 CHUNK_SIZE = 500       # words per chunk
 CHUNK_OVERLAP = 50     # word overlap between chunks
@@ -33,20 +35,29 @@ TOP_K = 4              # number of chunks to retrieve per query
 EMBED_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
 
+PRICING_PER_1K = {
+    "gpt-4o-mini": {"input": 0.000015, "output": 0.00006},
+    "text-embedding-3-small": {"input": 0.00002, "output": 0.0},
+}
 
-def print_usage(response):
+
+def print_usage(response, model: str):
     usage = getattr(response, "usage", None)
     if not usage:
-        print("📊 Tokens: 0 in + 0 out = 0 total | 💰 Est. cost: $0.0000")
+        print(f"📊 [{model}] Tokens: 0 in + 0 out = 0 total | 💰 Est. cost: $0.000000")
         return
 
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
-    input_cost = (prompt_tokens / 1000) * 0.000015
-    output_cost = (completion_tokens / 1000) * 0.00006
-    cost = input_cost + output_cost
-    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+    rates = PRICING_PER_1K.get(model, {"input": 0.0, "output": 0.0})
+    cost = (prompt_tokens / 1000) * rates["input"] + (completion_tokens / 1000) * rates["output"]
+
+    print(
+        f"📊 [{model}] Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total "
+        f"| 💰 Est. cost: ${cost:.6f}"
+    )
 
 
 def validate_environment():
@@ -102,7 +113,7 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         response = get_client().embeddings.create(model=EMBED_MODEL, input=batch)
-        print_usage(response)
+        print_usage(response, EMBED_MODEL)
         all_embeddings.extend([item.embedding for item in response.data])
     return all_embeddings
 
@@ -145,7 +156,7 @@ def answer_question(question: str, context_chunks: list[str], chat_history: list
         messages=messages,
         temperature=0.2,
     )
-    print_usage(response)
+    print_usage(response, CHAT_MODEL)
     return response.choices[0].message.content
 
 
@@ -169,10 +180,4 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     chunks = chunk_text(text)
     print(Fore.CYAN + f"  Created {len(chunks)} chunks. Generating embeddings...")
 
-    embeddings = get_embeddings(chunks)
-
-    with open(cache_path, "w") as f:
-        json.dump({"chunks": chunks, "embeddings": embeddings}, f)
-    print(Fore.GREEN + "  Embeddings cached for future use.")
-
-    return chunks, embeddings
+    embeddings = get_embedd
