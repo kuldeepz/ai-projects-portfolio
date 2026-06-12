@@ -4,7 +4,7 @@ Audits requirements.txt / package.json / pyproject.toml for outdated,
 deprecated, or vulnerable packages and recommends upgrades.
 """
 
-import os, sys, json, re
+import os, sys, json, re, time
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -22,6 +22,21 @@ def get_client():
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                if i == len(delays) - 1:
+                    break
+                time.sleep(delay)
+        raise last_exc
+    return wrapper
 
 SCHEMA = {
     "name": "dependency_report",
@@ -57,6 +72,7 @@ SCHEMA = {
 def parse_requirements(content: str, filename: str) -> str:
     return f"File: {filename}\n\n{content}"
 
+@retry_with_backoff
 def scan(dep_content: str) -> dict:
     response = get_client().chat.completions.create(
         model=MODEL,
