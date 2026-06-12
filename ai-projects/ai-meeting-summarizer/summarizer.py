@@ -166,131 +166,13 @@ def display_notes(notes: dict):
         dec_text = "\n".join(f"  [green]✔[/green] {d}" for d in notes["decisions"])
         console.print(Panel(dec_text, title="[bold green]Decisions Made[/bold green]", border_style="green"))
     else:
-        console.print(Panel("[dim]No explicit decisions recorded.[/dim]", title="[bold]Decisions[/bold]", border_style="dim"))
-
-    # Action items
-    if notes["action_items"]:
-        table = Table(show_header=True, header_style="bold yellow")
-        table.add_column("Action Item", ratio=3)
-        table.add_column("Owner", ratio=1)
-        table.add_column("Due", ratio=1)
-        for item in notes["action_items"]:
-            table.add_row(item["task"], item["owner"], item["due"])
-        console.print(Panel(table, title="[bold yellow]Action Items[/bold yellow]", border_style="yellow"))
-    else:
-        console.print(Panel("[dim]No action items identified.[/dim]", title="[bold]Action Items[/bold]", border_style="dim"))
-
-    # Blockers
-    if notes["blockers"]:
-        blockers_text = "\n".join(f"  [red]⚠[/red] {b}" for b in notes["blockers"])
-        console.print(Panel(blockers_text, title="[bold red]Blockers & Risks[/bold red]", border_style="red"))
-
-    # Follow-ups
-    if notes.get("follow_up_meetings"):
-        fu_text = "\n".join(f"  [dim]→[/dim] {f}" for f in notes["follow_up_meetings"])
-        console.print(Panel(fu_text, title="[bold]Follow-up Meetings[/bold]", border_style="dim"))
-
-    console.print()
+        console.print(Panel("[dim]No explicit decisions recorded",
+        title="[bold green]Decisions Made[/bold green]", border_style="green"))
 
 
-def save_notes(notes: dict, output_path: str):
-    lines = [
-        f"# {notes['title']}",
-        f"",
-        f"**Date:** {datetime.now().strftime('%Y-%m-%d')}",
-        f"**Attendees:** {', '.join(notes['attendees'])}",
-        f"**Sentiment:** {notes.get('sentiment', 'neutral').title()}",
-        f"",
-        f"## Executive Summary",
-        f"",
-        notes["executive_summary"],
-        f"",
-        f"## Key Topics",
-        f"",
-    ]
-    for t in notes["key_topics"]:
-        lines += [f"### {t['topic']}", f"", t["discussion"], f""]
-
-    lines += [f"## Decisions Made", f""]
-    for d in notes["decisions"]:
-        lines.append(f"- {d}")
-
-    lines += [f"", f"## Action Items", f"", "| Task | Owner | Due |", "| --- | --- | --- |"]
-    for item in notes["action_items"]:
-        lines.append(f"| {item['task']} | {item['owner']} | {item['due']} |")
-
-    if notes["blockers"]:
-        lines += [f"", f"## Blockers & Risks", f""]
-        for b in notes["blockers"]:
-            lines.append(f"- {b}")
-
-    with open(output_path, "w") as f:
-        f.write("\n".join(lines))
-
-
-def main():
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python summarizer.py <transcript.txt> [--export|-e]")
-        console.print("[dim]Example: python summarizer.py sprint_meeting.txt --export[/dim]")
-        console.print("\n[dim]Tip: You can also pipe text: cat transcript.txt | python summarizer.py - --export[/dim]")
-        sys.exit(1)
-
-    args = sys.argv[1:]
-    export_json = False
-    if "--export" in args:
-        export_json = True
-        args.remove("--export")
-    if "-e" in args:
-        export_json = True
-        args.remove("-e")
-
-    if len(args) < 1:
-        console.print("[yellow]Usage:[/yellow] python summarizer.py <transcript.txt> [--export|-e]")
-        sys.exit(1)
-
-    file_arg = args[0]
-
-    if file_arg == "-":
-        transcript = sys.stdin.read()
-        stem = "meeting"
-    else:
-        if not os.path.exists(file_arg):
-            console.print(f"[red]File not found:[/red] {file_arg}")
-            sys.exit(1)
-        with open(file_arg, "r", encoding="utf-8") as f:
-            transcript = f.read()
-        stem = Path(file_arg).stem
-
-    if not transcript.strip():
-        console.print("[red]Empty transcript.[/red]")
-        sys.exit(1)
-
-    # Truncate very long transcripts
-    if len(transcript) > 12000:
-        console.print("[yellow]Transcript truncated to 12,000 characters for processing.[/yellow]")
-        transcript = transcript[:12000]
-
-    console.print(f"\n[cyan]Processing transcript:[/cyan] {file_arg}")
-
-    with console.status("[bold green]Extracting meeting notes...[/bold green]"):
-        notes = summarize_transcript(transcript)
-
-    display_notes(notes)
-
-    output_file = f"notes_{stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-    save_notes(notes, output_file)
-    console.print(f"[green]Notes saved to:[/green] {output_file}")
-
-    if export_json:
-        export_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        export_file = f"output_{export_timestamp}.json"
-        export_payload = {**notes, "generated_at": datetime.now().isoformat()}
-        with open(export_file, "w", encoding="utf-8") as f:
-            json.dump(export_payload, f, indent=2, ensure_ascii=False)
-        console.print(f"[green]JSON export saved to:[/green] {export_file}")
-
-    console.print()
-
-
-if __name__ == "__main__":
-    main()
+def export_json(notes: dict, stem: str) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    export_file = f"notes_{stem}_{stamp}.json"
+    out_path = Path(export_file)
+    out_path.write_text(json.dumps(notes, indent=2), encoding="utf-8")
+    return out_path
