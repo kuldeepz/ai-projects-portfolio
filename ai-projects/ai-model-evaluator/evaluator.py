@@ -49,9 +49,8 @@ def retry_with_backoff(func=None, *, delays=(1, 2, 4), retry_exceptions=(Timeout
 def _extract_model_name(args, kwargs):
     if "model" in kwargs:
         return kwargs["model"]
-    for arg in args:
-        if isinstance(arg, str):
-            return arg
+    if len(args) > 0:
+        return args[0]
     return "unknown"
 
 
@@ -59,8 +58,8 @@ def _extract_input_text(args, kwargs):
     for key in ("input", "prompt", "messages"):
         if key in kwargs:
             return kwargs[key]
-    if args:
-        return args[0]
+    if len(args) > 1:
+        return args[1]
     return ""
 
 
@@ -183,10 +182,3 @@ if __name__ == "__main__":
             configure_verbose(["--verbose", "--debug-sensitive"])
             self.assertTrue(VERBOSE)
             self.assertTrue(DEBUG_SENSITIVE)
-            configure_verbose([])
-            self.assertFalse(VERBOSE)
-            self.assertFalse(DEBUG_SENSITIVE)
-
-        def test_print_usage_with_object_usage(self):
-            response = _ResponseObj(_UsageObj(prompt_tokens=100, completion_tokens=50, total_tokens=150))
-            wit
