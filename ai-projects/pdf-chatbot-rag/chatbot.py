@@ -190,5 +190,76 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     return chunks, embeddings
 
 
-if __name__ == "__main__":
-    pass
+# Tests for verbose argument and verbose logging paths
+if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
+    import pytest
+    from unittest.mock import patch, MagicMock
+
+    def _setup_pdf_mocks(mock_open, mock_exists):
+        mock_exists.return_value = True
+        file_obj = MagicMock()
+        file_obj.__enter__.return_value.read.return_value = b"%PDF"
+        mock_open.return_value = file_obj
+
+    def test_validate_environment_accepts_verbose_long_and_keeps_pdf_path(capsys):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "k"}), \
+             patch.object(sys, "argv", ["chatbot.py", "--verbose", "doc.pdf"]), \
+             patch("os.path.exists") as mock_exists, \
+             patch("builtins.open") as mock_open:
+            _setup_pdf_mocks(mock_open, mock_exists)
+            validate_environment()
+            out = capsys.readouterr().out
+            assert "Setup OK" in out
+            mock_open.assert_called_with("doc.pdf", "rb")
+
+    def test_validate_environment_accepts_verbose_short_and_keeps_pdf_path(capsys):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "k"}), \
+             patch.object(sys, "argv", ["chatbot.py", "-v", "doc.pdf"]), \
+             patch("os.path.exists") as mock_exists, \
+             patch("builtins.open") as mock_open:
+            _setup_pdf_mocks(mock_open, mock_exists)
+            validate_environment()
+            out = capsys.readouterr().out
+            assert "Setup OK" in out
+            mock_open.assert_called_with("doc.pdf", "rb")
+
+    def test_validate_environment_combined_flags_export_and_verbose_parse_pdf(capsys):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "k"}), \
+             patch.object(sys, "argv", ["chatbot.py", "--export", "out.json", "-v", "doc.pdf"]), \
+             patch("os.path.exists") as mock_exists, \
+             patch("builtins.open") as mock_open:
+            _setup_pdf_mocks(mock_open, mock_exists)
+            validate_environment()
+            out = capsys.readouterr().out
+            assert "Setup OK" in out
+            mock_open.assert_called_with("doc.pdf", "rb")
+
+    def test_get_embedding_verbose_outputs_diagnostics(capsys):
+        global VERBOSE
+        VERBOSE = True
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.data = [MagicMock(embedding=[0.1, 0.2])]
+        mock_client.embeddings.create.return_value = mock_resp
+        with patch("chatbot.OpenAI", return_value=mock_client):
+            emb = get_embedding("hello world")
+            assert emb == [0.1, 0.2]
+            out = capsys.readouterr().out
+            assert "Model:" in out
+            assert "Input size:" in out
+            assert "Calling OpenAI API" in out
+        VERBOSE = False
+
+    def test_get_embedding_non_verbose_suppresses_diagnostics(capsys):
+        global VERBOSE
+        VERBOSE = False
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.data = [MagicMock(embedding=[0.1, 0.2])]
+        mock_client.embeddings.create.return_value = mock_resp
+        with patch("chatbot.OpenAI", return_value=mock_client):
+            _ = get_embedding("hello world")
+            out = capsys.readouterr().out
+            assert "Model:" not in out
+            assert "Input size:" not in out
+            assert "Calling OpenAI API" not in out
