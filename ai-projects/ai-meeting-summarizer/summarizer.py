@@ -11,6 +11,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -21,15 +22,15 @@ from rich.markdown import Markdown
 
 load_dotenv()
 
-console = Console()
-CHAT_MODEL = "gpt-4o-mini"
-VERBOSE = False
+console: Console = Console()
+CHAT_MODEL: str = "gpt-4o-mini"
+VERBOSE: bool = False
 
-PRICING = {
+PRICING: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"in_per_1m": 0.15, "out_per_1m": 0.60},
 }
 
-_client = None
+_client: OpenAI | None = None
 
 
 def get_client() -> OpenAI:
@@ -39,13 +40,13 @@ def get_client() -> OpenAI:
     return _client
 
 
-def validate_environment(args=None) -> None:
+def validate_environment(args: Any | None = None) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("❌ OPENAI_API_KEY is missing. Set it in your environment or .env file.")
         raise SystemExit(1)
 
-    paths_to_check = []
+    paths_to_check: list[Any] = []
     if args is not None:
         for attr in ("file", "input_file", "transcript_file", "path"):
             if hasattr(args, attr):
@@ -68,7 +69,7 @@ def validate_environment(args=None) -> None:
     console.print("Setup OK ✓")
 
 
-def print_usage(response) -> None:
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -90,7 +91,7 @@ def print_usage(response) -> None:
     )
 
 
-NOTES_SCHEMA = {
+NOTES_SCHEMA: dict[str, Any] = {
     "name": "meeting_notes",
     "description": "Structured meeting notes extracted from a transcript",
     "parameters": {
@@ -177,7 +178,7 @@ NOTES_SCHEMA = {
 }
 
 
-def summarize_transcript(transcript: str) -> dict:
+def summarize_transcript(transcript: str) -> dict[str, Any]:
     with console.status("[bold green]Generating meeting notes..."):
         if VERBOSE:
             console.print(f"[dim]Model:[/dim] {CHAT_MODEL}")
