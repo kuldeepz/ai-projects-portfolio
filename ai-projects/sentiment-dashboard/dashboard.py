@@ -36,25 +36,6 @@ def get_client() -> OpenAI:
     return _client
 
 
-def _consume_verbose_flag(argv=None) -> bool:
-    """Remove --verbose/-v flags from argv and return whether verbose is enabled."""
-    if argv is None:
-        argv = sys.argv
-    enabled = False
-    cleaned = [argv[0]] if argv else []
-    for arg in argv[1:]:
-        if arg in ("--verbose", "-v"):
-            enabled = True
-            continue
-        cleaned.append(arg)
-    if argv is sys.argv:
-        sys.argv[:] = cleaned
-    return enabled
-
-
-VERBOSE = _consume_verbose_flag()
-
-
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
@@ -198,10 +179,3 @@ def display_single(result: dict, text: str):
     # Text preview
     preview = text[:200] + "..." if len(text) > 200 else text
     console.print(Panel(f"[dim italic]{preview}[/dim italic]", title="[bold]Input Text[/bold]", border_style="dim"))
-
-    # Summary
-    console.print(Panel(result["summary"], title="[bold]Summary[/bold]", border_style="green"))
-
-
-if __name__ == "__main__":
-    pass
