@@ -1,3 +1,4 @@
+import argparse
 import pytest
 from pathlib import Path
 
@@ -8,12 +9,15 @@ def _set_argv(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
     monkeypatch.setattr(analyzer.sys, "argv", ["analyzer.py", *args])
 
 
+def _args_with_input(path: str | None = None) -> argparse.Namespace:
+    return argparse.Namespace(input_file=path)
+
+
 def test_validate_environment_exits_when_api_key_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    _set_argv(monkeypatch)
 
     with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment()
+        analyzer.validate_environment(_args_with_input())
 
     assert exc.value.code == 1
 
@@ -24,10 +28,9 @@ def test_validate_environment_exits_for_nonexistent_path(
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     missing = tmp_path / "missing.log"
-    _set_argv(monkeypatch, str(missing))
 
     with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment()
+        analyzer.validate_environment(_args_with_input(str(missing)))
 
     assert exc.value.code == 1
 
@@ -39,10 +42,9 @@ def test_validate_environment_exits_when_path_is_directory(
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     directory = tmp_path / "logs"
     directory.mkdir()
-    _set_argv(monkeypatch, str(directory))
 
     with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment()
+        analyzer.validate_environment(_args_with_input(str(directory)))
 
     assert exc.value.code == 1
 
@@ -54,12 +56,11 @@ def test_validate_environment_exits_when_file_not_readable(
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     log_file = tmp_path / "pipeline.log"
     log_file.write_text("content", encoding="utf-8")
-    _set_argv(monkeypatch, str(log_file))
 
     monkeypatch.setattr(analyzer.os, "access", lambda *_args, **_kwargs: False)
 
     with pytest.raises(SystemExit) as exc:
-        analyzer.validate_environment()
+        analyzer.validate_environment(_args_with_input(str(log_file)))
 
     assert exc.value.code == 1
 
@@ -71,15 +72,14 @@ def test_validate_environment_success_with_valid_file(
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     log_file = tmp_path / "pipeline.log"
     log_file.write_text("ok", encoding="utf-8")
-    _set_argv(monkeypatch, str(log_file))
 
-    analyzer.validate_environment()
+    analyzer.validate_environment(_args_with_input(str(log_file)))
 
 
 def test_main_runs_analyzer_flow_after_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    monkeypatch.setattr(analyzer, "validate_environment", lambda: calls.append("validate"))
+    monkeypatch.setattr(analyzer, "validate_environment", lambda *_a, **_k: calls.append("validate"))
 
     if hasattr(analyzer, "run"):
         monkeypatch.setattr(analyzer, "run", lambda: calls.append("run"))
