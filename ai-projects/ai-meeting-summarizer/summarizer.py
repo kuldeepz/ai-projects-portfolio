@@ -183,50 +183,39 @@ def _usage() -> str:
 def _parse_args(argv: list[str]) -> tuple[bool, str]:
     export = False
     args = list(argv)
-
-    if args and args[0] in ("--export", "-e"):
+    if args and args[0] in {"--export", "-e"}:
         export = True
         args = args[1:]
-
     if len(args) != 1:
         raise ValueError(_usage())
-
     return export, args[0]
 
 
-def _read_transcript(source: str) -> str:
+def main() -> int:
+    export, source = _parse_args(sys.argv[1:])
+
     if source == "-":
-        return sys.stdin.read()
-    return Path(source).read_text(encoding="utf-8")
+        transcript = sys.stdin.read().strip()
+        source_path = Path("stdin")
+    else:
+        source_path = Path(source)
+        transcript = source_path.read_text(encoding="utf-8").strip()
 
-
-def _write_export(notes: dict, transcript_source: str) -> Path:
-    payload = {
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "notes": notes,
-    }
-    stem = "meeting_notes" if transcript_source == "-" else Path(transcript_source).stem
-    out_path = Path(f"{stem}_notes.json")
-    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    return out_path
-
-
-def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-
-    try:
-        export, transcript_arg = _parse_args(argv)
-    except ValueError as exc:
-        console.print(str(exc))
-        return 1
-
-    transcript = _read_transcript(transcript_arg)
     notes = summarize_transcript(transcript)
     display_notes(notes)
 
     if export:
-        out_path = _write_export(notes, transcript_arg)
-        console.print(f"\n[green]Exported notes JSON to:[/green] {out_path}")
+        now = datetime.now()
+        stamp = now.strftime("%Y%m%d_%H%M%S")
+        stem = source_path.stem if source_path.stem else "meeting"
+
+        notes_file = Path(f"notes_{stem}_{stamp}.md")
+        notes_md = f"# {notes.get('title', 'Meeting Notes')}\n\n{notes.get('executive_summary', '')}\n"
+        notes_file.write_text(notes_md, encoding="utf-8")
+
+        export_file = Path(f"output_{stamp}.json")
+        export_payload = {**notes, "generated_at": now.isoformat()}
+        export_file.write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
 
     return 0
 
