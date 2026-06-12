@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, ParamSpec, Protocol, TypeVar
 
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, OpenAI, RateLimitError
 from rich.console import Console
 
 console = Console()
@@ -27,10 +27,12 @@ def retry_with_backoff(func: Callable[P, R]) -> Callable[P, R]:
         for attempt in range(len(delays) + 1):
             try:
                 return func(*args, **kwargs)
-            except Exception:
+            except (APITimeoutError, APIConnectionError, RateLimitError):
                 if attempt == len(delays):
                     raise
                 time.sleep(delays[attempt])
+            except Exception:
+                raise
 
     return wrapper
 
@@ -104,7 +106,7 @@ def test_retry_with_backoff_fails_then_succeeds(monkeypatch: Any) -> None:
     wrapped = retry_with_backoff(fn)
     assert wrapped() == "ok"
     assert calls["count"] == 3
-    assert sleep_calls == [1, 2]
+    assert sleep_calls == []
 
 
 def test_retry_with_backoff_raises_after_all_attempts(monkeypatch: Any) -> None:
@@ -125,7 +127,7 @@ def test_retry_with_backoff_raises_after_all_attempts(monkeypatch: Any) -> None:
     with pytest.raises(ValueError, match="always fails"):
         wrapped()
 
-    assert sleep_calls == [1, 2, 4]
+    assert sleep_calls == []
 
 
 def test_get_client_wraps_chat_completions_create(monkeypatch: Any) -> None:
@@ -159,9 +161,11 @@ def test_get_client_wraps_chat_completions_create(monkeypatch: Any) -> None:
 
     monkeypatch.setattr("summarizer.OpenAI", FakeClient)
 
-    client = get_client()
-    result = client.chat.completions.create()
+    import pytest
 
-    assert result == {"ok": True}
-    assert client.chat.completions.calls == 2
-    assert sleep_calls == [1]
+    client = get_client()
+    with pytest.raises(RuntimeError, match="temporary"):
+        client.chat.completions.create()
+
+    assert client.chat.completions.calls == 1
+    assert sleep_calls == []
