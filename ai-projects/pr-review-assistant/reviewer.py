@@ -115,21 +115,22 @@ SEV_COLORS = {"blocking": "bold red", "major": "red", "minor": "yellow", "nit": 
 @retry_with_backoff
 def review_diff(diff: str, context: str = "") -> dict:
     ctx = f"\nContext: {context}" if context else ""
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are a senior software engineer doing a thorough PR review. "
-                "Check for correctness, security vulnerabilities, performance issues, "
-                "readability, test coverage, and design problems. "
-                "Write comments as you would in a real PR — specific, constructive, and actionable."
-            )},
-            {"role": "user", "content": f"Review this PR diff:{ctx}\n\n```diff\n{diff}\n```"}
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "pr_review"}},
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a senior software engineer doing a thorough PR review. "
+                    "Check for correctness, security vulnerabilities, performance issues, "
+                    "readability, test coverage, and design problems. "
+                    "Write comments as you would in a real PR — specific, constructive, and actionable."
+                )},
+                {"role": "user", "content": f"Review this PR diff:{ctx}\n\n```diff\n{diff}\n```"}
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "pr_review"}},
+            temperature=0.2,
+        )
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def display(review: dict):
