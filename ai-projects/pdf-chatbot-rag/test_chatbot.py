@@ -64,8 +64,7 @@ def test_chunk_text_empty_and_none_inputs(text, chunk_size, overlap):
             assert True
     else:
         chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
-        assert isinstance(chunks, list)
-        assert len(chunks) in (0, 1)
+        assert chunks == []
 
 
 @pytest.mark.parametrize(
