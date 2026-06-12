@@ -8,6 +8,7 @@ import os
 import sys
 import ast
 import json
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +22,7 @@ load_dotenv()
 
 console = Console()
 CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 
@@ -107,27 +109,38 @@ def extract_function_signatures(source_code: str) -> list[str]:
 
 
 def generate_tests(source_code: str, module_name: str, framework: str = "pytest") -> dict:
+    system_content = (
+        f"You are a senior Python engineer who writes thorough {framework} test suites. "
+        "For each function/method: write happy path tests, edge cases (empty input, None, "
+        "boundary values), and error condition tests. "
+        "Use pytest.mark.parametrize for multiple similar cases. "
+        "Mock external dependencies (I/O, network, database). "
+        "Write self-contained tests — each test should be independent. "
+        "Include docstrings explaining what each test validates."
+    )
+    user_content = (
+        f"Generate a complete {framework} test file for this module "
+        f"(module name: {module_name}):\n\n```python\n{source_code}\n```"
+    )
+
+    if VERBOSE:
+        console.print(f"[dim]Model:[/dim] {CHAT_MODEL}")
+        total_chars = len(system_content) + len(user_content)
+        approx_tokens = total_chars // 4
+        console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{approx_tokens} tokens)")
+        console.print("⏳ Calling OpenAI API...")
+
+    start_time = time.time()
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
         messages=[
             {
                 "role": "system",
-                "content": (
-                    f"You are a senior Python engineer who writes thorough {framework} test suites. "
-                    "For each function/method: write happy path tests, edge cases (empty input, None, "
-                    "boundary values), and error condition tests. "
-                    "Use pytest.mark.parametrize for multiple similar cases. "
-                    "Mock external dependencies (I/O, network, database). "
-                    "Write self-contained tests — each test should be independent. "
-                    "Include docstrings explaining what each test validates."
-                )
+                "content": system_content
             },
             {
                 "role": "user",
-                "content": (
-                    f"Generate a complete {framework} test file for this module "
-                    f"(module name: {module_name}):\n\n```python\n{source_code}\n```"
-                )
+                "content": user_content
             }
         ],
         tools=[{"type": "function", "function": TEST_SCHEMA}],
@@ -135,6 +148,9 @@ def generate_tests(source_code: str, module_name: str, framework: str = "pytest"
         temperature=0.2,
         max_tokens=4096,
     )
+    elapsed = time.time() - start_time
+    if VERBOSE:
+        console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
@@ -170,6 +186,9 @@ def display_summary(result: dict, output_file: str):
 
 
 def main():
+    global VERBOSE
+    VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
+
     validate_environment()
 
     source_path = sys.argv[1]
