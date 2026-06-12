@@ -133,37 +133,22 @@ def display(data: dict, plan: dict):
         dt.add_column("ID"); dt.add_column("Title", ratio=2); dt.add_column("Reason", ratio=2, style="dim")
         for item in plan["deferred_items"]:
             dt.add_row(item["id"], item["title"], item["reason"])
-        console.print(Panel(dt, title="[bold]Deferred[/bold]", border_style="yellow"))
+        console.print(Panel(dt, title="[bold]Deferred Items[/bold]", border_style="yellow"))
+
 
 def main():
-    export = None
-    input_path = None
-    args = sys.argv[1:]
+    export = "--export" in sys.argv
 
-    i = 0
-    while i < len(args):
-        a = args[i]
-        if a in ("--export", "-e") and i + 1 < len(args):
-            export = args[i + 1]
-            i += 2
-            continue
-        if not a.startswith("-") and input_path is None:
-            input_path = a
-        i += 1
-
-    data = SAMPLE_BACKLOG if input_path is None else json.load(open(input_path, "r", encoding="utf-8"))
+    data = SAMPLE_BACKLOG
     plan = plan_sprint(data)
     display(data, plan)
 
     if export:
-        payload = {
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-            "input": data,
-            "plan": plan,
-        }
-        with open(export, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-        console.print(f"[green]Exported plan to {export}[/green]")
+        filename = f"sprint_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(plan, f, indent=2)
+        console.print(f"[green]Exported plan to {filename}[/green]")
+
 
 if __name__ == "__main__":
     main()
