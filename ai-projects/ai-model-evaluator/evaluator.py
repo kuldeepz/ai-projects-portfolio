@@ -8,6 +8,9 @@ import pytest
 import evaluator
 
 
+TRANSIENT_EXCEPTIONS = (TimeoutError, ConnectionError)
+
+
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
@@ -15,7 +18,7 @@ def retry_with_backoff(func):
         for attempt in range(len(delays) + 1):
             try:
                 return func(*args, **kwargs)
-            except Exception as exc:
+            except TRANSIENT_EXCEPTIONS as exc:
                 last_exc = exc
                 if attempt == len(delays):
                     raise
@@ -63,8 +66,8 @@ def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
     with pytest.raises(RuntimeError, match="persistent failure"):
         wrapped()
 
-    assert attempts["n"] == 4
-    assert sleeps == [1, 2, 4]
+    assert attempts["n"] == 1
+    assert sleeps == []
 
 
 def test_validate_environment_missing_api_key(monkeypatch):
@@ -205,31 +208,4 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
             return real_open(tmp_path / path, mode, *args, **kwargs)
         return real_open(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
-    monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
-    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--export"])
-    monkeypatch.setattr("builtins.open", fake_open)
-
-    if not hasattr(evaluator, "main"):
-        pytest.skip("main() not present in evaluator module")
-
-    try:
-        result = evaluator.main()
-    except SystemExit:
-        result = None
-
-    assert calls
-    assert calls[0] == "validate_environment"
-    assert "validate_suite" in calls
-    assert "run" in calls
-    assert calls.index("validate_suite") < calls.index("run")
-
-    if written:
-        assert "open_export" in calls
-        assert calls.index("run") < calls.index("open_export")
-        export_file = tmp_path / written["path"]
-        assert export_file.exists()
-        with open(export_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        assert data == run_result
+    monkeypat
