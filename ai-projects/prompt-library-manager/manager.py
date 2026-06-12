@@ -27,12 +27,15 @@ def get_client():
     return _client
 
 def validate_environment():
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.strip():
-        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please set it in your environment or .env file.")
-        sys.exit(1)
-
     cmd = sys.argv[1] if len(sys.argv) >= 2 else None
+
+    api_required = {"test", "compare"}
+    if cmd in api_required:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or not api_key.strip():
+            console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please set it in your environment or .env file.")
+            sys.exit(1)
+
     file_args = []
     if cmd == "add" and len(sys.argv) >= 4:
         file_args.append(sys.argv[3])
