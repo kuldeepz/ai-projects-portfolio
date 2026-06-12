@@ -141,90 +141,84 @@ def main():
                         border_style="cyan"))
 
 
-def _run_tests_for_status_behavior():
-    class DummyStatus:
-        def __init__(self, calls, message):
-            self.calls = calls
-            self.message = message
+def _run_tests():
+    from types import SimpleNamespace
+    from unittest.mock import patch, mock_open
 
+    def fake_response():
+        payload = json.dumps({
+            "title": "Use pgvector",
+            "status": "accepted",
+            "context": "ctx",
+            "decision": "dec",
+            "rationale": "why",
+            "alternatives_considered": [],
+            "consequences": {"positive": [], "negative": [], "risks": []},
+            "full_markdown": "# ADR"
+        })
+        return SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(
+                    tool_calls=[SimpleNamespace(function=SimpleNamespace(arguments=payload))]
+                )
+            )]
+        )
+
+    class _Status:
         def __enter__(self):
-            self.calls.append(("enter", self.message))
             return self
-
         def __exit__(self, exc_type, exc, tb):
-            self.calls.append(("exit", self.message))
             return False
 
-    class DummyConsole:
-        def __init__(self):
-            self.calls = []
+    global VERBOSE
 
-        def status(self, message):
-            self.calls.append(("status", message))
-            return DummyStatus(self.calls, message)
+    # (1) -v and --verbose both set verbosity and (2) positional args still parse after removal
+    for flag in ("-v", "--verbose"):
+        VERBOSE = False
+        calls = []
+        with patch.object(console, "status", side_effect=lambda *a, **k: _Status()), \
+             patch.object(console, "print"), \
+             patch("builtins.open", mock_open(read_data="discussion from file")), \
+             patch(__name__ + ".create_adr", side_effect=lambda d, n: calls.append((d, n)) or {
+                 "title": "T", "full_markdown": "# M"
+             }):
+            sys.argv = ["adr_creator.py", flag, "notes.txt", "123"]
+            main()
+        assert VERBOSE is True
+        assert calls == [("discussion from file", "123")]
 
-        def print(self, *args, **kwargs):
-            return None
+    # (3) non-verbose flow unchanged
+    VERBOSE = False
+    prints = []
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: fake_response()
+            )
+        )
+    )
+    with patch.object(console, "status", side_effect=lambda *a, **k: _Status()), \
+         patch.object(console, "print", side_effect=lambda *a, **k: prints.append(a)):
+        with patch(__name__ + ".get_client", return_value=fake_client):
+            create_adr("x", "001")
+    assert not any("Model:" in " ".join(map(str, p)) for p in prints)
 
-    # test create_adr status usage
-    original_console = globals()["console"]
-    original_get_client = globals()["get_client"]
-
-    dummy_console = DummyConsole()
-
-    class DummyResponse:
-        class Choice:
-            class Message:
-                class ToolCall:
-                    class Function:
-                        arguments = '{"title":"T","status":"accepted","context":"c","decision":"d","rationale":"r","alternatives_considered":[],"consequences":{"positive":[],"negative":[],"risks":[]},"full_markdown":"# ADR"}'
-                    function = Function()
-                tool_calls = [ToolCall()]
-            message = Message()
-        choices = [Choice()]
-
-    class DummyClient:
-        class Chat:
-            class Completions:
-                @staticmethod
-                def create(**kwargs):
-                    return DummyResponse()
-            completions = Completions()
-        chat = Chat()
-
-    try:
-        globals()["console"] = dummy_console
-        globals()["get_client"] = lambda: DummyClient()
-        create_adr("discussion", "001")
-        assert ("status", "[bold green]Processing...[/bold green]") in dummy_console.calls
-    finally:
-        globals()["console"] = original_console
-        globals()["get_client"] = original_get_client
-
-    # test main file-input status usage
-    original_argv = sys.argv[:]
-    original_create_adr = globals()["create_adr"]
-    tmp_path = Path(".tmp_test_discussion.txt")
-    tmp_path.write_text("hello")
-    dummy_console = DummyConsole()
-
-    try:
-        globals()["console"] = dummy_console
-        globals()["create_adr"] = lambda discussion, adr_num: {"title": "T", "full_markdown": "# ADR"}
-        sys.argv = ["adr_creator.py", str(tmp_path)]
-        main()
-        assert ("status", "[bold green]Processing...[/bold green]") in dummy_console.calls
-        assert ("status", "[bold green]Generating ADR...[/bold green]") in dummy_console.calls
-    finally:
-        globals()["console"] = original_console
-        globals()["create_adr"] = original_create_adr
-        sys.argv = original_argv
-        if tmp_path.exists():
-            tmp_path.unlink()
+    # (4) verbose flow prints diagnostics and does not crash
+    VERBOSE = True
+    prints = []
+    with patch.object(console, "status", side_effect=lambda *a, **k: _Status()), \
+         patch.object(console, "print", side_effect=lambda *a, **k: prints.append(a)):
+        with patch(__name__ + ".get_client", return_value=fake_client):
+            create_adr("x", "001")
+    joined = "\n".join(" ".join(map(str, p)) for p in prints)
+    assert "Model:" in joined
+    assert "Input chars:" in joined
+    assert "Input tokens (est):" in joined
+    assert "Calling OpenAI API" in joined
 
 
 if __name__ == "__main__":
-    if os.getenv("ADR_CREATOR_RUN_STATUS_TESTS") == "1":
-        _run_tests_for_status_behavior()
+    if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
+        _run_tests()
     else:
         main()
