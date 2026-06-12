@@ -1,5 +1,6 @@
 """Sanity tests for team-skill-gap-analyzer — no API key required."""
 import sys, os
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from analyzer import SCHEMA, SAMPLE_DATA
 
@@ -45,6 +46,25 @@ def test_member_fit_is_array():
     props = SCHEMA["parameters"]["properties"]
     assert props["member_fit"]["type"] == "array"
     print("  [PASS] Member fit — typed as array")
+
+@pytest.mark.parametrize("candidate", ["", " ", "\t"]) 
+def test_required_fields_do_not_include_empty_strings(candidate):
+    """Verify required schema fields are never empty-string placeholders."""
+    required = SCHEMA["parameters"]["required"]
+    assert candidate not in required
+
+@pytest.mark.parametrize("value", [None, "", {}])
+def test_sample_project_container_is_not_none_or_empty(value):
+    """Ensure project section exists and is not None/empty-like invalid input."""
+    assert "project" in SAMPLE_DATA
+    assert SAMPLE_DATA["project"] != value
+
+@pytest.mark.parametrize("idx", [0, -1, 4])
+def test_team_member_boundary_indexes_have_required_keys(idx):
+    """Validate first/last team members (boundary indexes) include core keys."""
+    member = SAMPLE_DATA["team"][idx]
+    for f in ["name", "role", "skills"]:
+        assert f in member
 
 if __name__ == "__main__":
     print("\n=== team-skill-gap-analyzer: Sanity Tests ===\n")
