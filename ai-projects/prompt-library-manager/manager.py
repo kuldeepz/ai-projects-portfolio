@@ -18,6 +18,7 @@ load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 LIBRARY_FILE = "prompt_library.json"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -63,25 +64,22 @@ def validate_environment():
             sys.exit(1)
 
 def load_library() -> dict:
-    with console.status("[bold green]Processing..."):
-        if Path(LIBRARY_FILE).exists():
-            with open(LIBRARY_FILE) as f:
-                return json.load(f)
+    if Path(LIBRARY_FILE).exists():
+        with open(LIBRARY_FILE) as f:
+            return json.load(f)
     return {"prompts": {}}
 
 def save_library(lib: dict):
-    with console.status("[bold green]Processing..."):
-        with open(LIBRARY_FILE, "w") as f:
-            json.dump(lib, f, indent=2)
+    with open(LIBRARY_FILE, "w") as f:
+        json.dump(lib, f, indent=2)
 
 def export_results(results: dict):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"output_{timestamp}.json"
     payload = dict(results)
     payload["generated_at"] = datetime.now().isoformat()
-    with console.status("[bold green]Processing..."):
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
     console.print(f"[green]Exported results[/green] to [bold]{filename}[/bold]")
 
 def cmd_add(name: str, prompt_text: str, description: str = "", tags: list = None):
@@ -146,12 +144,24 @@ def cmd_test(name: str, test_input: str):
         console.print("[red]Current version not found.[/red]"); return None
 
     prompt = version["prompt"]
+    input_content = f"{prompt}\n\nInput: {test_input}"
+    if VERBOSE:
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
+        console.print("⏳ Calling OpenAI API...")
+    started = datetime.now()
     with console.status(f"[bold green]Testing prompt '{name}'...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
-            messages=[{"role": "user", "content": f"{prompt}\n\nInput: {test_input}"}],
+            messages=[{"role": "user", "content": input_content}],
             temperature=0.3,
         )
+    if VERBOSE:
+        elapsed = (datetime.now() - started).total_seconds()
+        usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+        console.print(f"[dim]Input tokens:[/dim] {prompt_tokens}")
+        console.print(f"✅ Done in {elapsed:.1f}s")
     print_usage(response)
     output = response.choices[0].message.content
     console.print(Panel(output, title=f"[bold green]Output ({name} v{current_hash})[/bold green]", border_style="green"))
@@ -181,18 +191,29 @@ def cmd_compare(name: str, input_text: str):
     table.add_column("Output", ratio=3)
 
     comparison_results = []
-    with console.status("[bold green]Processing..."):
-        for v in versions:
-            with console.status(f"[bold green]Comparing v{v['hash']}...[/bold green]"):
-                response = get_client().chat.completions.create(
-                    model=MODEL,
-                    messages=[{"role": "user", "content": f"{v['prompt']}\n\nInput: {input_text}"}],
-                    temperature=0.3,
-                )
-            print_usage(response)
-            output = response.choices[0].message.content
-            table.add_row(v["hash"], output[:500])
-            comparison_results.append({"version": v["hash"], "output": output})
+    for v in versions:
+        input_content = f"{v['prompt']}\n\nInput: {input_text}"
+        if VERBOSE:
+            console.print(f"[dim]Model:[/dim] {MODEL}")
+            console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
+            console.print("⏳ Calling OpenAI API...")
+        started = datetime.now()
+        with console.status(f"[bold green]Comparing v{v['hash']}...[/bold green]"):
+            response = get_client().chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": input_content}],
+                temperature=0.3,
+            )
+        if VERBOSE:
+            elapsed = (datetime.now() - started).total_seconds()
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+            console.print(f"[dim]Input tokens:[/dim] {prompt_tokens}")
+            console.print(f"✅ Done in {elapsed:.1f}s")
+        print_usage(response)
+        output = response.choices[0].message.content
+        table.add_row(v["hash"], output[:500])
+        comparison_results.append({"version": v["hash"], "output": output})
 
     console.print(Panel(table, title=f"[bold]Comparison for {name}[/bold]", border_style="magenta"))
     return {
@@ -204,6 +225,7 @@ def cmd_compare(name: str, input_text: str):
 
 
 def main():
+    global VERBOSE
     validate_environment()
     export = False
     if "--export" in sys.argv:
@@ -212,6 +234,12 @@ def main():
     if "-e" in sys.argv:
         export = True
         sys.argv.remove("-e")
+    if "--verbose" in sys.argv:
+        VERBOSE = True
+        sys.argv.remove("--verbose")
+    if "-v" in sys.argv:
+        VERBOSE = True
+        sys.argv.remove("-v")
 
     if len(sys.argv) < 2:
         console.print("Usage: python manager.py [add|list|show|test|compare] ...")
@@ -222,8 +250,7 @@ def main():
         name = sys.argv[2]
         arg = sys.argv[3]
         if Path(arg).exists() and Path(arg).is_file():
-            with console.status("[bold green]Processing..."):
-                prompt_text = Path(arg).read_text(encoding="utf-8")
+            prompt_text = Path(arg).read_text(encoding="utf-8")
         else:
             prompt_text = arg
         description = sys.argv[4] if len(sys.argv) >= 5 else ""
