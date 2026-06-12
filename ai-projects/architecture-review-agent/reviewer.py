@@ -5,6 +5,7 @@ single points of failure, scalability concerns, and security gaps.
 """
 
 import os, sys, json
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -22,6 +23,21 @@ def get_client():
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for i in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                if i < len(delays):
+                    time.sleep(delays[i])
+                else:
+                    raise last_exc
+    return wrapper
 
 SCHEMA = {
     "name": "architecture_review",
@@ -87,6 +103,7 @@ MySQL database hosted on the same server.
 
 SEV_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim"}
 
+@retry_with_backoff
 def review_architecture(design: str) -> dict:
     response = get_client().chat.completions.create(
         model=MODEL,
