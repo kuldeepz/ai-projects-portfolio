@@ -230,12 +230,25 @@ def save_notes(notes: dict, output_path: str):
 
 def main():
     if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python summarizer.py <transcript.txt>")
-        console.print("[dim]Example: python summarizer.py sprint_meeting.txt[/dim]")
-        console.print("\n[dim]Tip: You can also pipe text: cat transcript.txt | python summarizer.py -[/dim]")
+        console.print("[yellow]Usage:[/yellow] python summarizer.py <transcript.txt> [--export|-e]")
+        console.print("[dim]Example: python summarizer.py sprint_meeting.txt --export[/dim]")
+        console.print("\n[dim]Tip: You can also pipe text: cat transcript.txt | python summarizer.py - --export[/dim]")
         sys.exit(1)
 
-    file_arg = sys.argv[1]
+    args = sys.argv[1:]
+    export_json = False
+    if "--export" in args:
+        export_json = True
+        args.remove("--export")
+    if "-e" in args:
+        export_json = True
+        args.remove("-e")
+
+    if len(args) < 1:
+        console.print("[yellow]Usage:[/yellow] python summarizer.py <transcript.txt> [--export|-e]")
+        sys.exit(1)
+
+    file_arg = args[0]
 
     if file_arg == "-":
         transcript = sys.stdin.read()
@@ -266,7 +279,17 @@ def main():
 
     output_file = f"notes_{stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     save_notes(notes, output_file)
-    console.print(f"[green]Notes saved to:[/green] {output_file}\n")
+    console.print(f"[green]Notes saved to:[/green] {output_file}")
+
+    if export_json:
+        export_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        export_file = f"output_{export_timestamp}.json"
+        export_payload = {**notes, "generated_at": datetime.now().isoformat()}
+        with open(export_file, "w", encoding="utf-8") as f:
+            json.dump(export_payload, f, indent=2, ensure_ascii=False)
+        console.print(f"[green]JSON export saved to:[/green] {export_file}")
+
+    console.print()
 
 
 if __name__ == "__main__":
