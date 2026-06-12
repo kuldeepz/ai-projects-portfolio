@@ -142,19 +142,20 @@ ModuleNotFoundError: No module named 'stripe'
 """
 
 def analyze_log(log: str) -> Diagnosis:
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are a DevOps expert and CI/CD specialist. Analyze pipeline logs to identify "
-                "root causes of failures. Provide specific, actionable fix steps with exact commands where possible."
-            )},
-            {"role": "user", "content": f"Analyze this pipeline failure log:\n\n{log}"}
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "pipeline_diagnosis"}},
-        temperature=0.1,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a DevOps expert and CI/CD specialist. Analyze pipeline logs to identify "
+                    "root causes of failures. Provide specific, actionable fix steps with exact commands where possible."
+                )},
+                {"role": "user", "content": f"Analyze this pipeline failure log:\n\n{log}"}
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "pipeline_diagnosis"}},
+            temperature=0.1,
+        )
     print_usage(cast(ResponseLike, response))
     return cast(Diagnosis, json.loads(response.choices[0].message.tool_calls[0].function.arguments))
 
