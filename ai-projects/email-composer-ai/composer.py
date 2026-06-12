@@ -69,6 +69,17 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
+def print_usage(response: Any) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+
 def compose_email(
     bullet_points: str,
     tone: str,
@@ -106,6 +117,7 @@ def compose_email(
         tool_choice={"type": "function", "function": {"name": "email_output"}},
         temperature=0.7,
     )
+    print_usage(response)
 
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
