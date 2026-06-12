@@ -19,6 +19,7 @@ from unittest.mock import Mock, patch
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -118,6 +119,12 @@ SEV_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": 
 
 @retry_with_backoff
 def review_architecture(design: str) -> dict:
+    if VERBOSE:
+        print(f"🤖 Model: {MODEL}")
+        user_input = f"Review this system architecture:\n\n{design}"
+        print(f"📝 Input size: {len(user_input)} chars")
+        print("⏳ Calling OpenAI API...")
+        start = time.time()
     response = get_client().chat.completions.create(
         model=MODEL,
         messages=[
@@ -133,6 +140,9 @@ def review_architecture(design: str) -> dict:
         tool_choice={"type": "function", "function": {"name": "architecture_review"}},
         temperature=0.2,
     )
+    if VERBOSE:
+        elapsed = time.time() - start
+        print(f"✅ Done in {elapsed:.1f}s")
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
@@ -141,6 +151,7 @@ def display(review: dict):
     pass
 
 def main():
+    global VERBOSE
     args = sys.argv[1:]
     export = False
     cleaned_args = []
@@ -149,6 +160,10 @@ def main():
         arg = args[i]
         if arg in ("--export", "-e"):
             export = True
+            i += 1
+            continue
+        if arg in ("--verbose", "-v"):
+            VERBOSE = True
             i += 1
             continue
         cleaned_args.append(arg)
