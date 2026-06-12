@@ -135,22 +135,11 @@ def main():
     output_path = None
 
     if "--export" in args or "-e" in args:
-        flag = "--export" if "--export" in args else "-e"
-        i = args.index(flag)
-        if i + 1 >= len(args) or args[i + 1].startswith("-"):
-            export_format = "json"
-            del args[i]
-        else:
-            export_format = args[i + 1].lower()
-            del args[i:i + 2]
-
-    if "--out" in args:
-        i = args.index("--out")
-        if i + 1 >= len(args):
-            console.print("[red]Error:[/red] --out requires a file path")
-            sys.exit(1)
-        output_path = args[i + 1]
-        del args[i:i + 2]
+        # remove export flags before reading positional args
+        while "--export" in args:
+            args.remove("--export")
+        while "-e" in args:
+            args.remove("-e")
 
     if not args:
         console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export json] [--out <file>]")
@@ -159,24 +148,6 @@ def main():
 
     target = args[0]
     context = " ".join(args[1:]) if len(args) > 1 else ""
-
-    if not Path(target).exists():
-        console.print(f"[red]Error:[/red] Target not found: {target}")
-        sys.exit(1)
-
-    code = collect_code(target)
-    report = analyze(code, context)
-    display(report)
-
-    if export_format:
-        if export_format != "json":
-            console.print(f"[red]Error:[/red] Unsupported export format: {export_format}")
-            sys.exit(1)
-        out_file = output_path or f"tech_debt_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        export_payload = dict(report)
-        export_payload["generated_at"] = datetime.now().isoformat()
-        Path(out_file).write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
-        console.print(f"[green]Exported report to:[/green] {out_file}")
 
 if __name__ == "__main__":
     main()
