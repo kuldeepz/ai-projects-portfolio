@@ -70,7 +70,8 @@ def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, j
                         raise
                     delay = min(max_delay, base_delay * (2 ** attempt))
                     delay *= random.uniform(1 - jitter, 1 + jitter)
-                    time.sleep(delay)
+                    with console.status("[bold green]Processing..."):
+                        time.sleep(delay)
         return wrapper
 
     return deco(func) if func else deco
@@ -139,23 +140,24 @@ def analyze_sentiment(text: str) -> dict:
         console.print(f"[dim]Input size: {len(text)} chars, ~{max(1, len(text) // 4)} tokens[/dim]")
         console.print("⏳ Calling OpenAI API...")
         started = time.time()
-    response = get_client().chat.completions.create(
-        model=CHAT_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert sentiment analyst with deep understanding of human emotion "
-                    "in written text. Analyze not just polarity but nuanced emotions, tone, and "
-                    "aspect-level sentiment. Be precise and calibrated in your scoring."
-                )
-            },
-            {"role": "user", "content": f"Analyze the sentiment of this text:\n\n{text}"}
-        ],
-        tools=[{"type": "function", "function": SENTIMENT_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "sentiment_result"}},
-        temperature=0.1,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert sentiment analyst with deep understanding of human emotion "
+                        "in written text. Analyze not just polarity but nuanced emotions, tone, and "
+                        "aspect-level sentiment. Be precise and calibrated in your scoring."
+                    )
+                },
+                {"role": "user", "content": f"Analyze the sentiment of this text:\n\n{text}"}
+            ],
+            tools=[{"type": "function", "function": SENTIMENT_SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "sentiment_result"}},
+            temperature=0.1,
+        )
     if VERBOSE:
         console.print(f"✅ Done in {time.time() - started:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
