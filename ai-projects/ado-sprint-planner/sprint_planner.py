@@ -5,6 +5,7 @@ the optimal sprint composition with story point distribution.
 """
 
 import os, sys, json, time
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -140,16 +141,33 @@ def display(data: dict, plan: dict):
     console.print()
 
 def main():
-    if len(sys.argv) < 2:
+    export = False
+    args = sys.argv[1:]
+    if "--export" in args:
+        export = True
+        args.remove("--export")
+    if "-e" in args:
+        export = True
+        args.remove("-e")
+
+    if len(args) < 1:
         console.print("[dim]No file provided — running with sample backlog...[/dim]\n")
         data = SAMPLE_BACKLOG
     else:
-        with open(sys.argv[1]) as f:
+        with open(args[0]) as f:
             data = json.load(f)
 
     with console.status("[bold green]Planning sprint...[/bold green]"):
         plan = plan_sprint(data)
     display(data, plan)
+
+    if export:
+        generated_at = datetime.utcnow().isoformat() + "Z"
+        output = dict(plan)
+        output["generated_at"] = generated_at
+        filename = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filename, "w") as f:
+            json.dump(output, f, indent=2)
 
 if __name__ == "__main__":
     main()
