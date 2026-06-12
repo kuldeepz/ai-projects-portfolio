@@ -124,7 +124,46 @@ def display(report: dict):
         ))
     console.print()
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
+        sys.exit(1)
+
+    if len(sys.argv) < 2:
+        console.print("[red]Error:[/red] Missing required file or directory path argument.")
+        sys.exit(1)
+
+    path_args = []
+    args = sys.argv[1:]
+    skip_next = False
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("--out",):
+            if i + 1 < len(args):
+                path_args.append(args[i + 1])
+                skip_next = True
+            continue
+        if arg.startswith("-"):
+            continue
+        if i == 0:
+            path_args.append(arg)
+
+    for path_str in path_args:
+        p = Path(path_str)
+        if not p.exists():
+            console.print(f"[red]Error:[/red] Path does not exist: {path_str}")
+            sys.exit(1)
+        if not os.access(p, os.R_OK):
+            console.print(f"[red]Error:[/red] Path is not readable: {path_str}")
+            sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
 def main():
+    validate_environment()
     if len(sys.argv) < 2:
         console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export json] [--out <file>]")
         console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export json --out report.json[/dim]")
