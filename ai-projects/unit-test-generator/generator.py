@@ -167,22 +167,4 @@ def generate_tests(source_code: str, module_name: str, framework: str = "pytest"
         max_tokens=4096,
     )
     print_usage(response)
-    elapsed = time.time() - start_time
-    if VERBOSE:
-        console.print(f"✅ Done in {elapsed:.1f}s")
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
-
-
-def display_summary(result: dict, output_file: str):
-    console.print()
-
-    # Stats table
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column(style="dim")
-    table.add_column(style="bold white")
-    table.add_row("Tests generated", str(result["test_count"]))
-    table.add_row("Functions covered", str(len(result["functions_covered"])))
-    table.add_row("Output file", output_file)
-    console.print(Panel(table, title="[bold cyan]Test Generation Summary[/bold cyan]", border_style="cyan"))
-
-    # Functions c
+    elapsed = time.time() - sta
