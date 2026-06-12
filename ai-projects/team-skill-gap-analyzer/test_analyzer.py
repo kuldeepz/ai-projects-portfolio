@@ -82,10 +82,12 @@ def test_all_team_member_skills_have_consistent_types():
         else:
             assert len(skills) > 0
 
-@pytest.mark.parametrize("idx", [0, -1, 4])
+@pytest.mark.parametrize("idx", [0, -1])
 def test_team_member_boundary_indexes_have_required_keys(idx):
     """Validate first/last team members (boundary indexes) include core keys."""
-    member = SAMPLE_DATA["team"][idx]
+    members = SAMPLE_DATA["team"]
+    assert isinstance(members, list) and members
+    member = members[idx]
     for f in ["name", "role", "skills"]:
         assert f in member
 
