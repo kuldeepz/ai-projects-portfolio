@@ -11,6 +11,7 @@ import ast
 import json
 import time
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -21,15 +22,15 @@ from rich.table import Table
 
 load_dotenv()
 
-console = Console()
-CHAT_MODEL = "gpt-4o-mini"
-VERBOSE = False
+console: Console = Console()
+CHAT_MODEL: str = "gpt-4o-mini"
+VERBOSE: bool = False
 
-PRICING_PER_1K = {
+PRICING_PER_1K: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"in": 0.000015, "out": 0.00006}
 }
 
-_client = None
+_client: OpenAI | None = None
 
 
 def get_client() -> OpenAI:
@@ -39,7 +40,7 @@ def get_client() -> OpenAI:
     return _client
 
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -59,7 +60,7 @@ def print_usage(response):
     )
 
 
-def parse_args(argv=None):
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate unit tests for a Python source file.")
     parser.add_argument("source_file", help="Path to the Python source file")
     parser.add_argument("--framework", choices=["pytest", "unittest"], default="pytest")
@@ -67,7 +68,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def validate_environment(source_path: str):
+def validate_environment(source_path: str) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
@@ -88,7 +89,7 @@ def validate_environment(source_path: str):
     console.print("[green]Setup OK ✓[/green]")
 
 
-TEST_SCHEMA = {
+TEST_SCHEMA: dict[str, Any] = {
     "name": "test_output",
     "description": "Generated pytest test suite",
     "parameters": {
@@ -137,7 +138,7 @@ def extract_function_signatures(source_code: str) -> list[str]:
     return signatures
 
 
-def generate_tests(source_code: str, module_name: str, framework: str = "pytest") -> dict:
+def generate_tests(source_code: str, module_name: str, framework: str = "pytest") -> dict[str, Any]:
     system_content = (
         f"You are a senior Python engineer who writes thorough {framework} test suites. "
         "For each function/method: write happy path tests, edge cases (empty input, None, "
