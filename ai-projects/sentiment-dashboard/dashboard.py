@@ -10,8 +10,10 @@ import json
 import csv
 import io
 import time
+import random
 from pathlib import Path
 from datetime import datetime
+from functools import wraps
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -36,20 +38,22 @@ def get_client() -> OpenAI:
     return _client
 
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exc = None
-        for attempt in range(len(delays) + 1):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                last_exc = e
-                if attempt == len(delays):
-                    raise
-                time.sleep(delays[attempt])
-        raise last_exc
-    return wrapper
+def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, jitter=0.2):
+    def deco(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            for attempt in range(retries + 1):
+                try:
+                    return f(*args, **kwargs)
+                except Exception:
+                    if attempt == retries:
+                        raise
+                    delay = min(max_delay, base_delay * (2 ** attempt))
+                    delay *= random.uniform(1 - jitter, 1 + jitter)
+                    time.sleep(delay)
+        return wrapper
+
+    return deco(func) if func else deco
 
 
 SENTIMENT_SCHEMA = {
