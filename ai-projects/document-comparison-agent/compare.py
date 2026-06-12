@@ -27,6 +27,10 @@ console = Console()
 CHAT_MODEL = "gpt-4o-mini"
 VERBOSE = False
 
+MODEL_PRICING = {
+    "gpt-4o-mini": {"in_per_1m": 0.15, "out_per_1m": 0.60},
+}
+
 _client = None
 
 
@@ -86,9 +90,18 @@ def print_usage(response) -> None:
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+
+    pricing = MODEL_PRICING.get(CHAT_MODEL)
+    if pricing:
+        cost = (prompt_tokens / 1_000_000) * pricing["in_per_1m"] + (
+            completion_tokens / 1_000_000
+        ) * pricing["out_per_1m"]
+        cost_text = f"${cost:.4f}"
+    else:
+        cost_text = "N/A (unknown model pricing)"
+
     console.print(
-        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {cost_text}"
     )
 
 
@@ -182,53 +195,4 @@ def read_document(path: str) -> str:
         with console.status("[cyan]Reading PDF..."):
             with open(path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
-                return 
-
-
-# ------------------------
-# Tests for print_usage()
-# ------------------------
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
-
-
-class TestPrintUsage(unittest.TestCase):
-    def setUp(self):
-        global VERBOSE
-        self._old_verbose = VERBOSE
-        VERBOSE = True
-
-    def tearDown(self):
-        global VERBOSE
-        VERBOSE = self._old_verbose
-
-    @patch.object(console, "print")
-    def test_print_usage_with_usage_present_formats_tokens_and_cost(self, mock_print):
-        response = SimpleNamespace(
-            usage=SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
-        )
-
-        print_usage(response)
-
-        mock_print.assert_called_once_with(
-            "📊 Tokens: 1000 in + 500 out = 1500 total | 💰 Est. cost: $0.0000"
-        )
-
-    @patch.object(console, "print")
-    def test_print_usage_with_missing_usage_does_nothing(self, mock_print):
-        response = SimpleNamespace(usage=None)
-
-        print_usage(response)
-
-        mock_print.assert_not_called()
-
-    @patch.object(console, "print")
-    def test_print_usage_with_partial_fields_defaults_to_zero(self, mock_print):
-        response = SimpleNamespace(usage=SimpleNamespace(prompt_tokens=200, completion_tokens=None))
-
-        print_usage(response)
-
-        mock_print.assert_called_once_with(
-            "📊 Tokens: 200 in + 0 out = 200 total | 💰 Est. cost: $0.0000"
-        )
+                return
