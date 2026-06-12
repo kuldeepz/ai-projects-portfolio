@@ -10,6 +10,7 @@ import math
 import hashlib
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -67,7 +68,17 @@ def validate_environment():
         sys.exit(1)
 
     if len(sys.argv) >= 2:
-        for arg in sys.argv[1:]:
+        args = sys.argv[1:]
+        filtered_args = []
+        i = 0
+        while i < len(args):
+            if args[i] in ("--export", "-e"):
+                i += 1
+                continue
+            filtered_args.append(args[i])
+            i += 1
+
+        for arg in filtered_args:
             path = Path(arg)
             if not path.exists():
                 print(Fore.RED + f"File not found: {arg}")
@@ -175,6 +186,23 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     if not text.strip():
         print(Fore.RED + "  No text could be extracted. Is the PDF readable?")
         return [], []
+
+
+def export_results(results: dict) -> Optional[str]:
+    args = sys.argv[1:]
+    if "--export" not in args and "-e" not in args:
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = Path(f"output_{timestamp}.json")
+
+    export_payload = dict(results)
+    export_payload["generated_at"] = datetime.now().isoformat()
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(export_payload, f, indent=2, ensure_ascii=False)
+
+    return str(output_path)
 
 
 # -----------------------------
