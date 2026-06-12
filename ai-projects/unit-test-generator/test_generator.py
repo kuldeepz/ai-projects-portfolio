@@ -84,12 +84,4 @@ def test_signature_extraction_edge_cases(source, expected_names):
 
 
 if __name__ == "__main__":
-    print("\n=== unit-test-generator: Sanity Tests ===\n")
-    try:
-        test_signature_extraction_functions()
-        test_signature_extraction_class()
-        test_signature_extraction_invalid()
-        test_schema_structure()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); sys.exit(1)
+    sys.exit(pytest.main([__file__]))
