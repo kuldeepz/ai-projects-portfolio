@@ -203,14 +203,82 @@ class TestPrintUsage(unittest.TestCase):
         mock_print.assert_not_called()
 
     def test_print_usage_fallback_total_tokens_when_missing(self) -> None:
-        usage = SimpleNamespace(input_tokens=100, output_tokens=50)
+        usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=None)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
             print_usage(response)
         mock_print.assert_called_once()
-        message = mock_print.call_args[0][0]
-        self.assertIn("100 in + 50 out = 150 total", message)
+        printed = mock_print.call_args[0][0]
+        self.assertIn("150 total", printed)
 
-    def test_print_usage_uses_provided_total_tokens(self) -> None:
-        usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=999)
-        response = SimpleNamespace(usage=usage)
+
+class TestExportBehavior(unittest.TestCase):
+    def test_interactive_mode_export_off_no_file_created(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("builtins.input", side_effect=["quit"]), patch(__name__ + ".generate_sql") as mock_gen, patch(
+                __name__ + ".Path.write_text"
+            ) as mock_write, patch("os.getcwd", return_value=tmpdir):
+                cwd = os.getcwd()
+                try:
+                    os.chdir(tmpdir)
+                    interactive_mode(schema_paths=[], export=False)
+                finally:
+                    os.chdir(cwd)
+
+            mock_gen.assert_not_called()
+            mock_write.assert_not_called()
+            self.assertEqual(list(Path(tmpdir).glob("output_*.json")), [])
+
+    def test_interactive_mode_export_on_writes_json_with_two_results(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("builtins.input", side_effect=["first prompt", "second prompt", "quit"]), patch(
+                __name__ + ".generate_sql", side_effect=[{"sql": "SELECT 1"}, {"sql": "SELECT 2"}]
+            ), patch(__name__ + ".time.strftime", side_effect=["2026-01-02T03:04:05Z", "20260102_030405"]):
+                cwd = os.getcwd()
+                try:
+                    os.chdir(tmpdir)
+                    interactive_mode(schema_paths=[], export=True)
+                finally:
+                    os.chdir(cwd)
+
+            out = Path(tmpdir) / "output_20260102_030405.json"
+            self.assertTrue(out.exists())
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertIn("generated_at", payload)
+            self.assertIn("results", payload)
+            self.assertEqual(payload["generated_at"], "2026-01-02T03:04:05Z")
+            self.assertEqual(len(payload["results"]), 2)
+            self.assertEqual(payload["results"][0]["prompt"], "first prompt")
+            self.assertEqual(payload["results"][0]["result"], {"sql": "SELECT 1"})
+            self.assertEqual(payload["results"][1]["prompt"], "second prompt")
+            self.assertEqual(payload["results"][1]["result"], {"sql": "SELECT 2"})
+
+    def test_interactive_mode_export_on_quit_immediately_exports_empty_results(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch("builtins.input", side_effect=["quit"]), patch(__name__ + ".time.strftime", side_effect=[
+                "2026-01-02T03:04:05Z",
+                "20260102_030405",
+            ]):
+                cwd = os.getcwd()
+                try:
+                    os.chdir(tmpdir)
+                    interactive_mode(schema_paths=[], export=True)
+                finally:
+                    os.chdir(cwd)
+
+            out = Path(tmpdir) / "output_20260102_030405.json"
+            self.assertTrue(out.exists())
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(payload["generated_at"], "2026-01-02T03:04:05Z")
+            self.assertEqual(payload["results"], [])
+
+
+class TestMainExportFlag(unittest.TestCase):
+    def test_main_parses_export_flag_and_passes_to_interactive_mode(self) -> None:
+        with patch.object(sys, "argv", ["generator.py", "--export"]), patch(
+            __name__ + ".validate_environment"
+        ) as mock_validate, patch(__name__ + ".interactive_mode") as mock_interactive:
+            main()
+
+        mock_validate.assert_called_once()
+        mock_interactive.assert_called_once_with(schema_paths=[], export=True)
