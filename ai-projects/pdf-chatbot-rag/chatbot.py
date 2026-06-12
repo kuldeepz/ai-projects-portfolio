@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import math
+import hashlib
 from pathlib import Path
 from typing import Any
 from datetime import datetime
@@ -15,9 +16,11 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import PyPDF2
 from colorama import init, Fore, Style
+from rich.console import Console
 
 load_dotenv()
 init(autoreset=True)
+console = Console()
 
 CHUNK_SIZE = 500       # words per chunk
 CHUNK_OVERLAP = 50     # word overlap between chunks
@@ -61,12 +64,13 @@ def validate_environment() -> None:
 
 def read_pdf(pdf_path: str) -> str:
     text = ""
-    with open(pdf_path, "rb") as file:
-        reader = PyPDF2.PdfReader(file)
-        for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted + "\n"
+    with console.status("[bold green]Processing..."):
+        with open(pdf_path, "rb") as file:
+            reader = PyPDF2.PdfReader(file)
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
     return text
 
 
@@ -86,7 +90,8 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
 
 def get_embedding(text: str) -> list[float]:
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.embeddings.create(model=EMBED_MODEL, input=text)
+    with console.status("[bold green]Processing..."):
+        response = client.embeddings.create(model=EMBED_MODEL, input=text)
     return response.data[0].embedding
 
 
@@ -101,11 +106,12 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 def retrieve_top_chunks(query_embedding: list[float], chunk_embeddings: list[list[float]], chunks: list[str], top_k: int = TOP_K) -> list[str]:
     scored = []
-    for i, emb in enumerate(chunk_embeddings):
-        score = cosine_similarity(query_embedding, emb)
-        scored.append((score, chunks[i]))
+    with console.status("[bold green]Processing..."):
+        for i, emb in enumerate(chunk_embeddings):
+            score = cosine_similarity(query_embedding, emb)
+            scored.append((score, chunks[i]))
 
-    scored.sort(reverse=True, key=lambda x: x[0])
+        scored.sort(reverse=True, key=lambda x: x[0])
     return [chunk for _, chunk in scored[:top_k]]
 
 
@@ -125,11 +131,12 @@ def answer_question(question: str, context_chunks: list[str], chat_history: list
     })
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.chat.completions.create(
-        model=CHAT_MODEL,
-        messages=messages,
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing..."):
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=messages,
+            temperature=0.2,
+        )
     return response.choices[0].message.content
 
 
@@ -142,7 +149,8 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     print(Fore.CYAN + f"Created {len(chunks)} chunks")
 
     print(Fore.CYAN + "Generating embeddings (this may take a moment)...")
-    embeddings = [get_embedding(chunk) for chunk in chunks]
+    with console.status("[bold green]Processing..."):
+        embeddings = [get_embedding(chunk) for chunk in chunks]
 
     return chunks, embeddings
 
@@ -152,8 +160,9 @@ def save_chat_history(chat_history: list[dict[str, Any]], output_path: str = "ch
         "timestamp": datetime.now().isoformat(),
         "history": chat_history,
     }
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with console.status("[bold green]Processing..."):
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def main() -> None:
