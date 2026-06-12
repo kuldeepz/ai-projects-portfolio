@@ -125,7 +125,7 @@ def display(report: dict):
         ))
     console.print()
 
-def validate_environment(argv=None):
+def validate_environment(argv):
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
@@ -134,23 +134,28 @@ def validate_environment(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("target")
     parser.add_argument("context", nargs="?")
-    parser.add_argument("--output", "-o", default=None)
-    args = parser.parse_args(argv)
-    return args.target, args.context, args.output
-
+    parser.add_argument("--out", default=f"tech_debt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    return parser.parse_args(argv)
 
 def main():
-    target, context, output_path = validate_environment(sys.argv[1:])
+    args = validate_environment(sys.argv[1:])
 
-    code = collect_code(target)
-    report = analyze(code, context or "")
+    target_path = Path(args.target)
+    if not target_path.exists():
+        console.print(f"[red]Error:[/red] Target '{args.target}' does not exist.")
+        sys.exit(1)
+
+    code = collect_code(args.target)
+    if not code.strip():
+        console.print("[red]Error:[/red] No analyzable Python code found in target.")
+        sys.exit(1)
+
+    report = analyze(code, args.context or "")
     display(report)
 
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2)
-        console.print(f"[green]Saved report to[/green] {output_path}")
-
+    out_path = Path(args.out)
+    out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    console.print(f"[green]Saved report to:[/green] {out_path}")
 
 if __name__ == "__main__":
     main()
