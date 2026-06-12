@@ -158,9 +158,60 @@ def cmd_test(name: str, test_input: str):
     current_hash = entry["current_version"]
     version = next((v for v in entry["versions"] if v["hash"] == current_hash), None)
     if not version:
-        console.print("[red]Current version not found.[/red]"); return None
+        console.print(f"[red]Current version not found for:[/red] {name}")
+        return None
 
-    prompt = version["prompt"]
-    input_content = f"{prompt}\n\nInput: {test_input}"
-    with console.status(f"[bold green]Testing prompt '{name}'...[/bold green]"):
-        response = call_openai(input_content, temperature=0)
+    content = f"{version['prompt']}\n\nInput: {test_input}"
+    response = call_openai(content, temperature=0.3)
+    output_text = response.choices[0].message.content
+
+    version["test_results"].append({
+        "input": test_input,
+        "output": output_text,
+        "tested_at": datetime.now().isoformat(),
+    })
+    save_library(lib)
+
+    console.print(Panel(output_text, title=f"[bold]Test Output[/bold] {name} v{current_hash}", border_style="green"))
+    return output_text
+
+def cmd_compare(name: str, input_text: str):
+    lib = load_library()
+    if name not in lib["prompts"]:
+        console.print(f"[red]Prompt not found:[/red] {name}")
+        return None
+
+    entry = lib["prompts"][name]
+    versions = entry.get("versions", [])
+    if not versions:
+        console.print(f"[yellow]No versions found for prompt:[/yellow] {name}")
+        return None
+
+    results = {
+        "prompt": name,
+        "input": input_text,
+        "versions": []
+    }
+
+    for v in versions:
+        content = f"{v['prompt']}\n\nInput: {input_text}"
+        if VERBOSE:
+            console.print(f"[dim]Comparing version {v['hash']}...[/dim]")
+        response = call_openai(content, temperature=0.3)
+        output_text = response.choices[0].message.content
+
+        results["versions"].append({
+            "hash": v["hash"],
+            "created_at": v.get("created_at"),
+            "output": output_text,
+        })
+
+    for r in results["versions"]:
+        console.print(Panel(
+            r["output"],
+            title=f"[bold]{name}[/bold] v{r['hash']}",
+            border_style="cyan"
+        ))
+
+    export_results(results)
+    return results
