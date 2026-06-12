@@ -3,17 +3,16 @@ import os
 import sys
 import time
 from pathlib import Path
-from contextlib import nullcontext
 
 from rich.console import Console
 
-console = Console()
-
-
-def get_client():
+try:
     from openai import OpenAI
+except ImportError:  # pragma: no cover
+    OpenAI = None
 
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+console = Console()
 
 
 def retry_with_backoff(func):
@@ -38,9 +37,38 @@ def _create_response(client, **kwargs):
     return client.responses.create(**kwargs)
 
 
-def generate_sql(prompt, schema_paths=None):
+def get_client():
+    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+
+def validate_environment(schema_paths=None, require_api_key=True):
+    if require_api_key and not os.environ.get("OPENAI_API_KEY"):
+        console.print("[red]OPENAI_API_KEY is not set[/red]")
+        raise SystemExit(1)
+
+    if schema_paths:
+        for path in schema_paths:
+            if not Path(path).exists():
+                console.print(f"[red]Schema file not found: {path}[/red]")
+                raise SystemExit(1)
+
+
+def load_schema(schema_paths):
+    with console.status("Loading schema..."):
+        parts = []
+        for path in schema_paths:
+            p = Path(path)
+            if not p.exists():
+                console.print(f"[red]Schema file not found: {path}[/red]")
+                raise SystemExit(1)
+            parts.append(p.read_text())
+        return "\n\n".join(parts)
+
+
+def generate_sql(prompt, schema_paths):
     client = get_client()
-    with console.status("Generating SQL...") if hasattr(console, "status") else nullcontext():
+
+    with console.status("Generating SQL..."):
         response = _create_response(
             client,
             model="gpt-4.1-mini",
@@ -49,13 +77,13 @@ def generate_sql(prompt, schema_paths=None):
                 {
                     "type": "function",
                     "name": "emit_sql",
+                    "description": "Emit generated SQL",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "sql": {"type": "string"},
                         },
                         "required": ["sql"],
-                        "additionalProperties": False,
                     },
                 }
             ],
@@ -64,24 +92,25 @@ def generate_sql(prompt, schema_paths=None):
     for item in getattr(response, "output", []):
         if getattr(item, "type", None) == "function_call" and getattr(item, "name", None) == "emit_sql":
             return json.loads(item.arguments)
+
     return {"sql": ""}
 
 
-def load_schema(schema_paths):
-    for p in schema_paths or []:
-        if not Path(p).exists():
-            raise SystemExit(1)
-    return "\n".join(Path(p).read_text() for p in (schema_paths or []))
-
-
-def validate_environment(schema_paths=None, require_api_key=True):
-    if require_api_key and not os.getenv("OPENAI_API_KEY"):
-        raise SystemExit(1)
-    load_schema(schema_paths or [])
-
-
 def interactive_mode(schema_paths=None):
-    return None
+    while True:
+        try:
+            prompt = input("sql> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            break
+
+        if not prompt:
+            continue
+        if prompt.lower() in {"exit", "quit"}:
+            break
+
+        result = generate_sql(prompt, schema_paths or [])
+        console.print(result.get("sql", ""))
 
 
 def main():
