@@ -36,20 +36,26 @@ def print_usage(response: Any) -> None:
         print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total")
 
 
-def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, retry_exceptions: tuple[type[Exception], ...] = (Exception,)):
+def retry_with_backoff(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    retry_exceptions: tuple[type[Exception], ...] = (Exception,),
+    operation_name: str = "operation",
+):
     def deco(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            with console.status("[bold green]Processing..."):
-                for attempt in range(max_retries + 1):
+            for attempt in range(max_retries + 1):
+                status_msg = f"[bold green]{operation_name} (attempt {attempt + 1}/{max_retries + 1})..."
+                with console.status(status_msg):
                     try:
                         return func(*args, **kwargs)
                     except retry_exceptions:
                         if attempt == max_retries:
                             raise
-                        delay = base_delay * (2 ** attempt)
-                        jitter = random.uniform(0, delay * 0.2)
-                        time.sleep(delay + jitter)
+                delay = base_delay * (2 ** attempt)
+                jitter = random.uniform(0, delay * 0.2)
+                time.sleep(delay + jitter)
         return wrapper
     return deco
 
@@ -66,10 +72,10 @@ def _extract_verbose_flag(argv: list[str]) -> tuple[list[str], bool]:
     return cleaned, verbose
 
 
-def review_code(api_call, payload: Any) -> Any:
+def review_code(api_call, payload: Any, status_msg: str = "Calling review API...") -> Any:
     if VERBOSE:
         print("[verbose] preparing API call")
-    with console.status("[bold green]Processing..."):
+    with console.status(f"[bold green]{status_msg}"):
         response = api_call(payload)
     if VERBOSE:
         print("[verbose] API call completed")
