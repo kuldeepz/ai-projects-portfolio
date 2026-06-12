@@ -6,8 +6,11 @@ from contextlib import redirect_stdout
 from functools import wraps
 from typing import Any
 
+from rich.console import Console
+
 CHAT_MODEL = "gpt-4o-mini"
 VERBOSE = False
+console = Console()
 
 MODEL_PRICING_PER_1K: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"input": 0.000015, "output": 0.000060},
@@ -37,15 +40,16 @@ def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, retry_exce
     def deco(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except retry_exceptions:
-                    if attempt == max_retries:
-                        raise
-                    delay = base_delay * (2 ** attempt)
-                    jitter = random.uniform(0, delay * 0.2)
-                    time.sleep(delay + jitter)
+            with console.status("[bold green]Processing..."):
+                for attempt in range(max_retries + 1):
+                    try:
+                        return func(*args, **kwargs)
+                    except retry_exceptions:
+                        if attempt == max_retries:
+                            raise
+                        delay = base_delay * (2 ** attempt)
+                        jitter = random.uniform(0, delay * 0.2)
+                        time.sleep(delay + jitter)
         return wrapper
     return deco
 
@@ -65,7 +69,8 @@ def _extract_verbose_flag(argv: list[str]) -> tuple[list[str], bool]:
 def review_code(api_call, payload: Any) -> Any:
     if VERBOSE:
         print("[verbose] preparing API call")
-    response = api_call(payload)
+    with console.status("[bold green]Processing..."):
+        response = api_call(payload)
     if VERBOSE:
         print("[verbose] API call completed")
     return response
