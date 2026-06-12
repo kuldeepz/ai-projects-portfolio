@@ -62,8 +62,9 @@ def retry_with_backoff(func):
                     raise
                 last_exception = e
                 if attempt < len(delays):
-                    with console.status("[bold green]Processing..."):
-                        time.sleep(delays[attempt])
+                    delay = delays[attempt]
+                    with console.status(f"[yellow]Retrying in {delay}s (attempt {attempt + 1})..."):
+                        time.sleep(delay)
                 else:
                     raise last_exception
     return wrapper
@@ -176,17 +177,10 @@ COMPARE_SCHEMA = {
 def read_document(path: str) -> str:
     ext = Path(path).suffix.lower()
     if ext == ".pdf":
-        with console.status("[bold green]Processing..."):
+        with console.status("[cyan]Reading PDF..."):
             with open(path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
                 return "\n".join(p.extract_text() or "" for p in reader.pages)
-    with console.status("[bold green]Processing..."):
+    with console.status("[cyan]Reading text document..."):
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
-
-
-def parse_response(response) -> dict:
-    message = response.choices[0].message
-
-    if getattr(message, "tool_calls", None):
-        tool_call = message.t
