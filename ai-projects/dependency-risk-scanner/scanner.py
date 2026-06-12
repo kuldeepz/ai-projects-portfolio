@@ -181,17 +181,16 @@ if __name__ == "__main__":
 
     args = [a for a in sys.argv[1:] if a not in ("--export", "-e") and not a.startswith("-")]
     if not args:
-        print("Usage: python scanner.py [--export|-e] <dependency-file>")
+        print("Usage: python scanner.py <dependency-file> [--export|-e]")
         sys.exit(1)
 
-    file_path = args[0]
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    input_path = args[0]
+    with open(input_path, "r", encoding="utf-8") as f:
+        dep_content = parse_requirements(f.read(), input_path)
 
-    dep_content = parse_requirements(content, file_path)
     report = scan(dep_content)
 
     if export_enabled:
-        path = "dependency-risk-report.json"
+        path = str(Path(input_path).with_suffix(".report.json"))
         export_report(report, path)
         print(f"Exported report to {path}")
