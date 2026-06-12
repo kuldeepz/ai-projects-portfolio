@@ -6,6 +6,7 @@ and provides a step-by-step remediation plan.
 
 import os, sys, json
 import time
+import argparse
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict, NotRequired, Literal, Protocol, cast
@@ -20,6 +21,12 @@ load_dotenv()
 console: Console = Console()
 MODEL: str = "gpt-4o-mini"
 VERBOSE: bool = False
+
+
+def parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", action="store_true", help="Show OpenAI call diagnostics")
+    return parser.parse_args()
 
 
 def retry_with_backoff(func):
@@ -175,99 +182,9 @@ Expected: 200 (user deleted successfully)
 Actual:   404 (user not found)
 
 ImportError while collecting tests/test_payments.py
-  tests/test_payments.py:3: in <module>
-    from src.payments import StripeClient
-ModuleNotFoundError: No module named 'stripe'
-
-===========================
-``` 
+  tests/test_payments.py:3: i
 """
 
-def main() -> None:
-    global VERBOSE
-    args = sys.argv[1:]
-    VERBOSE = "--verbose" in args or "-v" in args
-    export = "--export" in args or "-e" in args
-    clean_args = [a for a in args if a not in {"--verbose", "-v", "--export", "-e"}]
-
-    if "-h" in clean_args or "--help" in clean_args:
-        console.print("Usage: python analyzer.py [log_file] [--verbose|-v] [--export|-e]")
-        return
-
-    if clean_args:
-        log_path = Path(clean_args[0])
-        if not log_path.exists():
-            console.print(f"[red]File not found:[/red] {log_path}")
-            sys.exit(1)
-        log_text = log_path.read_text(encoding="utf-8", errors="replace")
-    else:
-        log_text = SAMPLE_LOG
-
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": "You are a CI/CD failure analyst. Return valid JSON only."},
-        {
-            "role": "user",
-            "content": (
-                "Analyze this Azure DevOps pipeline failure log and provide a structured diagnosis. "
-                "Focus on root cause, impacted files, exact remediation steps, and prevention tips.\n\n"
-                f"LOG:\n{log_text}"
-            ),
-        },
-    ]
-
-    response = create_chat_completion(
-        model=MODEL,
-        messages=messages,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": SCHEMA["name"],
-                "description": SCHEMA["description"],
-                "schema": SCHEMA["parameters"],
-                "strict": True,
-            },
-        },
-    )
-    print_usage(cast(ResponseLike, response))
-
-    raw = response.choices[0].message.content or "{}"
-    diagnosis: Diagnosis = cast(Diagnosis, json.loads(raw))
-
-    table = Table(title="Pipeline Failure Diagnosis")
-    table.add_column("Field", style="cyan", no_wrap=True)
-    table.add_column("Value", style="white")
-    table.add_row("Failure Stage", diagnosis["failure_stage"])
-    table.add_row("Root Cause", diagnosis["root_cause"])
-    table.add_row("Error Type", diagnosis["error_type"])
-    table.add_row("Severity", diagnosis["severity"])
-    if "affected_files" in diagnosis:
-        table.add_row("Affected Files", "\n".join(diagnosis["affected_files"]))
-    if "estimated_fix_time" in diagnosis:
-        table.add_row("Estimated Fix Time", diagnosis["estimated_fix_time"])
-    console.print(table)
-
-    fix_table = Table(title="Remediation Plan")
-    fix_table.add_column("Step", style="magenta", width=6)
-    fix_table.add_column("Action", style="white")
-    fix_table.add_column("Command", style="green")
-    for s in diagnosis["fix_steps"]:
-        fix_table.add_row(str(s["step"]), s["action"], s.get("command", ""))
-    console.print(fix_table)
-
-    tips = "\n".join([f"- {t}" for t in diagnosis["prevention_tips"]])
-    console.print(Panel(tips, title="Prevention Tips", border_style="blue"))
-
-    console.print(Panel(Syntax(json.dumps(diagnosis, indent=2), "json", theme="monokai", line_numbers=False), title="Raw JSON"))
-
-    if export:
-        generated_at = datetime.now().isoformat()
-        output = dict(diagnosis)
-        output["generated_at"] = generated_at
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"output_{timestamp}.json"
-        Path(filename).write_text(json.dumps(output, indent=2), encoding="utf-8")
-        console.print(f"[green]Exported results to[/green] {filename}")
-
-
 if __name__ == "__main__":
-    main()
+    args = parse_cli_args()
+    VERBOSE = args.verbose
