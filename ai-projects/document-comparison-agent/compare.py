@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, TypedDict
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -38,6 +38,27 @@ _client: OpenAI | None = None
 
 class StartupValidationError(Exception):
     pass
+
+
+class UsageLike(Protocol):
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+
+
+class ResponseWithUsage(Protocol):
+    usage: UsageLike | None
+
+
+JSONValue = str | int | float | bool | None | dict[str, "JSONValue"] | list["JSONValue"]
+
+
+class ComparisonResults(TypedDict, total=False):
+    similarities: list[str]
+    differences: list[str]
+    conflicts: list[str]
+    summary: str
+    generated_at: str
 
 
 def _is_retryable_openai_error(exc: Exception) -> bool:
@@ -83,7 +104,7 @@ def get_client() -> OpenAI:
     return _client
 
 
-def print_usage(response: Any) -> None:
+def print_usage(response: ResponseWithUsage) -> None:
     if not VERBOSE:
         return
     usage = getattr(response, "usage", None)
@@ -134,7 +155,7 @@ def validate_environment() -> None:
     console.print("Setup OK ✓")
 
 
-COMPARE_SCHEMA: dict[str, Any] = {
+COMPARE_SCHEMA: dict[str, JSONValue] = {
     "name": "comparison_report",
     "description": "Structured comparison between two documents",
     "parameters": {
@@ -180,32 +201,19 @@ COMPARE_SCHEMA: dict[str, Any] = {
             },
             "recommendation": {
                 "type": "string",
-                "description": "Suggested next steps or which document to prefer for a given purpose"
+                "description": "Recommended action based on comparison"
             }
         },
         "required": [
-            "doc1_summary", "doc2_summary", "overall_similarity",
-            "common_themes", "unique_to_doc1", "unique_to_doc2",
-            "conflicts", "recommendation"
+            "doc1_summary",
+            "doc2_summary",
+            "overall_similarity",
+            "common_themes",
+            "unique_to_doc1",
+            "unique_to_doc2",
+            "conflicts",
+            "tone_comparison",
+            "recommendation"
         ]
     }
 }
-
-
-def read_document(path: str) -> str:
-    ext = Path(path).suffix.lower()
-    if ext == ".pdf":
-        with console.status("[cyan]Reading PDF..."):
-            with open(path, "rb") as f:
-                reader = PyPDF2.PdfReader(f)
-                return
-
-
-def export_results(results: dict[str, Any]) -> None:
-    generated_at = datetime.now().isoformat()
-    payload = dict(results)
-    payload["generated_at"] = generated_at
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"output_{timestamp}.json"
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
