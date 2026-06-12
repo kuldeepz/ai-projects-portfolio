@@ -78,7 +78,9 @@ def test_save_notes_handles_empty_string_inputs(title, attendees, executive_summ
         with open(tmp) as f:
             content = f.read()
         assert isinstance(content, str)
-        assert len(content) >= 0
+        assert content.strip() != ""
+        assert "#" in content
+        assert "Sentiment" in content
     finally:
         os.unlink(tmp)
 
