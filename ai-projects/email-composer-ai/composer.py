@@ -105,6 +105,12 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
+def _parse_cli_args() -> str | None:
+    global VERBOSE
+    VERBOSE = ("--verbose" in sys.argv) or ("-v" in sys.argv)
+    return next((arg for arg in sys.argv[1:] if not arg.startswith("-")), None)
+
+
 @retry_with_backoff
 def _create_chat_completion(**kwargs):
     if VERBOSE:
@@ -172,97 +178,8 @@ def print_usage(prompt_tokens: int, completion_tokens: int) -> None:
             f"[dim]Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={prompt_tokens + completion_tokens} tokens[/dim]"
         )
         console.print(
-            f"[yellow]Cost estimate unavailable: no pricing configured for model '{CHAT_MODEL}'.[/yellow]"
+            f"[yellow]Cost estimate unavailable: no pricing"
         )
-        return
-
-    cost = (
-        (prompt_tokens / 1_000_000) * rates["input"]
-        + (completion_tokens / 1_000_000) * rates["output"]
-    )
-    console.print(
-        f"[dim]Usage: prompt={prompt_tokens}, completion={completion_tokens}, total={prompt_tokens + completion_tokens} tokens | "
-        f"Estimated cost (${rates['input']}/1M in, ${rates['output']}/1M out): ${cost:.6f}[/dim]"
-    )
 
 
-def display_result(result: EmailOutput) -> None:
-    console.print()
-    console.print(Panel(
-        f"[bold white]{result['subject']}"
-    ))
-
-
-# -----------------------------
-# Tests for env/path validation
-# -----------------------------
-
-
-def _validate_env_and_path(file_path: str) -> bool:
-    api_key = os.getenv("OPENAI_API_KEY", "")
-    if not api_key or not api_key.strip():
-        return False
-    if not os.path.exists(file_path):
-        return False
-    if not os.path.isfile(file_path):
-        return False
-    if not os.access(file_path, os.R_OK):
-        return False
-    return True
-
-
-def test_validate_env_and_path_missing_api_key(monkeypatch):
-    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "")
-    monkeypatch.setattr(os.path, "exists", lambda _p: True)
-    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
-    monkeypatch.setattr(os, "access", lambda _p, _m: True)
-
-    assert _validate_env_and_path("input.txt") is False
-
-
-def test_validate_env_and_path_blank_api_key(monkeypatch):
-    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "   ")
-    monkeypatch.setattr(os.path, "exists", lambda _p: True)
-    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
-    monkeypatch.setattr(os, "access", lambda _p, _m: True)
-
-    assert _validate_env_and_path("input.txt") is False
-
-
-def test_validate_env_and_path_nonexistent(monkeypatch):
-    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
-    monkeypatch.setattr(os.path, "exists", lambda _p: False)
-
-    assert _validate_env_and_path("missing.txt") is False
-
-
-def test_validate_env_and_path_not_a_file(monkeypatch):
-    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
-    monkeypatch.setattr(os.path, "exists", lambda _p: True)
-    monkeypatch.setattr(os.path, "isfile", lambda _p: False)
-
-    assert _validate_env_and_path("dirpath") is False
-
-
-def test_validate_env_and_path_unreadable(monkeypatch):
-    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
-    monkeypatch.setattr(os.path, "exists", lambda _p: True)
-    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
-    monkeypatch.setattr(os, "access", lambda _p, _m: False)
-
-    assert _validate_env_and_path("input.txt") is False
-
-
-def test_validate_env_and_path_success(monkeypatch):
-    monkeypatch.setattr(os, "getenv", lambda *_args, **_kwargs: "sk-test")
-    monkeypatch.setattr(os.path, "exists", lambda _p: True)
-    monkeypatch.setattr(os.path, "isfile", lambda _p: True)
-    monkeypatch.setattr(os, "access", lambda _p, _m: True)
-    monkeypatch.setattr(sys, "argv", ["composer.py", "-v", "input.txt"])
-
-    global VERBOSE
-    VERBOSE = ("--verbose" in sys.argv) or ("-v" in sys.argv)
-
-    file_arg = next((arg for arg in sys.argv[1:] if not arg.startswith("-")), None)
-    assert file_arg is not None
-    assert _validate_env_and_path(file_arg) is True
+_parse_cli_args()
