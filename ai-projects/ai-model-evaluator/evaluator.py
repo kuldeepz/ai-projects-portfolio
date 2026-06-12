@@ -8,8 +8,9 @@ import pytest
 import evaluator
 
 
-def retry_with_backoff(func, delays=(1, 2, 4), sleep_fn=time.sleep):
+def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
         last_exc = None
         for attempt in range(len(delays) + 1):
             try:
@@ -18,10 +19,65 @@ def retry_with_backoff(func, delays=(1, 2, 4), sleep_fn=time.sleep):
                 last_exc = exc
                 if attempt == len(delays):
                     raise
-                sleep_fn(delays[attempt])
+                time.sleep(delays[attempt])
         raise last_exc
 
     return wrapper
+
+
+def test_retry_succeeds_after_retries(monkeypatch):
+    attempts = {"n": 0}
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    def flaky():
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise TimeoutError("temporary")
+        return "ok"
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    wrapped = retry_with_backoff(flaky)
+
+    assert wrapped() == "ok"
+    assert attempts["n"] == 3
+    assert sleeps == [1, 2]
+
+
+def test_retry_raises_after_max_retries(monkeypatch):
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    def always_fail():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    wrapped = retry_with_backoff(always_fail)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        wrapped()
+
+    assert sleeps == [1, 2, 4]
+
+
+def test_retry_no_sleep_on_immediate_success(monkeypatch):
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    def succeed():
+        return 42
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    wrapped = retry_with_backoff(succeed)
+
+    assert wrapped() == 42
+    assert sleeps == []
 
 
 def test_validate_environment_missing_api_key(monkeypatch):
@@ -119,7 +175,7 @@ def test_main_validates_before_run_evaluation(monkeypatch):
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run, sleep_fn=lambda _: None))
+    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
 
     monkeypatch.setattr(sys, "argv", ["evaluator.py"])
 
@@ -164,7 +220,7 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run, sleep_fn=lambda _: None))
+    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
     monkeypatch.setattr(sys, "argv", ["evaluator.py", "--export"])
     monkeypatch.setattr("builtins.open", fake_open)
 
@@ -188,4 +244,5 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
         export_file = tmp_path / written["path"]
         assert export_file.exists()
         with open(export_file, "r", encoding="utf-8") as f:
-            data = json.lo
+            data = json.load(f)
+        assert data == run_result
