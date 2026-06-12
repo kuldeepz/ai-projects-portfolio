@@ -134,27 +134,30 @@ def main():
         args.remove("-e")
 
     if len(args) < 1:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py '<work item json>' [--export|-e]")
-        return
-
-    try:
-        item = json.loads(args[0])
-    except json.JSONDecodeError:
+        console.print("[yellow]Usage:[/yellow] python analyzer.py [--export|-e] '<work item json>' OR path/to/workitem.json")
+        console.print("[dim]No input provided; using sample work item.[/dim]")
         item = SAMPLE_WORK_ITEM
+    else:
+        raw = args[0]
+        if os.path.exists(raw):
+            with open(raw, "r", encoding="utf-8") as f:
+                item = json.load(f)
+        else:
+            item = json.loads(raw)
 
     analysis = analyze_workitem(item)
     display(item, analysis)
 
     if export:
-        out = {
+        payload = {
             "work_item": item,
             "analysis": analysis,
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
-        filename = f"analysis_{item.get('id', 'workitem')}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(out, f, indent=2)
-        console.print(f"[green]Exported analysis to {filename}[/green]")
+        out_file = f"workitem-analysis-{item.get('id', 'unknown')}.json"
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"[green]Exported analysis to {out_file}[/green]")
 
 if __name__ == "__main__":
     main()
