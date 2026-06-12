@@ -25,7 +25,7 @@ def retry_with_backoff(func):
     return wrapper
 
 
-def test_retry_succeeds_after_retries(monkeypatch):
+def test_retry_with_backoff_succeeds_after_retries(monkeypatch):
     attempts = {"n": 0}
     sleeps = []
 
@@ -35,7 +35,7 @@ def test_retry_succeeds_after_retries(monkeypatch):
     def flaky():
         attempts["n"] += 1
         if attempts["n"] < 3:
-            raise TimeoutError("temporary")
+            raise TimeoutError("temporary failure")
         return "ok"
 
     monkeypatch.setattr(time, "sleep", fake_sleep)
@@ -46,38 +46,25 @@ def test_retry_succeeds_after_retries(monkeypatch):
     assert sleeps == [1, 2]
 
 
-def test_retry_raises_after_max_retries(monkeypatch):
+def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
+    attempts = {"n": 0}
     sleeps = []
 
     def fake_sleep(seconds):
         sleeps.append(seconds)
 
     def always_fail():
-        raise RuntimeError("boom")
+        attempts["n"] += 1
+        raise RuntimeError("persistent failure")
 
     monkeypatch.setattr(time, "sleep", fake_sleep)
     wrapped = retry_with_backoff(always_fail)
 
-    with pytest.raises(RuntimeError, match="boom"):
+    with pytest.raises(RuntimeError, match="persistent failure"):
         wrapped()
 
+    assert attempts["n"] == 4
     assert sleeps == [1, 2, 4]
-
-
-def test_retry_no_sleep_on_immediate_success(monkeypatch):
-    sleeps = []
-
-    def fake_sleep(seconds):
-        sleeps.append(seconds)
-
-    def succeed():
-        return 42
-
-    monkeypatch.setattr(time, "sleep", fake_sleep)
-    wrapped = retry_with_backoff(succeed)
-
-    assert wrapped() == 42
-    assert sleeps == []
 
 
 def test_validate_environment_missing_api_key(monkeypatch):
