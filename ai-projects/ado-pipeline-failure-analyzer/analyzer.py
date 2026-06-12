@@ -5,6 +5,7 @@ and provides a step-by-step remediation plan.
 """
 
 import os, sys, json
+import time
 from pathlib import Path
 from typing import Any, TypedDict, NotRequired, Literal, Protocol, cast
 from dotenv import load_dotenv
@@ -17,6 +18,23 @@ from rich.syntax import Syntax
 load_dotenv()
 console: Console = Console()
 MODEL: str = "gpt-4o-mini"
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if i == len(delays) - 1:
+                    raise
+                time.sleep(delay)
+        if last_exception is not None:
+            raise last_exception
+    return wrapper
 
 
 class UsageLike(Protocol):
@@ -69,6 +87,11 @@ def get_client() -> OpenAI:
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+
+@retry_with_backoff
+def create_chat_completion(**kwargs):
+    return get_client().chat.completions.create(**kwargs)
 
 
 def print_usage(response: ResponseLike) -> None:
@@ -143,7 +166,7 @@ ModuleNotFoundError: No module named 'stripe'
 
 def analyze_log(log: str) -> Diagnosis:
     with console.status("[bold green]Processing..."):
-        response = get_client().chat.completions.create(
+        response = create_chat_completion(
             model=MODEL,
             messages=[
                 {"role": "system", "content": (
