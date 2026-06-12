@@ -34,6 +34,17 @@ EMBED_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
 
 
+def print_usage(response):
+    usage = response.usage
+    prompt_tokens = usage.prompt_tokens
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = usage.total_tokens
+    input_cost = (prompt_tokens / 1000) * 0.000015
+    output_cost = (completion_tokens / 1000) * 0.00006
+    cost = input_cost + output_cost
+    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+
 def validate_environment():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
@@ -87,6 +98,7 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         response = get_client().embeddings.create(model=EMBED_MODEL, input=batch)
+        print_usage(response)
         all_embeddings.extend([item.embedding for item in response.data])
     return all_embeddings
 
@@ -129,6 +141,7 @@ def answer_question(question: str, context_chunks: list[str], chat_history: list
         messages=messages,
         temperature=0.2,
     )
+    print_usage(response)
     return response.choices[0].message.content
 
 
