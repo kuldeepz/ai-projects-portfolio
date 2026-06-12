@@ -140,4 +140,3 @@ def main():
                         title=f"[bold cyan]ADR-{adr_num}: {adr['title']}[/bold cyan]",
                         border_style="cyan"))
 
-
