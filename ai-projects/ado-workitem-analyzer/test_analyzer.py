@@ -2,7 +2,7 @@
 import sys, os
 import pytest
 sys.path.insert(0, os.path.dirname(__file__))
-from analyzer import SCHEMA, SAMPLE_WORK_ITEM
+from analyzer import SCHEMA, SAMPLE_WORK_ITEM, analyze_work_item
 
 def test_schema():
     required = SCHEMA["parameters"]["required"]
@@ -14,10 +14,8 @@ def test_schema():
 def test_fibonacci_enum():
     # story point suggestion should be fibonacci
     valid_sp = {1, 2, 3, 5, 8, 13, 21}
-    mock_result = {"ready_score": 40, "missing_fields": ["story_points", "assigned_to"],
-                   "acceptance_criteria_issues": ["Too vague"], "improved_acceptance_criteria": "Given...",
-                   "story_point_suggestion": 5, "risks": [], "suggestions": ["Add AC"], "summary": "Needs work"}
-    assert mock_result["story_point_suggestion"] in valid_sp
+    result = analyze_work_item(SAMPLE_WORK_ITEM)
+    assert result["story_point_suggestion"] in valid_sp
     print("  [PASS] Story point — value is valid Fibonacci number")
 
 def test_sample_item_has_issues():
@@ -36,9 +34,10 @@ def test_sample_item_has_issues():
     ],
 )
 def test_assigned_to_empty_string_edge_cases(input_value, expected_missing):
-    """Covers empty-string and whitespace edge cases for assignee presence checks."""
-    is_missing = not bool(input_value and input_value.strip())
-    assert is_missing is expected_missing
+    """Covers empty-string and whitespace edge cases via analyzer behavior."""
+    item = {**SAMPLE_WORK_ITEM, "assigned_to": input_value}
+    result = analyze_work_item(item)
+    assert ("assigned_to" in result["missing_fields"]) is expected_missing
 
 @pytest.mark.parametrize(
     "story_points,expected_missing",
@@ -49,9 +48,10 @@ def test_assigned_to_empty_string_edge_cases(input_value, expected_missing):
     ],
 )
 def test_story_points_none_and_boundary_inputs(story_points, expected_missing):
-    """Covers None and boundary numeric inputs for story points availability."""
-    is_missing = story_points is None
-    assert is_missing is expected_missing
+    """Covers None and boundary numeric inputs via analyzer behavior."""
+    item = {**SAMPLE_WORK_ITEM, "story_points": story_points, "assigned_to": "owner"}
+    result = analyze_work_item(item)
+    assert ("story_points" in result["missing_fields"]) is expected_missing
 
 @pytest.mark.parametrize(
     "sp_value,is_valid",
@@ -64,9 +64,11 @@ def test_story_points_none_and_boundary_inputs(story_points, expected_missing):
     ],
 )
 def test_fibonacci_story_point_boundary_values(sp_value, is_valid):
-    """Covers boundary and invalid edge values for Fibonacci story point suggestions."""
+    """Covers boundary and invalid edge values through analyzer outputs."""
+    item = {**SAMPLE_WORK_ITEM, "story_points": sp_value, "assigned_to": "owner"}
+    result = analyze_work_item(item)
     valid_sp = {1, 2, 3, 5, 8, 13, 21}
-    assert (sp_value in valid_sp) is is_valid
+    assert (result["story_point_suggestion"] in valid_sp) is is_valid
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__]))
