@@ -9,6 +9,7 @@ Reads Azure DevOps work items (from JSON export or typed input) and:
 import os, sys, json
 import argparse
 from datetime import datetime
+from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -19,26 +20,29 @@ load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 
-_client = None
-def get_client():
+# Estimated pricing in USD per 1M tokens.
+INPUT_RATE_PER_1M = 0.15
+OUTPUT_RATE_PER_1M = 0.60
+
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def print_usage(response):
-    usage = getattr(response, "usage", None)
-    if not usage:
-        console.print("📊 Token usage unavailable")
-        return
-
-    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+def print_usage(response: Any) -> None:
+    usage = response.usage
+    prompt_tokens = usage.prompt_tokens
+    completion_tokens = usage.completion_tokens
+    total_tokens = usage.total_tokens
+    cost = (
+        (prompt_tokens / 1_000_000) * INPUT_RATE_PER_1M
+        + (completion_tokens / 1_000_000) * OUTPUT_RATE_PER_1M
+    )
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-def validate_environment(args):
+def validate_environment(args: argparse.Namespace) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Setup error:[/red] OPENAI_API_KEY is not set or is empty.")
@@ -59,7 +63,7 @@ def validate_environment(args):
 
     console.print("[green]Setup OK ✓[/green]")
 
-SCHEMA = {
+SCHEMA: dict[str, Any] = {
     "name": "workitem_analysis",
     "description": "Analysis of an ADO work item for completeness and quality",
     "parameters": {
@@ -79,7 +83,7 @@ SCHEMA = {
     }
 }
 
-SAMPLE_WORK_ITEM = {
+SAMPLE_WORK_ITEM: dict[str, Any] = {
     "id": "WI-1042",
     "type": "User Story",
     "title": "As a user I want to login",
@@ -92,7 +96,7 @@ SAMPLE_WORK_ITEM = {
     "tags": []
 }
 
-def analyze_workitem(item: dict) -> dict:
+def analyze_workitem(item: dict[str, Any]) -> dict[str, Any]:
     with console.status("[bold green]Calling OpenAI for analysis...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -111,7 +115,7 @@ def analyze_workitem(item: dict) -> dict:
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-def display(item: dict, analysis: dict):
+def display(item: dict[str, Any], analysis: dict[str, Any]) -> None:
     score = analysis["ready_score"]
     color = "green" if score >= 75 else "yellow" if score >= 50 else "red"
     console.print()
