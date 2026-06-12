@@ -72,7 +72,8 @@ def validate_environment(parsed):
             console.print(f"❌ File is not readable: {path}")
             sys.exit(1)
 
-    console.print("Setup OK ✓")
+    if getattr(parsed, "verbose", False):
+        console.print("Setup OK ✓")
 
 FORMATS = {
     "1": ("standup", "Daily standup (Yesterday / Today / Blockers)"),
