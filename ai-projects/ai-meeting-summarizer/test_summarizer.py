@@ -1,5 +1,6 @@
 """Sanity tests for ai-meeting-summarizer — no API key required."""
 import os, sys, tempfile
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from summarizer import NOTES_SCHEMA, save_notes
 
@@ -46,6 +47,83 @@ def test_sentiment_values():
     enum_vals = set(props["sentiment"]["enum"])
     assert enum_vals == valid, f"Unexpected enum: {enum_vals}"
     print("  [PASS] Sentiment enum — all four values valid")
+
+
+@pytest.mark.parametrize(
+    "title, attendees, executive_summary, key_topics, decisions, action_items, blockers, sentiment",
+    [
+        ("", [], "", [], [], [], [], "neutral"),
+        ("", ["Alice"], "", [{"topic": "", "discussion": ""}], [], [], [], "mixed"),
+        ("", [], "", [], [""], [{"task": "", "owner": "", "due": ""}], [""], "tense"),
+    ],
+)
+def test_save_notes_handles_empty_string_inputs(title, attendees, executive_summary, key_topics, decisions, action_items, blockers, sentiment):
+    """Covers saving notes when multiple fields contain empty-string content."""
+    notes = {
+        "title": title,
+        "attendees": attendees,
+        "executive_summary": executive_summary,
+        "key_topics": key_topics,
+        "decisions": decisions,
+        "action_items": action_items,
+        "blockers": blockers,
+        "follow_up_meetings": [],
+        "sentiment": sentiment,
+        "duration_estimate": ""
+    }
+    with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w") as f:
+        tmp = f.name
+    try:
+        save_notes(notes, tmp)
+        with open(tmp) as f:
+            content = f.read()
+        assert isinstance(content, str)
+        assert len(content) >= 0
+    finally:
+        os.unlink(tmp)
+
+
+@pytest.mark.parametrize(
+    "duration_estimate, follow_up_meetings",
+    [
+        (None, []),
+        ("30 minutes", None),
+        (None, None),
+    ],
+)
+def test_save_notes_allows_optional_none_inputs(duration_estimate, follow_up_meetings):
+    """Covers optional fields receiving None where applicable during save."""
+    notes = {
+        "title": "Weekly Sync",
+        "attendees": ["Alice"],
+        "executive_summary": "Status updates",
+        "key_topics": [{"topic": "Roadmap", "discussion": "Reviewed milestones"}],
+        "decisions": ["Proceed with beta"],
+        "action_items": [{"task": "Prepare release notes", "owner": "Alice", "due": "2024-08-01"}],
+        "blockers": [],
+        "follow_up_meetings": follow_up_meetings,
+        "sentiment": "neutral",
+        "duration_estimate": duration_estimate,
+    }
+    with tempfile.NamedTemporaryFile(suffix=".md", delete=False, mode="w") as f:
+        tmp = f.name
+    try:
+        save_notes(notes, tmp)
+        with open(tmp) as f:
+            content = f.read()
+        assert "Weekly Sync" in content
+    finally:
+        os.unlink(tmp)
+
+
+@pytest.mark.parametrize(
+    "sentiment",
+    ["positive", "neutral", "tense", "mixed"],
+)
+def test_sentiment_boundary_values_are_supported(sentiment):
+    """Covers all sentiment enum boundary values defined by the schema."""
+    enum_vals = NOTES_SCHEMA["parameters"]["properties"]["sentiment"]["enum"]
+    assert sentiment in enum_vals
 
 
 if __name__ == "__main__":
