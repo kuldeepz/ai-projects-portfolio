@@ -25,6 +25,10 @@ console = Console()
 CHAT_MODEL = "gpt-4o-mini"
 VERBOSE = False
 
+PRICING = {
+    "gpt-4o-mini": {"in_per_1m": 0.15, "out_per_1m": 0.60},
+}
+
 _client = None
 
 
@@ -42,9 +46,18 @@ def print_usage(response) -> None:
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+
+    prices = PRICING.get(CHAT_MODEL)
+    if prices:
+        cost = (prompt_tokens / 1_000_000) * prices["in_per_1m"] + (
+            completion_tokens / 1_000_000
+        ) * prices["out_per_1m"]
+        cost_text = f"${cost:.4f}"
+    else:
+        cost_text = "N/A (unknown model pricing)"
+
     console.print(
-        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {cost_text}"
     )
 
 
@@ -167,4 +180,4 @@ def summarize_transcript(transcript: str) -> dict:
         if VERBOSE:
             elapsed = time.time() - start
             usage = getattr(response, "usage", None)
-            prompt_tokens = geta
+            prompt
