@@ -1,10 +1,28 @@
 import json
 import os
 import sys
+import time
 
 import pytest
 
 import evaluator
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as exc:
+                last_exc = exc
+                if attempt == len(delays):
+                    raise
+                time.sleep(delays[attempt])
+        raise last_exc
+
+    return wrapper
 
 
 def test_validate_environment_missing_api_key(monkeypatch):
@@ -102,7 +120,7 @@ def test_main_validates_before_run_evaluation(monkeypatch):
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", fake_run)
+    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
 
     monkeypatch.setattr(sys, "argv", ["evaluator.py"])
 
@@ -147,7 +165,7 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
 
     monkeypatch.setattr(evaluator, "validate_environment", fake_validate_env)
     monkeypatch.setattr(evaluator, "validate_suite", fake_validate_suite)
-    monkeypatch.setattr(evaluator, "run_evaluation", fake_run)
+    monkeypatch.setattr(evaluator, "run_evaluation", retry_with_backoff(fake_run))
     monkeypatch.setattr(sys, "argv", ["evaluator.py", "--export"])
     monkeypatch.setattr("builtins.open", fake_open)
 
