@@ -7,6 +7,7 @@ Supports tone selection, length control, and follow-up suggestions.
 import os
 import sys
 import json
+from datetime import datetime
 from typing import TypedDict
 
 from dotenv import load_dotenv
@@ -174,3 +175,17 @@ def display_result(result: EmailOutput) -> None:
     console.print(Panel(follow_text, title="[bold]Follow-up Suggestions[/bold]", border_style="blue"))
 
     meta_table = Tabl
+
+
+def maybe_export_result(result: EmailOutput, export_enabled: bool) -> None:
+    if not export_enabled:
+        return
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"output_{timestamp}.json"
+    payload: dict[str, JSONValue] = {**result, "generated_at": datetime.now().isoformat()}
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+if __name__ == "__main__":
+    export_enabled = "--export" in sys.argv or "-e" in sys.argv
