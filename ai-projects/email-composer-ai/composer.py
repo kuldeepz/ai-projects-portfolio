@@ -7,6 +7,7 @@ Supports tone selection, length control, and follow-up suggestions.
 import os
 import sys
 import json
+from typing import Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -17,18 +18,18 @@ from rich.table import Table
 
 load_dotenv()
 
-_client = None
+_client: OpenAI | None = None
 
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
-console = Console()
+console: Console = Console()
 
-CHAT_MODEL = "gpt-4o-mini"
+CHAT_MODEL: str = "gpt-4o-mini"
 
-TONES = {
+TONES: dict[str, tuple[str, str]] = {
     "1": ("formal", "Professional and polished — suitable for executives, clients, formal requests"),
     "2": ("friendly", "Warm and approachable — for colleagues, collaborators, casual business"),
     "3": ("assertive", "Direct and confident — for negotiations, setting expectations, following up"),
@@ -36,7 +37,7 @@ TONES = {
     "5": ("persuasive", "Compelling and motivating — for pitches, proposals, calls to action"),
 }
 
-EMAIL_SCHEMA = {
+EMAIL_SCHEMA: dict[str, Any] = {
     "name": "email_output",
     "description": "Generated email with metadata",
     "parameters": {
@@ -61,7 +62,7 @@ EMAIL_SCHEMA = {
     }
 }
 
-LENGTH_PROMPTS = {
+LENGTH_PROMPTS: dict[str, str] = {
     "short": "Keep it brief — under 100 words. Get to the point fast.",
     "medium": "Aim for 100-200 words. Clear and complete without being verbose.",
     "long": "Write a thorough email of 200-350 words with full context and detail.",
@@ -75,7 +76,7 @@ def compose_email(
     sender_name: str,
     recipient_context: str,
     email_purpose: str,
-) -> dict:
+) -> dict[str, Any]:
     length_instruction = LENGTH_PROMPTS.get(length, LENGTH_PROMPTS["medium"])
 
     system_prompt = (
@@ -110,7 +111,7 @@ def compose_email(
     return json.loads(tool_call.function.arguments)
 
 
-def display_result(result: dict):
+def display_result(result: dict[str, Any]) -> None:
     console.print()
     console.print(Panel(
         f"[bold white]{result['subject']}[/bold white]",
@@ -140,7 +141,7 @@ def display_result(result: dict):
     console.print()
 
 
-def interactive_mode():
+def interactive_mode() -> None:
     """Guided interactive input mode."""
     console.print(Panel.fit(
         "[bold cyan]AI Email Composer[/bold cyan]\n[dim]Turn bullet points into polished emails[/dim]",
@@ -161,7 +162,7 @@ def interactive_mode():
     sender_name = Prompt.ask("Your name")
 
     console.print("\n[bold]Enter your bullet points[/bold] (one per line, blank line when done):")
-    lines = []
+    lines: list[str] = []
     while True:
         try:
             line = input()
@@ -189,7 +190,7 @@ def interactive_mode():
         console.print(f"[green]Saved to:[/green] {filename}")
 
 
-def cli_mode(args: list[str]):
+def cli_mode(args: list[str]) -> None:
     """Non-interactive CLI mode for scripting."""
     import argparse
     parser = argparse.ArgumentParser(description="AI Email Composer")
@@ -216,7 +217,7 @@ def cli_mode(args: list[str]):
     display_result(result)
 
 
-def main():
+def main() -> None:
     if len(sys.argv) == 1:
         interactive_mode()
     else:
