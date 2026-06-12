@@ -81,6 +81,7 @@ def get_client() -> OpenAI:
 console: Console = Console()
 
 CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 
 def print_usage(response: Any) -> None:
@@ -208,6 +209,14 @@ def detect_language(file_path: str) -> str:
 def review_code(code: str, language: str = "", context: str = "") -> ReviewResult:
     lang_hint = f"Language: {language}\n" if language else ""
     ctx_hint = f"Context: {context}\n" if context else ""
+    user_content = f"{lang_hint}{ctx_hint}\n```\n{code}\n```"
+
+    if VERBOSE:
+        print(f"🤖 Model: {CHAT_MODEL}")
+        print(f"🔤 Input characters: {len(user_content)}")
+        print(f"🔢 Approx input tokens: {len(user_content) // 4}")
+        print("⏳ Calling OpenAI API...")
+    started = time.time()
 
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
@@ -223,13 +232,23 @@ def review_code(code: str, language: str = "", context: str = "") -> ReviewResul
             },
             {
                 "role": "user",
-                "content": f"{lang_hint}{ctx_hint}\n```\n{code}\n```",
+                "content": user_content,
             },
         ],
         functions=[REVIEW_SCHEMA],
         function_call={"name": "code_review"},
     )
 
+    if VERBOSE:
+        elapsed = time.time() - started
+        print(f"✅ Done in {elapsed:.1f}s")
+
     print_usage(response)
     args = response.choices[0].message.function_call.arguments
     return json.loads(args)
+
+
+if __name__ == "__main__":
+    if "--verbose" in sys.argv or "-v" in sys.argv:
+        VERBOSE = True
+        sys.argv = [arg for arg in sys.argv if arg not in ("--verbose", "-v")]
