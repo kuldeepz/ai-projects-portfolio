@@ -155,8 +155,26 @@ def display(review: dict):
 def main():
     global VERBOSE
     args = sys.argv[1:]
-    export = False
-    cleaned_args = []
-    i = 0
-    while i < len(args):
-        arg = args[i]
+    export = "--export" in args
+    design = SAMPLE_DESIGN
+
+    try:
+        review = review_architecture(design)
+        display(review)
+    except Exception as e:
+        console.print(f"[red]Review failed:[/red] {e}")
+        sys.exit(1)
+
+    if export:
+        try:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"output_{ts}.json"
+            payload = {**review, "generated_at": datetime.now().isoformat()}
+            Path(filename).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            console.print(f"[green]Exported:[/green] {filename}")
+        except OSError as e:
+            console.print(f"[red]Export failed:[/red] {e}")
+            sys.exit(2)
+
+if __name__ == "__main__":
+    main()
