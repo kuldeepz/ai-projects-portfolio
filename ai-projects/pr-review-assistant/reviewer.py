@@ -4,7 +4,7 @@ Takes a git diff (or two file versions) and generates detailed PR review comment
 categorized by severity — ready to paste into GitHub/ADO PR.
 """
 
-import os, sys, json, subprocess
+import os, sys, json, subprocess, time
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -23,6 +23,20 @@ def get_client():
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if i < len(delays) - 1:
+                    time.sleep(delay)
+        raise last_exception
+    return wrapper
 
 SCHEMA = {
     "name": "pr_review",
@@ -98,6 +112,7 @@ VERDICT_ICONS = {
 }
 SEV_COLORS = {"blocking": "bold red", "major": "red", "minor": "yellow", "nit": "dim", "praise": "green"}
 
+@retry_with_backoff
 def review_diff(diff: str, context: str = "") -> dict:
     ctx = f"\nContext: {context}" if context else ""
     response = get_client().chat.completions.create(
