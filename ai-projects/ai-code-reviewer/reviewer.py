@@ -8,6 +8,7 @@ import os
 import sys
 import json
 from pathlib import Path
+from datetime import datetime
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -234,13 +235,26 @@ def display_review(review: dict, code: str, language: str):
 def main():
     if len(sys.argv) < 2:
         console.print("[yellow]Usage:[/yellow]")
-        console.print("  python reviewer.py <code_file> [context]")
-        console.print("  echo 'code' | python reviewer.py - [context]")
-        console.print('\n[dim]Example: python reviewer.py app.py "Django REST API view"[/dim]')
+        console.print("  python reviewer.py <code_file> [context] [--export|-e]")
+        console.print("  echo 'code' | python reviewer.py - [context] [--export|-e]")
+        console.print('\n[dim]Example: python reviewer.py app.py "Django REST API view" --export[/dim]')
         sys.exit(1)
 
-    file_arg = sys.argv[1]
-    context = sys.argv[2] if len(sys.argv) > 2 else ""
+    args = sys.argv[1:]
+    export = False
+    filtered_args = []
+    for arg in args:
+        if arg in ("--export", "-e"):
+            export = True
+        else:
+            filtered_args.append(arg)
+
+    if not filtered_args:
+        console.print("[red]No input source provided.[/red]")
+        sys.exit(1)
+
+    file_arg = filtered_args[0]
+    context = filtered_args[1] if len(filtered_args) > 1 else ""
 
     if file_arg == "-":
         code = sys.stdin.read()
@@ -271,6 +285,16 @@ def main():
         review = review_code(code, language, context)
 
     display_review(review, code, language)
+
+    if export:
+        generated_at = datetime.now().isoformat()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = f"output_{timestamp}.json"
+        export_data = dict(review)
+        export_data["generated_at"] = generated_at
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(export_data, f, indent=2, ensure_ascii=False)
+        console.print(f"[green]Exported results to:[/green] {output_file}")
 
 
 if __name__ == "__main__":
