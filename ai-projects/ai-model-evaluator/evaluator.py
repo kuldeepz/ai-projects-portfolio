@@ -6,6 +6,7 @@ scores outputs, and produces an evaluation report.
 
 import os, sys, json
 from datetime import datetime
+from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -14,17 +15,17 @@ from rich.table import Table
 from rich.progress import track
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-EVAL_SCHEMA = {
+EVAL_SCHEMA: dict[str, Any] = {
     "name": "eval_score",
     "description": "Evaluation of a single model output against expected answer",
     "parameters": {
@@ -40,7 +41,7 @@ EVAL_SCHEMA = {
     }
 }
 
-SAMPLE_SUITE = {
+SAMPLE_SUITE: dict[str, Any] = {
     "name": "Customer Support Bot Evaluation",
     "system_prompt": "You are a helpful customer support agent for an e-commerce company. Be concise, friendly, and accurate.",
     "test_cases": [
@@ -66,7 +67,7 @@ def run_model(system_prompt: str, user_input: str) -> str:
     )
     return r.choices[0].message.content
 
-def score_output(actual: str, expected: str, question: str) -> dict:
+def score_output(actual: str, expected: str, question: str) -> dict[str, Any]:
     r = get_client().chat.completions.create(
         model=MODEL,
         messages=[
@@ -84,8 +85,8 @@ def score_output(actual: str, expected: str, question: str) -> dict:
     )
     return json.loads(r.choices[0].message.tool_calls[0].function.arguments)
 
-def run_evaluation(suite: dict) -> dict:
-    results = []
+def run_evaluation(suite: dict[str, Any]) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
     for tc in track(suite["test_cases"], description="Evaluating..."):
         actual = run_model(suite["system_prompt"], tc["input"])
         score_result = score_output(actual, tc["expected"], tc["input"])
@@ -98,7 +99,7 @@ def run_evaluation(suite: dict) -> dict:
             "avg_score": round(avg_score, 1), "total": len(results),
             "correct": correct, "hallucinations": hallucinations, "results": results}
 
-def display(report: dict):
+def display(report: dict[str, Any]) -> None:
     avg = report["avg_score"]
     color = "green" if avg >= 80 else "yellow" if avg >= 60 else "red"
     console.print()
@@ -130,7 +131,7 @@ def display(report: dict):
         json.dump(report, f, indent=2)
     console.print(f"\n[green]Full report saved:[/green] {out}\n")
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         console.print("[dim]No suite file provided — running sample evaluation suite...[/dim]\n")
         suite = SAMPLE_SUITE
