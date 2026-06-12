@@ -7,7 +7,7 @@ for daily standups, weekly syncs, or executive status updates.
 import os, sys, json, argparse, time, random, functools
 from datetime import date, datetime
 from dotenv import load_dotenv
-from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError, APIStatusError
+from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
@@ -23,7 +23,15 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-RETRYABLE_EXCEPTIONS = (APIConnectionError, APITimeoutError, RateLimitError, APIStatusError)
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25):
     def deco(fn):
@@ -32,7 +40,7 @@ def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25
             for attempt in range(max_retries + 1):
                 try:
                     return fn(*args, **kwargs)
-                except RETRYABLE_EXCEPTIONS:
+                except Exception:
                     if attempt == max_retries:
                         raise
                     delay = min(base_delay * (2 ** attempt), max_delay)
@@ -114,6 +122,7 @@ def generate_report(data: dict, verbose: bool = False) -> dict:
         tool_choice={"type": "function", "function": {"name": "report_output"}},
         temperature=0.4,
     )
+    print_usage(response)
     if verbose:
         elapsed = time.perf_counter() - start
         console.print(f"✅ Done in {elapsed:.1f}s")
@@ -155,4 +164,10 @@ def main():
 
     if parsed.export == "json":
         now = datetime.now()
-        timestamp
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
+        export_out = parsed.export_out or f"output_{timestamp}.json"
+        export_data = dict(report)
+        export_data["generated_at"] = now.isoformat()
+
+
+# Tests for retry behavi
