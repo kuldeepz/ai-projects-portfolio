@@ -134,33 +134,101 @@ def validate_environment():
         console.print("[red]Error:[/red] Missing required file or directory path argument.")
         sys.exit(1)
 
-    out_path = None
-    path_arg = None
-    i = 1
-    while i < len(sys.argv):
-        arg = sys.argv[i]
-        if arg == "--out":
-            if i + 1 >= len(sys.argv):
-                console.print("[red]Error:[/red] --out flag requires an output file path.")
-                sys.exit(1)
-            out_path = sys.argv[i + 1]
+    path_args = []
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--out":
             i += 2
             continue
-        if path_arg is None:
-            path_arg = arg
+        path_args.append(args[i])
         i += 1
 
-    if not path_arg:
+    if not path_args:
         console.print("[red]Error:[/red] Missing required file or directory path argument.")
         sys.exit(1)
 
-    p = Path(path_arg)
-    if not p.exists():
-        console.print(f"[red]Error:[/red] Path does not exist: {path_arg}")
+    target = path_args[0]
+    if not os.path.exists(target):
+        console.print(f"[red]Error:[/red] Path does not exist: {target}")
         sys.exit(1)
 
-    if not os.access(p, os.R_OK):
-        console.print(f"[red]Error:[/red] Path is not readable: {path_arg}")
+    if not os.access(target, os.R_OK):
+        console.print(f"[red]Error:[/red] Path is not readable: {target}")
         sys.exit(1)
 
-    return path_arg, out_path
+
+def test_validate_environment_missing_api_key(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./"])
+    monkeypatch.setattr(os, "getenv", lambda _: "")
+
+    messages = []
+    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    assert any("OPENAI_API_KEY is not set" in m for m in messages)
+
+
+def test_validate_environment_missing_args(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["analyzer.py"])
+    monkeypatch.setattr(os, "getenv", lambda _: "key")
+
+    messages = []
+    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    assert any("Missing required file or directory path argument" in m for m in messages)
+
+
+def test_validate_environment_invalid_path(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./does-not-exist"])
+    monkeypatch.setattr(os, "getenv", lambda _: "key")
+    monkeypatch.setattr(os.path, "exists", lambda _: False)
+
+    messages = []
+    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    assert any("Path does not exist" in m for m in messages)
+
+
+def test_validate_environment_unreadable_path(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./target"])
+    monkeypatch.setattr(os, "getenv", lambda _: "key")
+    monkeypatch.setattr(os.path, "exists", lambda _: True)
+    monkeypatch.setattr(os, "access", lambda *_: False)
+
+    messages = []
+    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    assert any("Path is not readable" in m for m in messages)
+
+
+def test_validate_environment_valid_with_out(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./target", "--out", "report.json"])
+    monkeypatch.setattr(os, "getenv", lambda _: "key")
+    monkeypatch.setattr(os.path, "exists", lambda _: True)
+    monkeypatch.setattr(os, "access", lambda *_: True)
+
+    validate_environment()
