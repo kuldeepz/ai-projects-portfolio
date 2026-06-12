@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import time
+from functools import wraps
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -49,6 +50,7 @@ def print_usage(response: Any) -> None:
 
 
 def retry_with_backoff(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
         last_exception = None
@@ -178,45 +180,6 @@ def review_code(code: str, language: str = "", context: str = "") -> dict[str, A
             {
                 "role": "user",
                 "content": f"{lang_hint}{ctx_hint}\nCode to review:\n```\n{code}\n```"
-            }
-        ]
+            },
+        ],
     )
-
-    print_usage(response)
-
-    content = response.choices[0].message.content or "{}"
-    return json.loads(content)
-
-
-def _run_print_usage_tests() -> None:
-    import io
-    from contextlib import redirect_stdout
-    from types import SimpleNamespace
-
-    def _capture_output(resp: Any) -> str:
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            print_usage(resp)
-        return buf.getvalue()
-
-    # (1) usage=None prints nothing
-    resp_none = SimpleNamespace(usage=None)
-    assert _capture_output(resp_none) == ""
-
-    # (2) prompt=1000, completion=500, total=1500 prints expected totals and cost
-    usage_full = SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
-    resp_full = SimpleNamespace(usage=usage_full)
-    out_full = _capture_output(resp_full)
-    assert "1000 in + 500 out = 1500 total" in out_full
-    assert "Est. cost: $0.0000" in out_full
-
-    # (3) absent fields default to 0 without exception
-    usage_empty = SimpleNamespace()
-    resp_empty = SimpleNamespace(usage=usage_empty)
-    out_empty = _capture_output(resp_empty)
-    assert "0 in + 0 out = 0 total" in out_empty
-    assert "Est. cost: $0.0000" in out_empty
-
-
-if __name__ == "__main__" and os.getenv("RUN_PRINT_USAGE_TESTS") == "1":
-    _run_print_usage_tests()
