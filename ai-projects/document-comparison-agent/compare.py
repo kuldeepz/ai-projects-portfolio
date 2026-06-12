@@ -26,6 +26,22 @@ CHAT_MODEL = "gpt-4o-mini"
 
 _client = None
 
+
+def _is_retryable_openai_error(exc: Exception) -> bool:
+    status_code = getattr(exc, "status_code", None)
+    if status_code in (429, 500, 502, 503, 504):
+        return True
+
+    exc_name = exc.__class__.__name__
+    retryable_names = {
+        "RateLimitError",
+        "APIConnectionError",
+        "APITimeoutError",
+        "InternalServerError",
+    }
+    return exc_name in retryable_names
+
+
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
@@ -34,12 +50,15 @@ def retry_with_backoff(func):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
+                if not _is_retryable_openai_error(e):
+                    raise
                 last_exception = e
                 if attempt < len(delays):
                     time.sleep(delays[attempt])
                 else:
                     raise last_exception
     return wrapper
+
 
 def get_client() -> OpenAI:
     global _client
@@ -169,92 +188,4 @@ def display_report(report: dict, doc1_name: str, doc2_name: str):
     summary_table = Table(show_header=True, header_style="bold")
     summary_table.add_column(f"[cyan]{doc1_name}[/cyan]", ratio=1)
     summary_table.add_column(f"[magenta]{doc2_name}[/magenta]", ratio=1)
-    summary_table.add_row(
-        f"[dim]{report['doc1_summary']}[/dim]",
-        f"[dim]{report['doc2_summary']}[/dim]"
-    )
-    console.print(Panel(summary_table, title="[bold]Document Summaries[/bold]", border_style="dim"))
-
-    # Common themes
-    if report["common_themes"]:
-        common_text = "\n".join(f"  [green]◆[/green] {t}" for t in report["common_themes"])
-        console.print(Panel(common_text, title="[bold green]Common Themes[/bold green]", border_style="green"))
-
-    # Unique content side by side
-    unique_table = Table(show_header=True, header_style="bold")
-    unique_table.add_column(f"[cyan]Only in {doc1_name}[/cyan]", ratio=1)
-    unique_table.add_column(f"[magenta]Only in {doc2_name}[/magenta]", ratio=1)
-
-    u1 = report["unique_to_doc1"]
-    u2 = report["unique_to_doc2"]
-    max_rows = max(len(u1), len(u2))
-    for i in range(max_rows):
-        cell1 = f"[cyan]•[/cyan] {u1[i]}" if i < len(u1) else ""
-        cell2 = f"[magenta]•[/magenta] {u2[i]}" if i < len(u2) else ""
-        unique_table.add_row(cell1, cell2)
-    console.print(Panel(unique_table, title="[bold]Unique Content[/bold]", border_style="blue"))
-
-    # Conflicts
-    if report["conflicts"]:
-        conflict_table = Table(show_header=True, header_style="bold red")
-        conflict_table.add_column("Topic", style="bold", ratio=1)
-        conflict_table.add_column(f"[cyan]{doc1_name}[/cyan]", ratio=2)
-        conflict_table.add_column(f"[magenta]{doc2_name}[/magenta]", ratio=2)
-        for c in report["conflicts"]:
-            conflict_table.add_row(c["topic"], c["doc1_position"], c["doc2_position"])
-        console.print(Panel(conflict_table, title="[bold red]Conflicts & Disagreements[/bold red]", border_style="red"))
-    else:
-        console.print(Panel("[green]No direct conflicts found.[/green]", title="[bold]Conflicts[/bold]", border_style="green"))
-
-    # Tone comparison
-    if report.get("tone_comparison"):
-        console.print(Panel(report["tone_comparison"], title="[bold]Tone & Style[/bold]", border_style="dim"))
-
-    # Recommendation
-    console.print(Panel(
-        f"[italic]{report['recommendation']}[/italic]",
-        title="[bold yellow]Recommendation[/bold yellow]",
-        border_style="yellow"
-    ))
-    console.print()
-
-
-def main():
-    if len(sys.argv) < 3:
-        console.print("[yellow]Usage:[/yellow] python compare.py <doc1> <doc2> [context]")
-        console.print("[dim]Example: python compare.py contract_v1.pdf contract_v2.pdf 'software license agreement'[/dim]")
-        sys.exit(1)
-
-    path1, path2 = sys.argv[1], sys.argv[2]
-    context = sys.argv[3] if len(sys.argv) > 3 else ""
-
-    for p in (path1, path2):
-        if not os.path.exists(p):
-            console.print(f"[red]File not found:[/red] {p}")
-            sys.exit(1)
-
-    doc1_name = Path(path1).name
-    doc2_name = Path(path2).name
-
-    console.print(f"\n[cyan]Comparing:[/cyan]")
-    console.print(f"  [cyan]Doc 1:[/cyan] {doc1_name}")
-    console.print(f"  [cyan]Doc 2:[/cyan] {doc2_name}")
-    if context:
-        console.print(f"  [cyan]Context:[/cyan] {context}")
-
-    with console.status("[bold green]Reading documents...[/bold green]"):
-        text1 = read_document(path1)
-        text2 = read_document(path2)
-
-    if not text1.strip() or not text2.strip():
-        console.print("[red]Could not extract text from one or both documents.[/red]")
-        sys.exit(1)
-
-    with console.status("[bold green]Comparing documents...[/bold green]"):
-        report = compare_documents(text1, text2, doc1_name, doc2_name, context)
-
-    display_report(report, doc1_name, doc2_name)
-
-
-if __name__ == "__main__":
-    main()
+    summary_table.a
