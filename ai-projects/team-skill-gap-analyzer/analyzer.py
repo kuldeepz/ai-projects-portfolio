@@ -101,3 +101,44 @@ def test_validate_environment_success_with_valid_setup(
 
     out = capsys.readouterr().out
     assert "Setup OK" in out
+
+
+def test_print_token_usage_outputs_expected_values(capsys: pytest.CaptureFixture[str]) -> None:
+    analyzer.print_token_usage(
+        prompt_tokens=100,
+        completion_tokens=50,
+        total_tokens=150,
+        estimated_cost=0.0123,
+    )
+
+    out = capsys.readouterr().out
+    assert "100" in out
+    assert "50" in out
+    assert "150" in out
+    assert "0.0123" in out or "0.012" in out
+
+
+def test_extract_usage_from_response_dict() -> None:
+    response = {
+        "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 80,
+            "total_tokens": 200,
+        }
+    }
+
+    usage = analyzer.extract_token_usage(response)
+
+    assert usage["prompt_tokens"] == 120
+    assert usage["completion_tokens"] == 80
+    assert usage["total_tokens"] == 200
+
+
+def test_calculate_estimated_cost_returns_positive_float() -> None:
+    cost = analyzer.calculate_estimated_cost(
+        prompt_tokens=1000,
+        completion_tokens=500,
+    )
+
+    assert isinstance(cost, float)
+    assert cost >= 0
