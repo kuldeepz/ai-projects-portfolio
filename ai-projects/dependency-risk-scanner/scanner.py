@@ -102,6 +102,11 @@ def retry_with_backoff(func):
                 last_exc = e
                 if i == len(delays) - 1:
                     break
+                if VERBOSE:
+                    print(
+                        f"⚠️ Retryable error ({type(e).__name__}) on attempt {i + 1}/{len(delays)}; "
+                        f"retrying in {delay}s..."
+                    )
                 with console.status("[bold green]Processing..."):
                     time.sleep(delay)
         raise last_exc
@@ -173,59 +178,3 @@ def _create_scan_response(dep_content: str):
         usage = getattr(response, "usage", None)
         if usage:
             prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-            total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-            print(f"🔢 Input/Output tokens: {prompt_tokens}/{completion_tokens} (total {total_tokens})")
-        return response
-    with console.status("[bold green]Processing..."):
-        return get_client().chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": (
-                    "You are a security engineer specializing in supply chain security. "
-                    "Analyze dependency files for: known vulnerabilities (CVEs), deprecated packages, "
-                    "packages with no recent maintenance, overly broad version pins, and security-sensitive "
-                    "packages that need careful version management. Use your knowledge of package ecosystems "
-                    "up to your training cutoff."
-                )},
-                {"role": "user", "content": f"Scan these dependencies for risks:\n\n{dep_content}"}
-            ],
-            tools=[{"type": "function", "function": SCHEMA}],
-            tool_choice={"type": "function", "function": {"name": "dependency_report"}},
-            temperature=0.1,
-        )
-
-
-def scan(dep_content: str) -> dict:
-    response = _create_scan_response(dep_content)
-    print_usage(response)
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
-
-
-def export_report(report: dict, output_path: str):
-    payload = dict(report)
-    payload["generated_at"] = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
-
-
-if __name__ == "__main__":
-    VERBOSE = "--verbose" in sys.argv[1:] or "-v" in sys.argv[1:]
-    validate_environment()
-    export_enabled = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
-
-    args = [a for a in sys.argv[1:] if a not in ("--export", "-e", "--verbose", "-v") and not a.startswith("-")]
-    if not args:
-        print("Usage: python scanner.py <dependency-file> [--export|-e] [--verbose|-v]")
-        sys.exit(1)
-
-    input_path = args[0]
-    with open(input_path, "r", encoding="utf-8") as f:
-        dep_content = parse_requirements(f.read(), input_path)
-
-    report = scan(dep_content)
-
-    if export_enabled:
-        path = str(Path(input_path).with_suffix(".report.json"))
-        export_report(report, path)
-        print(f"Exported report to {path}")
