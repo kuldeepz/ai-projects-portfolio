@@ -45,8 +45,9 @@ def print_usage(response):
     completion_tokens = getattr(usage, "output_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    formatted_cost = f"${cost:.6f}" if cost < 0.01 else f"${cost:.4f}"
     console.print(
-        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {formatted_cost}"
     )
 
 
@@ -184,7 +185,7 @@ class TestPrintUsage(unittest.TestCase):
         mock_print.assert_called_once()
         message = mock_print.call_args[0][0]
         self.assertIn("📊 Tokens: 1000 in + 500 out = 1500 total", message)
-        self.assertIn("💰 Est. cost: $0.0000", message)
+        self.assertIn("💰 Est. cost: $0.000045", message)
 
 
 if __name__ == "__main__":  # pragma: no cover
