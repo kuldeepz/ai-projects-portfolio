@@ -27,8 +27,7 @@ def test_validate_environment_empty_api_key(monkeypatch):
 
 def test_validate_environment_non_file_path(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["evaluator.py", "some_path"])
-    monkeypatch.setattr(os.path, "exists", lambda p: p == "some_path")
+    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--suite-file", "some_path"])
     monkeypatch.setattr(os.path, "isfile", lambda p: False)
 
     with pytest.raises(SystemExit) as exc:
@@ -39,8 +38,7 @@ def test_validate_environment_non_file_path(monkeypatch):
 
 def test_validate_environment_unreadable_file(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["evaluator.py", "suite.json"])
-    monkeypatch.setattr(os.path, "exists", lambda p: p == "suite.json")
+    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--suite-file", "suite.json"])
     monkeypatch.setattr(os.path, "isfile", lambda p: True)
     monkeypatch.setattr(os, "access", lambda p, mode: False)
 
@@ -52,9 +50,8 @@ def test_validate_environment_unreadable_file(monkeypatch):
 
 def test_validate_environment_valid_setup(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["evaluator.py", "suite.json", "--flag"])
-    monkeypatch.setattr(os.path, "exists", lambda p: p == "suite.json")
-    monkeypatch.setattr(os.path, "isfile", lambda p: True)
+    monkeypatch.setattr(sys, "argv", ["evaluator.py", "--suite-file", "suite.json", "--flag"])
+    monkeypatch.setattr(os.path, "isfile", lambda p: p == "suite.json")
     monkeypatch.setattr(os, "access", lambda p, mode: True)
 
     evaluator.validate_environment()
