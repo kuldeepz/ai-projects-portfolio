@@ -136,7 +136,7 @@ NOTES_SCHEMA = {
 
 
 def summarize_transcript(transcript: str) -> dict:
-    with console.status("[bold green]Processing..."):
+    with console.status("[bold green]Generating meeting notes..."):
         if VERBOSE:
             console.print(f"[dim]Model:[/dim] {CHAT_MODEL}")
             prompt_text = f"Summarize this meeting transcript:\n\n{transcript}"
@@ -167,27 +167,4 @@ def summarize_transcript(transcript: str) -> dict:
         if VERBOSE:
             elapsed = time.time() - start
             usage = getattr(response, "usage", None)
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-            completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-            console.print(
-                f"[dim]Done in {elapsed:.2f}s | Tokens: {prompt_tokens} in, {completion_tokens} out[/dim]"
-            )
-
-    tool_calls = response.choices[0].message.tool_calls
-    if not tool_calls:
-        raise RuntimeError("Model did not return structured notes")
-
-    arguments = tool_calls[0].function.arguments
-    return json.loads(arguments)
-
-
-def main() -> None:
-    global VERBOSE
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args = parser.parse_args()
-    VERBOSE = args.verbose
-
-
-if __name__ == "__main__":
-    main()
+            prompt_tokens = geta
