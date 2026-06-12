@@ -3,7 +3,7 @@ AI Decision Log Creator (Architecture Decision Records)
 Converts discussion notes or meeting summaries into formal ADR documents.
 """
 
-import os, sys, json
+import os, sys, json, time
 from datetime import date
 from pathlib import Path
 from dotenv import load_dotenv
@@ -15,6 +15,7 @@ from rich.markdown import Markdown
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -83,6 +84,13 @@ Action: Use pgvector. Raj to upgrade RDS and create migration. Sarah to update t
 """
 
 def create_adr(discussion: str, adr_number: str = "001") -> dict:
+    if VERBOSE:
+        prompt = f"Create an ADR (number: {adr_number}) from this discussion:\n\n{discussion}"
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input chars:[/dim] {len(prompt)}")
+        console.print(f"[dim]Input tokens (est):[/dim] {max(1, len(prompt) // 4)}")
+        console.print("⏳ Calling OpenAI API...")
+        start = time.perf_counter()
     with console.status("[bold green]Processing...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -99,18 +107,30 @@ def create_adr(discussion: str, adr_number: str = "001") -> dict:
             tool_choice={"type": "function", "function": {"name": "adr"}},
             temperature=0.2,
         )
+    if VERBOSE:
+        elapsed = time.perf_counter() - start
+        console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
-    if len(sys.argv) < 2:
+    global VERBOSE
+    args = sys.argv[1:]
+    if "--verbose" in args:
+        VERBOSE = True
+        args.remove("--verbose")
+    if "-v" in args:
+        VERBOSE = True
+        args.remove("-v")
+
+    if len(args) < 1:
         console.print("[dim]No file provided — using sample discussion...[/dim]\n")
         discussion = SAMPLE_DISCUSSION
         adr_num = "001"
     else:
         with console.status("[bold green]Processing...[/bold green]"):
-            with open(sys.argv[1]) as f:
+            with open(args[0]) as f:
                 discussion = f.read()
-        adr_num = sys.argv[2] if len(sys.argv) > 2 else "001"
+        adr_num = args[1] if len(args) > 1 else "001"
 
     with console.status("[bold green]Generating ADR...[/bold green]"):
         adr = create_adr(discussion, adr_num)
