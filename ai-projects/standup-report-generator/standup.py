@@ -16,6 +16,10 @@ load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 
+PRICING_PER_1K = {
+    "gpt-4o-mini": {"in": 0.00015, "out": 0.00060},
+}
+
 _client = None
 def get_client():
     global _client
@@ -30,8 +34,15 @@ def print_usage(response):
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+    rates = PRICING_PER_1K.get(MODEL)
+    if rates:
+        cost = (prompt_tokens / 1000) * rates["in"] + (completion_tokens / 1000) * rates["out"]
+        cost_display = f"${cost:.4f}"
+    else:
+        cost_display = "N/A"
+
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {cost_display}")
 
 def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25):
     def deco(fn):
