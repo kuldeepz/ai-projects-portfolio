@@ -72,6 +72,15 @@ def save_library(lib: dict):
     with open(LIBRARY_FILE, "w") as f:
         json.dump(lib, f, indent=2)
 
+def export_results(results: dict):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"output_{timestamp}.json"
+    payload = dict(results)
+    payload["generated_at"] = datetime.now().isoformat()
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    console.print(f"[green]Exported results[/green] to [bold]{filename}[/bold]")
+
 def cmd_add(name: str, prompt_text: str, description: str = "", tags: list = None):
     lib = load_library()
     version_hash = hashlib.md5(prompt_text.encode()).hexdigest()[:8]
@@ -126,12 +135,12 @@ def cmd_show(name: str):
 def cmd_test(name: str, test_input: str):
     lib = load_library()
     if name not in lib["prompts"]:
-        console.print(f"[red]Prompt not found:[/red] {name}"); return
+        console.print(f"[red]Prompt not found:[/red] {name}"); return None
     entry = lib["prompts"][name]
     current_hash = entry["current_version"]
     version = next((v for v in entry["versions"] if v["hash"] == current_hash), None)
     if not version:
-        console.print("[red]Current version not found.[/red]"); return
+        console.print("[red]Current version not found.[/red]"); return None
 
     prompt = version["prompt"]
     with console.status(f"[bold green]Testing prompt '{name}'...[/bold green]"):
@@ -146,21 +155,29 @@ def cmd_test(name: str, test_input: str):
 
     version["test_results"].append({"input": test_input, "output": output, "tested_at": datetime.now().isoformat()})
     save_library(lib)
+    return {
+        "command": "test",
+        "name": name,
+        "input": test_input,
+        "current_version": current_hash,
+        "output": output
+    }
 
 def cmd_compare(name: str, input_text: str):
     """Run the same input against all versions of a prompt and compare."""
     lib = load_library()
     if name not in lib["prompts"]:
-        console.print(f"[red]Prompt not found:[/red] {name}"); return
+        console.print(f"[red]Prompt not found:[/red] {name}"); return None
     versions = lib["prompts"][name]["versions"]
     if len(versions) < 2:
         console.print("[yellow]Need at least 2 versions to compare.[/yellow]")
-        return
+        return None
 
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Version", width=12)
     table.add_column("Output", ratio=3)
 
+    comparison_results = []
     for v in versions:
         with console.status(f"[bold green]Comparing v{v['hash']}...[/bold green]"):
             response = get_client().chat.completions.create(
@@ -171,12 +188,27 @@ def cmd_compare(name: str, input_text: str):
         print_usage(response)
         output = response.choices[0].message.content
         table.add_row(v["hash"], output[:500])
+        comparison_results.append({"version": v["hash"], "output": output})
 
     console.print(Panel(table, title=f"[bold]Comparison for {name}[/bold]", border_style="magenta"))
+    return {
+        "command": "compare",
+        "name": name,
+        "input": input_text,
+        "results": comparison_results
+    }
 
 
 def main():
     validate_environment()
+    export = False
+    if "--export" in sys.argv:
+        export = True
+        sys.argv.remove("--export")
+    if "-e" in sys.argv:
+        export = True
+        sys.argv.remove("-e")
+
     if len(sys.argv) < 2:
         console.print("Usage: python manager.py [add|list|show|test|compare] ...")
         return
@@ -197,9 +229,13 @@ def main():
     elif cmd == "show" and len(sys.argv) >= 3:
         cmd_show(sys.argv[2])
     elif cmd == "test" and len(sys.argv) >= 4:
-        cmd_test(sys.argv[2], " ".join(sys.argv[3:]))
+        result = cmd_test(sys.argv[2], " ".join(sys.argv[3:]))
+        if export and result:
+            export_results(result)
     elif cmd == "compare" and len(sys.argv) >= 4:
-        cmd_compare(sys.argv[2], " ".join(sys.argv[3:]))
+        result = cmd_compare(sys.argv[2], " ".join(sys.argv[3:]))
+        if export and result:
+            export_results(result)
     else:
         console.print("[red]Invalid command or missing arguments.[/red]")
 
