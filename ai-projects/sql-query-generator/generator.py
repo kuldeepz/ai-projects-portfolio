@@ -120,13 +120,14 @@ def generate_sql(question: str, schema: str, dialect: str, history: list[dict]) 
         "content": f"Question: {question}{schema_section}"
     })
 
-    response = get_client().chat.completions.create(
-        model=CHAT_MODEL,
-        messages=messages,
-        tools=[{"type": "function", "function": SQL_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "sql_result"}},
-        temperature=0.1,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=CHAT_MODEL,
+            messages=messages,
+            tools=[{"type": "function", "function": SQL_SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "sql_result"}},
+            temperature=0.1,
+        )
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
@@ -178,8 +179,9 @@ def load_schema(schema_path: str) -> str:
     if not os.path.exists(schema_path):
         console.print(f"[red]Schema file not found:[/red] {schema_path}")
         sys.exit(1)
-    with open(schema_path) as f:
-        return f.read()
+    with console.status("[bold green]Processing..."):
+        with open(schema_path) as f:
+            return f.read()
 
 
 def interactive_mode():
@@ -191,7 +193,8 @@ def interactive_mode():
 
 
 def main():
-    validate_environment()
+    with console.status("[bold green]Processing..."):
+        validate_environment()
     interactive_mode()
 
 
