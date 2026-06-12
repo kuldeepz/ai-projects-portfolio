@@ -4,7 +4,7 @@ Runs a test suite (question/expected-answer pairs) against a prompt+model,
 scores outputs, and produces an evaluation report.
 """
 
-import os, json
+import os, json, sys
 from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
 from dotenv import load_dotenv
@@ -70,6 +70,33 @@ def get_client() -> OpenAI:
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+
+def validate_environment() -> None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key is None or api_key.strip() == "":
+        console.print(
+            "[red]Setup error:[/red] OPENAI_API_KEY is not set or is empty. "
+            "Set it in your environment or .env file."
+        )
+        raise SystemExit(1)
+
+    for arg in sys.argv[1:]:
+        if arg.startswith("-"):
+            continue
+        if os.path.exists(arg):
+            if not os.path.isfile(arg):
+                console.print(
+                    f"[red]Setup error:[/red] Path exists but is not a file: {arg}"
+                )
+                raise SystemExit(1)
+            if not os.access(arg, os.R_OK):
+                console.print(
+                    f"[red]Setup error:[/red] File is not readable: {arg}"
+                )
+                raise SystemExit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
 
 
 EVAL_SCHEMA: EvalSchema = {
@@ -249,3 +276,13 @@ def display(report: EvaluationReport) -> None:
                 title="Test Case",
             )
         )
+
+
+def main() -> None:
+    validate_environment()
+    report = run_evaluation(SAMPLE_SUITE)
+    display(report)
+
+
+if __name__ == "__main__":
+    main()
