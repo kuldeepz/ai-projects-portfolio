@@ -83,21 +83,22 @@ Action: Use pgvector. Raj to upgrade RDS and create migration. Sarah to update t
 """
 
 def create_adr(discussion: str, adr_number: str = "001") -> dict:
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are a principal engineer creating Architecture Decision Records (ADRs) in the "
-                "Michael Nygard format. Extract the decision from the discussion, structure it formally, "
-                "ensure the context section captures WHY the decision was needed, and the consequences "
-                "section is honest about tradeoffs. Write the full_markdown as a complete, ready-to-commit ADR file."
-            )},
-            {"role": "user", "content": f"Create an ADR (number: {adr_number}) from this discussion:\n\n{discussion}"}
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "adr"}},
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing...[/bold green]"):
+        response = get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a principal engineer creating Architecture Decision Records (ADRs) in the "
+                    "Michael Nygard format. Extract the decision from the discussion, structure it formally, "
+                    "ensure the context section captures WHY the decision was needed, and the consequences "
+                    "section is honest about tradeoffs. Write the full_markdown as a complete, ready-to-commit ADR file."
+                )},
+                {"role": "user", "content": f"Create an ADR (number: {adr_number}) from this discussion:\n\n{discussion}"}
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "adr"}},
+            temperature=0.2,
+        )
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
@@ -106,8 +107,9 @@ def main():
         discussion = SAMPLE_DISCUSSION
         adr_num = "001"
     else:
-        with open(sys.argv[1]) as f:
-            discussion = f.read()
+        with console.status("[bold green]Processing...[/bold green]"):
+            with open(sys.argv[1]) as f:
+                discussion = f.read()
         adr_num = sys.argv[2] if len(sys.argv) > 2 else "001"
 
     with console.status("[bold green]Generating ADR...[/bold green]"):
@@ -119,10 +121,11 @@ def main():
                         border_style="cyan", padding=(1, 2)))
 
     out_dir = Path("decisions")
-    out_dir.mkdir(exist_ok=True)
-    safe_title = adr["title"].lower().replace(" ", "-").replace("/", "-")[:50]
-    out = out_dir / f"ADR-{adr_num}-{safe_title}.md"
-    out.write_text(adr["full_markdown"])
+    with console.status("[bold green]Processing...[/bold green]"):
+        out_dir.mkdir(exist_ok=True)
+        safe_title = adr["title"].lower().replace(" ", "-").replace("/", "-")[:50]
+        out = out_dir / f"ADR-{adr_num}-{safe_title}.md"
+        out.write_text(adr["full_markdown"])
     console.print(f"\n[green]Saved:[/green] {out}\n")
 
 if __name__ == "__main__":
