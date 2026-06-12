@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -27,13 +28,17 @@ load_dotenv()
 
 console: Console = Console()
 CHAT_MODEL: str = "gpt-4o-mini"
-VERBOSE: bool = False
 
 MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"in_per_1m": 0.15, "out_per_1m": 0.60},
 }
 
 _client: OpenAI | None = None
+
+
+@dataclass
+class Config:
+    verbose: bool = False
 
 
 class StartupValidationError(Exception):
@@ -104,8 +109,8 @@ def get_client() -> OpenAI:
     return _client
 
 
-def print_usage(response: ResponseWithUsage) -> None:
-    if not VERBOSE:
+def print_usage(response: ResponseWithUsage, config: Config) -> None:
+    if not config.verbose:
         return
     usage = getattr(response, "usage", None)
     if not usage:
@@ -128,20 +133,20 @@ def print_usage(response: ResponseWithUsage) -> None:
     )
 
 
-def validate_environment() -> None:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.strip():
-        raise StartupValidationError("Missing OPENAI_API_KEY. Set it in your environment or .env file.")
-
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("doc1")
     parser.add_argument("doc2")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-e", "--export", action="store_true")
     args, _ = parser.parse_known_args(sys.argv[1:])
+    return args
 
-    global VERBOSE
-    VERBOSE = args.verbose
+
+def validate_environment(args: argparse.Namespace) -> None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        raise StartupValidationError("Missing OPENAI_API_KEY. Set it in your environment or .env file.")
 
     for file_path in (args.doc1, args.doc2):
         path = Path(file_path)
@@ -190,30 +195,9 @@ COMPARE_SCHEMA: dict[str, JSONValue] = {
                         "topic": {"type": "string"},
                         "doc1_position": {"type": "string"},
                         "doc2_position": {"type": "string"}
-                    },
-                    "required": ["topic", "doc1_position", "doc2_position"]
-                },
-                "description": "Areas where the two documents contradict or disagree"
-            },
-            "tone_comparison": {
-                "type": "string",
-                "description": "How the writing tone/style differs between documents"
-            },
-            "recommendation": {
-                "type": "string",
-                "description": "Recommended action based on comparison"
+                    }
+                }
             }
-        },
-        "required": [
-            "doc1_summary",
-            "doc2_summary",
-            "overall_similarity",
-            "common_themes",
-            "unique_to_doc1",
-            "unique_to_doc2",
-            "conflicts",
-            "tone_comparison",
-            "recommendation"
-        ]
+        }
     }
 }
