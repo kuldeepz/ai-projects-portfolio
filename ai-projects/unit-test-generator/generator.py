@@ -4,6 +4,7 @@ Reads a Python source file and generates comprehensive pytest unit tests,
 including happy paths, edge cases, and error conditions.
 """
 
+import argparse
 import os
 import sys
 import ast
@@ -26,6 +27,7 @@ VERBOSE = False
 
 _client = None
 
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -33,18 +35,20 @@ def get_client() -> OpenAI:
     return _client
 
 
-def validate_environment():
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate unit tests for a Python source file.")
+    parser.add_argument("source_file", help="Path to the Python source file")
+    parser.add_argument("--framework", choices=["pytest", "unittest"], default="pytest")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    return parser.parse_args()
+
+
+def validate_environment(source_path: str):
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
         sys.exit(1)
 
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python generator.py <source_file.py> [--framework pytest|unittest]")
-        console.print("[dim]Example: python generator.py my_module.py[/dim]")
-        sys.exit(1)
-
-    source_path = sys.argv[1]
     path = Path(source_path)
     if not path.exists():
         console.print(f"[red]File not found:[/red] {source_path}")
@@ -170,73 +174,14 @@ def display_summary(result: dict, output_file: str):
     covered_text = "\n".join(f"  [green]✔[/green] {fn}" for fn in result["functions_covered"])
     console.print(Panel(covered_text, title="[bold green]Functions Covered[/bold green]", border_style="green"))
 
-    # Coverage notes
-    console.print(Panel(
-        result["coverage_notes"],
-        title="[bold]Coverage Notes[/bold]",
-        border_style="dim"
-    ))
-
-    # Setup requirements
-    if result.get("setup_requirements"):
-        reqs = "\n".join(f"  [yellow]pip install[/yellow] {r}" for r in result["setup_requirements"])
-        console.print(Panel(reqs, title="[bold yellow]Additional Requirements[/bold yellow]", border_style="yellow"))
-
-    console.print()
-
 
 def main():
     global VERBOSE
-    VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
+    args = parse_args()
+    VERBOSE = args.verbose
+    source_path = args.source_file
 
-    validate_environment()
-
-    source_path = sys.argv[1]
-    framework = "pytest"
-    if "--framework" in sys.argv:
-        idx = sys.argv.index("--framework")
-        framework = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else "pytest"
-
-    if not os.path.exists(source_path):
-        console.print(f"[red]File not found:[/red] {source_path}")
-        sys.exit(1)
-
-    with open(source_path, "r", encoding="utf-8") as f:
-        source_code = f.read()
-
-    if not source_code.strip():
-        console.print("[red]Source file is empty.[/red]")
-        sys.exit(1)
-
-    if len(source_code) > 8000:
-        console.print("[yellow]Source truncated to 8000 characters.[/yellow]")
-        source_code = source_code[:8000]
-
-    module_name = Path(source_path).stem
-    signatures = extract_function_signatures(source_code)
-
-    console.print(f"\n[cyan]Generating tests for:[/cyan] {source_path}")
-    console.print(f"[cyan]Framework:[/cyan] {framework}")
-    if signatures:
-        console.print(f"[cyan]Detected:[/cyan] {', '.join(signatures[:5])}{'...' if len(signatures) > 5 else ''}")
-
-    with console.status("[bold green]Generating test suite...[/bold green]"):
-        result = generate_tests(source_code, module_name, framework)
-
-    # Write test file
-    output_file = f"test_{module_name}.py"
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(result["test_file_content"])
-
-    display_summary(result, output_file)
-
-    # Show a preview
-    console.print(Panel(
-        Syntax(result["test_file_content"][:2000] + ("\n..." if len(result["test_file_content"]) > 2000 else ""),
-               "python", theme="monokai", line_numbers=True),
-        title=f"[bold]Preview: {output_file}[/bold]",
-        border_style="cyan"
-    ))
+    validate_environment(source_path)
 
 
 if __name__ == "__main__":
