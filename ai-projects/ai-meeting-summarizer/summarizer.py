@@ -133,27 +133,28 @@ NOTES_SCHEMA = {
 
 
 def summarize_transcript(transcript: str) -> dict:
-    response = get_client().chat.completions.create(
-        model=CHAT_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert meeting facilitator and note-taker. "
-                    "Extract structured meeting notes from the provided transcript. "
-                    "Be precise — only include action items, decisions, and blockers that are "
-                    "explicitly stated or clearly implied in the transcript."
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"Summarize this meeting transcript:\n\n{transcript}",
-            },
-        ],
-        tools=[{"type": "function", "function": NOTES_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "meeting_notes"}},
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert meeting facilitator and note-taker. "
+                        "Extract structured meeting notes from the provided transcript. "
+                        "Be precise — only include action items, decisions, and blockers that are "
+                        "explicitly stated or clearly implied in the transcript."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Summarize this meeting transcript:\n\n{transcript}",
+                },
+            ],
+            tools=[{"type": "function", "function": NOTES_SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "meeting_notes"}},
+            temperature=0.2,
+        )
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
@@ -208,28 +209,30 @@ def _parse_args(argv: list[str]) -> tuple[bool, str]:
 def main() -> int:
     export, source = _parse_args(sys.argv[1:])
 
-    if source == "-":
-        transcript = sys.stdin.read().strip()
-        source_path = Path("stdin")
-    else:
-        source_path = Path(source)
-        transcript = source_path.read_text(encoding="utf-8").strip()
+    with console.status("[bold green]Processing..."):
+        if source == "-":
+            transcript = sys.stdin.read().strip()
+            source_path = Path("stdin")
+        else:
+            source_path = Path(source)
+            transcript = source_path.read_text(encoding="utf-8").strip()
 
     notes = summarize_transcript(transcript)
     display_notes(notes)
 
     if export:
-        now = datetime.now()
-        stamp = now.strftime("%Y%m%d_%H%M%S")
-        stem = source_path.stem if source_path.stem else "meeting"
+        with console.status("[bold green]Processing..."):
+            now = datetime.now()
+            stamp = now.strftime("%Y%m%d_%H%M%S")
+            stem = source_path.stem if source_path.stem else "meeting"
 
-        notes_file = Path(f"notes_{stem}_{stamp}.md")
-        notes_md = f"# {notes.get('title', 'Meeting Notes')}\n\n{notes.get('executive_summary', '')}\n"
-        notes_file.write_text(notes_md, encoding="utf-8")
+            notes_file = Path(f"notes_{stem}_{stamp}.md")
+            notes_md = f"# {notes.get('title', 'Meeting Notes')}\n\n{notes.get('executive_summary', '')}\n"
+            notes_file.write_text(notes_md, encoding="utf-8")
 
-        export_file = Path(f"output_{stamp}.json")
-        export_payload = {**notes, "generated_at": now.isoformat()}
-        export_file.write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
+            export_file = Path(f"output_{stamp}.json")
+            export_payload = {**notes, "generated_at": now.isoformat()}
+            export_file.write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
 
     return 0
 
