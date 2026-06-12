@@ -8,8 +8,10 @@ import os, sys, json, hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from collections.abc import Mapping
 from dotenv import load_dotenv
 from openai import OpenAI
+from openai.types.chat import ChatCompletion
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -28,7 +30,7 @@ def get_client() -> OpenAI:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def call_openai(input_content: str, temperature: float = 0.3) -> Any:
+def call_openai(input_content: str, temperature: float = 0.3) -> ChatCompletion:
     if VERBOSE:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input chars:[/dim] {len(input_content)}")
@@ -45,7 +47,7 @@ def call_openai(input_content: str, temperature: float = 0.3) -> Any:
         print_usage(response)
     return response
 
-def print_usage(response: Any) -> None:
+def print_usage(response: ChatCompletion) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -84,17 +86,17 @@ def validate_environment() -> None:
             console.print(f"[red]Error:[/red] File is not readable: {file_arg}")
             sys.exit(1)
 
-def load_library() -> dict:
+def load_library() -> dict[str, Any]:
     if Path(LIBRARY_FILE).exists():
         with open(LIBRARY_FILE) as f:
             return json.load(f)
     return {"prompts": {}}
 
-def save_library(lib: dict) -> None:
+def save_library(lib: dict[str, Any]) -> None:
     with open(LIBRARY_FILE, "w") as f:
         json.dump(lib, f, indent=2)
 
-def export_results(results: dict) -> None:
+def export_results(results: Mapping[str, Any]) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"output_{timestamp}.json"
     payload = dict(results)
@@ -103,7 +105,7 @@ def export_results(results: dict) -> None:
         json.dump(payload, f, indent=2)
     console.print(f"[green]Exported results[/green] to [bold]{filename}[/bold]")
 
-def cmd_add(name: str, prompt_text: str, description: str = "", tags: list | None = None) -> None:
+def cmd_add(name: str, prompt_text: str, description: str = "", tags: list[str] | None = None) -> None:
     lib = load_library()
     version_hash = hashlib.md5(prompt_text.encode()).hexdigest()[:8]
     entry = lib["prompts"].get(name, {"name": name, "description": description, "tags": tags or [], "versions": []})
@@ -155,7 +157,4 @@ def cmd_show(name: str) -> None:
                 ))
 
 def cmd_test(name: str, test_input: str) -> str | None:
-    lib = load_library()
-    if name not in lib["prompts"]:
-        console.print(f"[red]Prompt not found:[/red] {name}"); return None
-    en
+    lib = load_li
