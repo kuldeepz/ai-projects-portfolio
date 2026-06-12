@@ -6,7 +6,7 @@ scores outputs, and produces an evaluation report.
 
 import os, json
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -21,6 +21,50 @@ MODEL: str = "gpt-4o-mini"
 _client: OpenAI | None = None
 
 
+class EvalSchema(TypedDict):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class TestCase(TypedDict):
+    id: str
+    input: str
+    expected: str
+
+
+class EvalResult(TypedDict, total=False):
+    score: int
+    correctness: Literal["correct", "partial", "incorrect"]
+    reasoning: str
+    key_missing: list[str]
+    hallucination_detected: bool
+
+
+class Suite(TypedDict):
+    name: str
+    system_prompt: str
+    test_cases: list[TestCase]
+
+
+class EvaluatedCase(TestCase):
+    actual_output: str
+    eval: EvalResult
+
+
+class EvaluationReport(TypedDict):
+    suite_name: str
+    model: str
+    run_at: str
+    avg_score: float
+    total: int
+    correct: int
+    partial: int
+    incorrect: int
+    hallucinations: int
+    results: list[EvaluatedCase]
+
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -28,7 +72,7 @@ def get_client() -> OpenAI:
     return _client
 
 
-EVAL_SCHEMA: dict[str, Any] = {
+EVAL_SCHEMA: EvalSchema = {
     "name": "eval_score",
     "description": "Evaluation of a single model output against expected answer",
     "parameters": {
@@ -47,7 +91,7 @@ EVAL_SCHEMA: dict[str, Any] = {
     },
 }
 
-SAMPLE_SUITE: dict[str, Any] = {
+SAMPLE_SUITE: Suite = {
     "name": "Customer Support Bot Evaluation",
     "system_prompt": "You are a helpful customer support agent for an e-commerce company. Be concise, friendly, and accurate.",
     "test_cases": [
@@ -95,7 +139,7 @@ def run_model(system_prompt: str, user_input: str) -> str:
     return content
 
 
-def _validate_score_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _validate_score_payload(payload: dict[str, Any]) -> EvalResult:
     required_types: dict[str, type] = {
         "score": int,
         "correctness": str,
@@ -120,10 +164,10 @@ def _validate_score_payload(payload: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("Invalid key_missing value")
 
-    return payload
+    return cast(EvalResult, payload)
 
 
-def score_output(actual: str, expected: str, question: str) -> dict[str, Any]:
+def score_output(actual: str, expected: str, question: str) -> EvalResult:
     r = get_client().chat.completions.create(
         model=MODEL,
         messages=[
@@ -152,8 +196,8 @@ def score_output(actual: str, expected: str, question: str) -> dict[str, Any]:
     return _validate_score_payload(parsed)
 
 
-def run_evaluation(suite: dict[str, Any]) -> dict[str, Any]:
-    results: list[dict[str, Any]] = []
+def run_evaluation(suite: Suite) -> EvaluationReport:
+    results: list[EvaluatedCase] = []
     for tc in track(suite["test_cases"], description="Evaluating..."):
         actual = run_model(suite["system_prompt"], tc["input"])
         score_result = score_output(actual, tc["expected"], tc["input"])
@@ -162,6 +206,8 @@ def run_evaluation(suite: dict[str, Any]) -> dict[str, Any]:
     avg_score = sum(r["eval"]["score"] for r in results) / len(results)
     hallucinations = sum(1 for r in results if r["eval"]["hallucination_detected"])
     correct = sum(1 for r in results if r["eval"]["correctness"] == "correct")
+    partial = sum(1 for r in results if r["eval"]["correctness"] == "partial")
+    incorrect = sum(1 for r in results if r["eval"]["correctness"] == "incorrect")
     return {
         "suite_name": suite["name"],
         "model": MODEL,
@@ -169,43 +215,37 @@ def run_evaluation(suite: dict[str, Any]) -> dict[str, Any]:
         "avg_score": round(avg_score, 1),
         "total": len(results),
         "correct": correct,
+        "partial": partial,
+        "incorrect": incorrect,
         "hallucinations": hallucinations,
         "results": results,
     }
 
 
-def display(report: dict[str, Any]) -> None:
-    avg = report["avg_score"]
-    color = "green" if avg >= 80 else "yellow" if avg >= 60 else "red"
-    console.print()
-    console.print(
-        Panel.fit(
-            f"[bold]{report['suite_name']}[/bold]  [dim]({report['model']})[/dim]\n"
-            f"Avg Score: [{color} bold]{avg}/100[/{color} bold]  "
-            f"Correct: [green]{report['correct']}/{report['total']}[/green]  "
-            f"Hallucinations: [{'red' if report['hallucinations'] else 'green'}]{report['hallucinations']}[/{'red' if report['hallucinations'] else 'green'}]",
-            title="[bold cyan]Evaluation Report[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-    t = Table(show_header=True, header_style="bold", show_lines=True)
-    t.add_column("ID", width=7)
-    t.add_column("Question", ratio=2)
-    t.add_column("Score", width=7)
-    t.add_column("Verdict", width=12)
-    t.add_column("Hallucination", width=13)
-    t.add_column("Notes", ratio=2, style="dim")
+def display(report: EvaluationReport) -> None:
+    summary = Table(title="Evaluation Summary")
+    summary.add_column("Metric")
+    summary.add_column("Value")
+    summary.add_row("Suite", report["suite_name"])
+    summary.add_row("Model", report["model"])
+    summary.add_row("Run At", report["run_at"])
+    summary.add_row("Average Score", str(report["avg_score"]))
+    summary.add_row("Total", str(report["total"]))
+    summary.add_row("Correct", str(report["correct"]))
+    summary.add_row("Partial", str(report["partial"]))
+    summary.add_row("Incorrect", str(report["incorrect"]))
+    summary.add_row("Hallucinations", str(report["hallucinations"]))
+    console.print(summary)
+
     for r in report["results"]:
-        e = r["eval"]
-        sc = e["score"]
-        sc_c = "green" if sc >= 80 else "yellow" if sc >= 60 else "red"
-        corr_c = {"correct": "green", "partial": "yellow", "incorrect": "red"}[e["correctness"]]
-        t.add_row(
-            r["id"],
-            r["input"][:50],
-            f"[{sc_c}]{sc}[/{sc_c}]",
-            f"[{corr_c}]{e['correctness']}[/{corr_c}]",
-            "[red]YES[/red]" if e["hallucination_detected"] else "[green]no[/green]",
-            e["reasoning"][:80],
+        console.print(
+            Panel(
+                f"[bold]{r['id']}[/bold]\n"
+                f"Q: {r['input']}\n"
+                f"Expected: {r['expected']}\n"
+                f"Actual: {r['actual_output']}\n"
+                f"Score: {r['eval']['score']} ({r['eval']['correctness']})\n"
+                f"Reasoning: {r['eval']['reasoning']}",
+                title="Test Case",
+            )
         )
-    console.print(Panel(t, title="[bold]Test Case Results[/bold]", border_style="dim"))
