@@ -21,6 +21,15 @@ load_dotenv()
 _client: OpenAI | None = None
 
 
+class EmailOutput(TypedDict):
+    subject: str
+    body: str
+    alternative_subjects: list[str]
+    follow_up_suggestions: list[str]
+    word_count: int
+    tone_notes: str
+
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -44,16 +53,6 @@ TONES: dict[str, tuple[str, str]] = {
     "4": ("empathetic", "Compassionate and understanding — for difficult conversations, apologies"),
     "5": ("persuasive", "Compelling and motivating — for pitches, proposals, calls to action"),
 }
-
-
-class EmailOutput(TypedDict):
-    subject: str
-    body: str
-    alternative_subjects: list[str]
-    follow_up_suggestions: list[str]
-    word_count: int
-    tone_notes: str
-
 
 EMAIL_SCHEMA: dict[str, Any] = {
     "name": "email_output",
