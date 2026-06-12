@@ -159,70 +159,57 @@ def interactive_mode() -> None:
     length = Prompt.ask("Length", choices=["short", "medium", "long"], default="medium")
     email_purpose = Prompt.ask("Purpose (e.g. 'follow up on proposal', 'request meeting')")
     recipient_context = Prompt.ask("Recipient context (e.g. 'my manager', 'a new client')")
-    sender_name = Prompt.ask("Your name")
-
-    console.print("\n[bold]Enter your bullet points[/bold] (one per line, blank line when done):")
-    lines: list[str] = []
-    while True:
-        try:
-            line = input()
-        except EOFError:
-            break
-        if not line.strip():
-            break
-        lines.append(f"• {line.strip()}")
-
-    if not lines:
-        console.print("[red]No bullet points provided.[/red]")
-        sys.exit(1)
-
-    bullet_points = "\n".join(lines)
-
-    with console.status("[bold green]Composing email...[/bold green]"):
-        result = compose_email(bullet_points, tone, length, sender_name, recipient_context, email_purpose)
-
-    display_result(result)
-
-    if Confirm.ask("Save to file?"):
-        filename = f"email_{email_purpose.replace(' ', '_')[:30]}.txt"
-        with open(filename, "w") as f:
-            f.write(f"Subject: {result['subject']}\n\n{result['body']}")
-        console.print(f"[green]Saved to:[/green] {filename}")
 
 
-def cli_mode(args: list[str]) -> None:
-    """Non-interactive CLI mode for scripting."""
-    import argparse
-    parser = argparse.ArgumentParser(description="AI Email Composer")
-    parser.add_argument("points_file", help="Text file with bullet points (one per line)")
-    parser.add_argument("--tone", choices=[v[0] for v in TONES.values()], default="formal")
-    parser.add_argument("--length", choices=["short", "medium", "long"], default="medium")
-    parser.add_argument("--purpose", required=True, help="Purpose of the email")
-    parser.add_argument("--recipient", default="a colleague", help="Recipient context")
-    parser.add_argument("--sender", default="the sender", help="Sender name")
+def _assert_email_result_contract(result: dict[str, Any]) -> None:
+    """Runtime contract check for compose_email structured output."""
+    required_keys = [
+        "subject",
+        "body",
+        "alternative_subjects",
+        "follow_up_suggestions",
+        "word_count",
+        "tone_notes",
+    ]
+    for key in required_keys:
+        if key not in result:
+            raise ValueError(f"Missing required key in email result: {key}")
 
-    parsed = parser.parse_args(args)
+    if not isinstance(result["subject"], str):
+        raise TypeError("email result 'subject' must be str")
+    if not isinstance(result["body"], str):
+        raise TypeError("email result 'body' must be str")
+    if not isinstance(result["word_count"], int):
+        raise TypeError("email result 'word_count' must be int")
+    if not isinstance(result["tone_notes"], str):
+        raise TypeError("email result 'tone_notes' must be str")
 
-    with open(parsed.points_file) as f:
-        bullet_points = "\n".join(f"• {line.strip()}" for line in f if line.strip())
+    if not isinstance(result["alternative_subjects"], list) or not all(
+        isinstance(item, str) for item in result["alternative_subjects"]
+    ):
+        raise TypeError("email result 'alternative_subjects' must be list[str]")
 
-    console.print(f"\n[cyan]Composing[/cyan] {parsed.tone} email for: {parsed.purpose}")
-
-    with console.status("[bold green]Composing...[/bold green]"):
-        result = compose_email(
-            bullet_points, parsed.tone, parsed.length,
-            parsed.sender, parsed.recipient, parsed.purpose
-        )
-
-    display_result(result)
-
-
-def main() -> None:
-    if len(sys.argv) == 1:
-        interactive_mode()
-    else:
-        cli_mode(sys.argv[1:])
+    if not isinstance(result["follow_up_suggestions"], list) or not all(
+        isinstance(item, str) for item in result["follow_up_suggestions"]
+    ):
+        raise TypeError("email result 'follow_up_suggestions' must be list[str]")
 
 
-if __name__ == "__main__":
-    main()
+def _run_contract_tests() -> None:
+    """Lightweight tests for structured return contract."""
+    sample = {
+        "subject": "Project update",
+        "body": "Hi team, here is the latest update...",
+        "alternative_subjects": ["Weekly project update", "Status update"],
+        "follow_up_suggestions": ["Schedule a sync", "Share timeline"],
+        "word_count": 42,
+        "tone_notes": "Professional and concise.",
+    }
+    _assert_email_result_contract(sample)
+
+    parsed = json.loads(json.dumps(sample))
+    _assert_email_result_contract(parsed)
+
+
+if __name__ == "__main__" and "--self-test" in sys.argv:
+    _run_contract_tests()
