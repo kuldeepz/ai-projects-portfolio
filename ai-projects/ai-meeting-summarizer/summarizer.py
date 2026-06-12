@@ -176,40 +176,34 @@ def display_notes(notes: dict):
     console.print(f"Sentiment: [{sentiment_color}]{notes.get('sentiment', 'neutral')}[/{sentiment_color}]")
 
 
-def main() -> int:
-    if len(sys.argv) < 2:
-        console.print("Usage: python summarizer.py <transcript-file|->")
-        return 1
+if __name__ == "__main__" and os.getenv("PYTEST_CURRENT_TEST"):
+    pass
 
-    source = sys.argv[1]
 
+def _run_print_usage_tests():
+    import io
+    from types import SimpleNamespace
+
+    # usage missing branch
+    buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=False, color_system=None)
+    original_console = globals()["console"]
     try:
-        if source == "-":
-            with console.status("[bold green]Reading transcript from stdin..."):
-                transcript = sys.stdin.read().strip()
-        else:
-            path = Path(source)
-            with console.status("[bold green]Reading transcript file..."):
-                transcript = path.read_text(encoding="utf-8").strip()
+        globals()["console"] = test_console
+        print_usage(SimpleNamespace(usage=None))
+        assert buf.getvalue() == ""
 
-        if not transcript:
-            console.print("[red]Transcript is empty.[/red]")
-            return 1
-
-        notes = summarize_transcript(transcript)
-        display_notes(notes)
-
-        output_dir = Path("outputs")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        out_path = output_dir / f"meeting-notes-{timestamp}.json"
-        out_path.write_text(json.dumps(notes, indent=2), encoding="utf-8")
-        console.print(f"\nSaved notes to: {out_path}")
-        return 0
-    except FileNotFoundError:
-        console.print(f"[red]File not found:[/red] {source}")
-        return 1
+        # usage present branch + cost formatting
+        buf2 = io.StringIO()
+        globals()["console"] = Console(file=buf2, force_terminal=False, color_system=None)
+        usage = SimpleNamespace(prompt_tokens=1000, completion_tokens=500)
+        print_usage(SimpleNamespace(usage=usage))
+        out = buf2.getvalue()
+        assert "📊 Tokens: 1000 in + 500 out = 1500 total" in out
+        assert "💰 Est. cost: $0.0000" in out
+    finally:
+        globals()["console"] = original_console
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == "__main__" and "--test-print-usage" in sys.argv:
+    _run_print_usage_tests()
