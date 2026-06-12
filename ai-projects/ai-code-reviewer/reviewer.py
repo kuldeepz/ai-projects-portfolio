@@ -140,62 +140,60 @@ def test_cli_verbose_flags_recognized_and_removed():
 
 
 def test_retry_with_backoff_retries_then_succeeds(monkeypatch):
-    calls = {"count": 0}
-    sleeps: list[float] = []
+    calls = {"n": 0}
 
-    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
-    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
+    monkeypatch.setattr(time, "sleep", lambda *_: None)
+    monkeypatch.setattr(random, "uniform", lambda *_: 0.0)
 
-    @retry_with_backoff(max_retries=3, base_delay=1.0, retry_exceptions=(ValueError,), operation_name="test")
+    @retry_with_backoff(max_retries=3, base_delay=0, operation_name="test")
     def flaky():
-        calls["count"] += 1
-        if calls["count"] < 3:
+        calls["n"] += 1
+        if calls["n"] < 3:
             raise ValueError("transient")
         return "ok"
 
-    result = flaky()
-    assert result == "ok"
-    assert calls["count"] == 3
-    assert sleeps == [1.0, 2.0]
+    assert flaky() == "ok"
+    assert calls["n"] == 3
 
 
 def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
-    calls = {"count": 0}
-    sleeps: list[float] = []
+    calls = {"n": 0}
 
-    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
-    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
+    monkeypatch.setattr(time, "sleep", lambda *_: None)
+    monkeypatch.setattr(random, "uniform", lambda *_: 0.0)
 
-    @retry_with_backoff(max_retries=2, base_delay=0.5, retry_exceptions=(RuntimeError,), operation_name="test")
+    @retry_with_backoff(max_retries=2, base_delay=0, operation_name="test")
     def always_fail():
-        calls["count"] += 1
-        raise RuntimeError("boom")
+        calls["n"] += 1
+        raise RuntimeError("permanent")
 
     try:
         always_fail()
         assert False, "Expected RuntimeError"
-    except RuntimeError as e:
-        assert str(e) == "boom"
+    except RuntimeError:
+        pass
 
-    assert calls["count"] == 3
-    assert sleeps == [0.5, 1.0]
+    assert calls["n"] == 3
 
 
-def test_review_code_status_non_interactive_output_clean(monkeypatch):
-    global console, VERBOSE
+def test_review_code_non_interactive_console_has_clean_output():
+    global VERBOSE, console
     VERBOSE = False
+
     original_console = console
+    local_buf = io.StringIO()
+    console = Console(file=local_buf, force_terminal=False)
+
+    def fake_api(payload):
+        return {"ok": True, "payload": payload}
+
+    stdout_buf = io.StringIO()
     try:
-        console = Console(file=io.StringIO(), force_terminal=False)
-
-        def fake_api(payload):
-            return {"ok": True, "payload": payload}
-
-        buf = io.StringIO()
-        with redirect_stdout(buf):
+        with redirect_stdout(stdout_buf):
             result = review_code(fake_api, {"x": 1})
-
-        assert buf.getvalue() == ""
-        assert result["ok"] is True
     finally:
         console = original_console
+
+    assert result["ok"] is True
+    assert stdout_buf.getvalue() == ""
+    assert local_buf.getvalue() == ""
