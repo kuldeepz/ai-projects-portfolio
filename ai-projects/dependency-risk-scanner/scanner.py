@@ -83,8 +83,8 @@ def parse_requirements(content: str, filename: str) -> str:
     return f"File: {filename}\n\n{content}"
 
 @retry_with_backoff
-def scan(dep_content: str) -> dict:
-    response = get_client().chat.completions.create(
+def _create_scan_response(dep_content: str):
+    return get_client().chat.completions.create(
         model=MODEL,
         messages=[
             {"role": "system", "content": (
@@ -100,6 +100,9 @@ def scan(dep_content: str) -> dict:
         tool_choice={"type": "function", "function": {"name": "dependency_report"}},
         temperature=0.1,
     )
+
+def scan(dep_content: str) -> dict:
+    response = _create_scan_response(dep_content)
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
