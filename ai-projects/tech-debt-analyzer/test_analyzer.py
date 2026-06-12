@@ -44,7 +44,7 @@ def test_collect_code_empty_string_inputs(tmp_path, file_content):
 
 def test_collect_code_none_input():
     """Covers None path input handling for collect_code."""
-    with pytest.raises((TypeError, ValueError, OSError, AttributeError)):
+    with pytest.raises(TypeError):
         collect_code(None)
 
 @pytest.mark.parametrize("max_chars", [0, 1, 10])
@@ -65,4 +65,5 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); sys.exit(1)
+
 
