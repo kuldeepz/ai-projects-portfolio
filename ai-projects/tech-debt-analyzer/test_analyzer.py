@@ -1,5 +1,7 @@
 """Sanity tests for tech-debt-analyzer — no API key required."""
 import sys, os, textwrap, tempfile
+import pytest
+
 sys.path.insert(0, os.path.dirname(__file__))
 from analyzer import SCHEMA, collect_code
 
@@ -30,6 +32,28 @@ def test_collect_code_truncation(tmp_path):
     result = collect_code(str(p), max_chars=100)
     assert len(result) <= 100
     print("  [PASS] Collect code — truncates to max_chars limit")
+
+@pytest.mark.parametrize("file_content", ["", "\n", "   "])
+def test_collect_code_empty_string_inputs(tmp_path, file_content):
+    """Covers empty and whitespace-only file content inputs."""
+    p = tmp_path / "empty_like.py"
+    p.write_text(file_content)
+    result = collect_code(str(p))
+    assert isinstance(result, str)
+
+@pytest.mark.parametrize("path_input", [None])
+def test_collect_code_none_input(path_input):
+    """Covers None path input handling for collect_code."""
+    with pytest.raises((TypeError, ValueError, OSError, AttributeError)):
+        collect_code(path_input)
+
+@pytest.mark.parametrize("max_chars", [0, 1, 10])
+def test_collect_code_boundary_max_chars(tmp_path, max_chars):
+    """Covers boundary max_chars limits including zero and small values."""
+    p = tmp_path / "boundary.py"
+    p.write_text("abcdefghijklmnopqrstuvwxyz")
+    result = collect_code(str(p), max_chars=max_chars)
+    assert len(result) <= max_chars
 
 if __name__ == "__main__":
     import pathlib
