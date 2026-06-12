@@ -7,7 +7,11 @@ Personal AI/ML portfolio — 25 practical tools and agents built with OpenAI GPT
 ```
 ai-projects-portfolio/
 ├── ai-projects/    ← 25 runnable AI/ML Python projects
-└── skills/         ← custom Claude Code / VS Code agent skills (SKILL.md)
+└── skills/         ← 24 pure SKILL.md agent skills (no code, no dependencies)
+    ├── developer/      5 skills  — code-review, write-tests, debug-error, explain-code, refactor-code
+    ├── it-ops/         4 skills  — incident-rca, pipeline-fix, dependency-audit, write-runbook
+    ├── lead/           6 skills  — sprint-plan, pr-review-checklist, adr-create, standup-write, skill-gap-review, release-notes
+    └── code-checks/    9 skills  — async, exceptions, null-safety, types, security, memory, concurrency, dead-code, logging
 ```
 
 ---
@@ -51,11 +55,18 @@ ai-projects-portfolio/
 
 ---
 
-## [skills/](./skills/) — Claude Code Skills
+## [skills/](./skills/) — Agent Skills (24 skills)
 
-Custom SKILL.md files — reusable AI workflows invocable as `/skill-name` in Claude Code or VS Code Copilot Chat.
+Pure SKILL.md files — no code, no dependencies. Invoke as `/skill-name` in Claude Code or any SKILL.md-compatible agent.
 
-> In progress — skills coming soon.
+| Category | Count | Skills |
+|----------|-------|--------|
+| [developer/](./skills/developer/) | 5 | `/code-review` · `/write-tests` · `/debug-error` · `/explain-code` · `/refactor-code` |
+| [it-ops/](./skills/it-ops/) | 4 | `/incident-rca` · `/pipeline-fix` · `/dependency-audit` · `/write-runbook` |
+| [lead/](./skills/lead/) | 6 | `/sprint-plan` · `/pr-review-checklist` · `/adr-create` · `/standup-write` · `/skill-gap-review` · `/release-notes` |
+| [code-checks/](./skills/code-checks/) | 9 | `/async-check` · `/exception-check` · `/null-safety` · `/type-check` · `/security-scan` · `/memory-check` · `/concurrency-check` · `/dead-code` · `/log-check` |
+
+> See [skills/README.md](./skills/README.md) for the full index with descriptions.
 
 ---
 
