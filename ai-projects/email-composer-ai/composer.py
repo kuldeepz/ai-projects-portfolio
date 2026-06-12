@@ -172,22 +172,94 @@ def display_result(result: EmailOutput) -> None:
     alt_text = "\n".join(f"  [dim]{i+1}.[/dim] {s}" for i, s in enumerate(result["alternative_subjects"]))
     console.print(Panel(alt_text, title="[bold]Alternative Subject Lines[/bold]", border_style="dim"))
 
-    follow_text = "\n".join(f"  [cyan]→[/cyan] {s}" for s in result["follow_up_suggestions"])
-    console.print(Panel(follow_text, title="[bold]Follow-up Suggestions[/bold]", border_style="blue"))
 
-    meta_table = Tabl
+class _StatusSpy:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+        self.entered: int = 0
+
+    def __call__(self, message: str):
+        self.messages.append(message)
+        return self
+
+    def __enter__(self):
+        self.entered += 1
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
-def maybe_export_result(result: EmailOutput, export_enabled: bool) -> None:
-    if not export_enabled:
-        return
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"output_{timestamp}.json"
-    payload: dict[str, JSONValue] = {**result, "generated_at": datetime.now().isoformat()}
-    with console.status("[bold green]Processing..."):
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
+def test_compose_email_enters_status_and_returns_output():
+    spy = _StatusSpy()
+
+    class _FakeResponse:
+        class _Choice:
+            class _Message:
+                class _ToolCall:
+                    class _Function:
+                        arguments = json.dumps({
+                            "subject": "s",
+                            "body": "b",
+                            "alternative_subjects": ["a1", "a2"],
+                            "follow_up_suggestions": ["f1", "f2"],
+                            "word_count": 2,
+                            "tone_notes": "t",
+                        })
+                    function = _Function()
+                tool_calls = [_ToolCall()]
+            message = _Message()
+        choices = [_Choice()]
+
+    class _FakeClient:
+        class _Chat:
+            class _Completions:
+                @staticmethod
+                def create(**kwargs):
+                    return _FakeResponse()
+            completions = _Completions()
+        chat = _Chat()
+
+    original_status = console.status
+    original_get_client = globals()["get_client"]
+    try:
+        console.status = spy
+        globals()["get_client"] = lambda: _FakeClient()
+        result = compose_email("pts", "formal", "short", "me", "ctx", "purpose")
+    finally:
+        console.status = original_status
+        globals()["get_client"] = original_get_client
+
+    assert spy.entered == 1
+    assert spy.messages == ["[bold green]Processing..."]
+    assert result["subject"] == "s"
 
 
-if __name__ == "__main__":
-    export_enabled = "--export" in sys.argv or "-e" in sys.argv
+def test_compose_email_status_does_not_swallow_exceptions():
+    spy = _StatusSpy()
+
+    class _FakeClient:
+        class _Chat:
+            class _Completions:
+                @staticmethod
+                def create(**kwargs):
+                    raise RuntimeError("boom")
+            completions = _Completions()
+        chat = _Chat()
+
+    original_status = console.status
+    original_get_client = globals()["get_client"]
+    try:
+        console.status = spy
+        globals()["get_client"] = lambda: _FakeClient()
+        try:
+            compose_email("pts", "formal", "short", "me", "ctx", "purpose")
+            assert False, "Expected RuntimeError"
+        except RuntimeError as exc:
+            assert str(exc) == "boom"
+    finally:
+        console.status = original_status
+        globals()["get_client"] = original_get_client
+
+    assert spy.entered == 1
+    assert spy.messages == ["[bold green]Processing..."]
