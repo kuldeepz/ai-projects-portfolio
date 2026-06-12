@@ -5,6 +5,7 @@ deprecated, or vulnerable packages and recommends upgrades.
 """
 
 import os, sys, json, re, time
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import (
@@ -52,7 +53,19 @@ def validate_environment():
         print("Error: OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
         sys.exit(1)
 
-    file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    args = sys.argv[1:]
+    file_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--export", "-e"):
+            i += 1
+            continue
+        if arg.startswith("-"):
+            i += 1
+            continue
+        file_args.append(arg)
+        i += 1
     for file_arg in file_args:
         p = Path(file_arg)
         if not p.exists():
@@ -191,3 +204,17 @@ def display(report: dict):
             c = RISK_COLORS.get(p["risk"], "white")
             icon = RISK_ICONS.get(p["risk"], "")
             upgrade = f"→ {p['upgrade_to']}" if p.get("upgrade_to") else ""
+
+
+def export_report(report: dict):
+    generated_at = datetime.now().isoformat()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    payload = dict(report)
+    payload["generated_at"] = generated_at
+    filename = f"output_{timestamp}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+if __name__ == "__main__":
+    export_enabled = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
