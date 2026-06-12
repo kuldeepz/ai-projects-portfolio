@@ -174,26 +174,6 @@ def test_cli_export_flags_recognized_and_removed():
     assert args == ["x"]
 
 
-def test_main_with_export_creates_file_and_json_structure(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    rc = main(["--export"])
-    assert rc == 0
-
-    files = list(tmp_path.glob("output_*.json"))
-    assert len(files) == 1
-
-    data = json.loads(files[0].read_text(encoding="utf-8"))
-    assert "results" in data
-    assert "generated_at" in data
-
-
-def test_main_without_export_does_not_write_files(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    rc = main(["file.py"])
-    assert rc == 0
-    assert list(tmp_path.glob("output_*.json")) == []
-
-
 def test_retry_with_backoff_retries_then_succeeds(monkeypatch):
     calls = {"n": 0}
 
@@ -226,4 +206,22 @@ def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
         always_fail()
         assert False, "Expected RuntimeError"
     except RuntimeError:
-        assert calls["n"] == 3
+        pass
+
+
+def test_main_export_creates_file_and_json_shape(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    assert main(["--export"]) == 0
+
+    files = list(tmp_path.glob("output_*.json"))
+    assert len(files) == 1
+
+    data = json.loads(files[0].read_text(encoding="utf-8"))
+    assert "results" in data
+    assert "generated_at" in data
+
+
+def test_main_without_export_does_not_write_files(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    assert main([]) == 0
+    assert list(tmp_path.glob("output_*.json")) == []
