@@ -6,6 +6,7 @@ Extracts skills, identifies gaps, scores the resume, and gives improvement sugge
 import os
 import sys
 import json
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,6 +20,22 @@ from rich.text import Text
 load_dotenv()
 
 _client = None
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if i == len(delays) - 1:
+                    break
+                time.sleep(delay)
+        raise last_exception
+    return wrapper
 
 
 def get_client() -> OpenAI:
@@ -131,6 +148,7 @@ def load_resume(path: str) -> str:
         sys.exit(1)
 
 
+@retry_with_backoff
 def analyze_resume(resume_text: str, target_role: str = "") -> dict:
     """Call GPT with function calling to get structured resume analysis."""
     role_context = f"\nTarget role: {target_role}" if target_role else ""
