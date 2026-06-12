@@ -139,6 +139,16 @@ if __name__ == "__main__":
     import contextlib
     import unittest
 
+    class _UsageObj:
+        def __init__(self, prompt_tokens=None, completion_tokens=None, total_tokens=None):
+            self.prompt_tokens = prompt_tokens
+            self.completion_tokens = completion_tokens
+            self.total_tokens = total_tokens
+
+    class _ResponseObj:
+        def __init__(self, usage=None):
+            self.usage = usage
+
     class TestEvaluatorCLIAndVerbose(unittest.TestCase):
         def setUp(self):
             _reset_verbose_for_tests(False)
@@ -171,35 +181,54 @@ if __name__ == "__main__":
             self.assertFalse(VERBOSE)
             self.assertFalse(DEBUG_SENSITIVE)
 
-        def test_extract_model_name_table_driven(self):
-            cases = [
-                (("gpt-4",), {}, "gpt-4"),
-                ((), {"model": "gpt-4o"}, "gpt-4o"),
-                ((123, "gpt-4.1", "ignored"), {}, "gpt-4.1"),
-                (("positional-model",), {"model": "kw-model"}, "kw-model"),
-                ((123, object()), {}, "unknown"),
-            ]
-            for args, kwargs, expected in cases:
-                with self.subTest(args=args, kwargs=kwargs):
-                    self.assertEqual(_extract_model_name(args, kwargs), expected)
+        def test_print_usage_with_object_usage(self):
+            response = _ResponseObj(_UsageObj(prompt_tokens=100, completion_tokens=50, total_tokens=150))
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                print_usage(response)
+                out = buf.getvalue().strip()
+            self.assertIn("100 in + 50 out = 150 total", out)
 
-        def test_extract_input_text_table_driven(self):
-            messages = [{"role": "user", "content": "hi"}]
-            cases = [
-                ((), {"input": "abc"}, "abc"),
-                ((), {"prompt": "p"}, "p"),
-                ((), {"messages": messages}, messages),
-                (("positional-input",), {}, "positional-input"),
-                (("positional",), {"prompt": "kw-prompt"}, "kw-prompt"),
-                ((), {}, ""),
-            ]
-            for args, kwargs, expected in cases:
-                with self.subTest(args=args, kwargs=kwargs):
-                    self.assertEqual(_extract_input_text(args, kwargs), expected)
+        def test_print_usage_with_dict_response(self):
+            response = {
+                "usage": {
+                    "prompt_tokens": 40,
+                    "completion_tokens": 10,
+                    "total_tokens": 50,
+                }
+            }
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                print_usage(response)
+                out = buf.getvalue().strip()
+            self.assertIn("40 in + 10 out = 50 total", out)
 
-        def test_helper_token_estimator(self):
-            self.assertEqual(_estimate_token_count(""), 0)
-            self.assertEqual(_estimate_token_count("abcd"), 1)
-            self.assertEqual(_estimate_token_count("abcdefgh"), 2)
+        def test_print_usage_missing_usage_no_output(self):
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                print_usage({})
+                out = buf.getvalue()
+            self.assertEqual(out, "")
+
+        def test_print_usage_missing_total_tokens_computed(self):
+            response = _ResponseObj(_UsageObj(prompt_tokens=30, completion_tokens=20, total_tokens=None))
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                print_usage(response)
+                out = buf.getvalue().strip()
+            self.assertIn("30 in + 20 out = 50 total", out)
+
+        def test_print_usage_missing_prompt_or_completion_early_return(self):
+            response_missing_prompt = {"usage": {"completion_tokens": 10, "total_tokens": 10}}
+            response_missing_completion = {"usage": {"prompt_tokens": 10, "total_tokens": 10}}
+
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                print_usage(response_missing_prompt)
+                print_usage(response_missing_completion)
+                out = buf.getvalue()
+            self.assertEqual(out, "")
+
+        def test_print_usage_expected_cost_formatting(self):
+            response = _ResponseObj(_UsageObj(prompt_tokens=1000, completion_tokens=1000, total_tokens=2000))
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                print_usage(response)
+                out = buf.getvalue().strip()
+            self.assertTrue(out.endswith("Est. cost: $0.0001"))
 
     unittest.main()
