@@ -9,6 +9,7 @@ import sys
 import json
 import csv
 import io
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -31,6 +32,22 @@ def get_client() -> OpenAI:
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                if attempt == len(delays):
+                    raise
+                time.sleep(delays[attempt])
+        raise last_exc
+    return wrapper
 
 
 SENTIMENT_SCHEMA = {
@@ -89,6 +106,7 @@ SENTIMENT_SCHEMA = {
 }
 
 
+@retry_with_backoff
 def analyze_sentiment(text: str) -> dict:
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
