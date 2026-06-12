@@ -93,6 +93,27 @@ SAMPLE_DATA = {
     ]
 }
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Setup error:[/red] OPENAI_API_KEY is not set or is empty.")
+        console.print("Set it in your environment or .env file and try again.")
+        sys.exit(1)
+
+    if len(sys.argv) >= 2:
+        path = sys.argv[1]
+        if not os.path.exists(path):
+            console.print(f"[red]Setup error:[/red] File not found: {path}")
+            sys.exit(1)
+        if not os.path.isfile(path):
+            console.print(f"[red]Setup error:[/red] Not a file: {path}")
+            sys.exit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"[red]Setup error:[/red] File is not readable: {path}")
+            sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
 def analyze_gaps(data: dict) -> dict:
     response = get_client().chat.completions.create(
         model=MODEL,
@@ -161,6 +182,7 @@ def display(data: dict, report: dict):
     console.print()
 
 def main():
+    validate_environment()
     if len(sys.argv) < 2:
         console.print("[dim]No file provided — using sample team data...[/dim]\n")
         data = SAMPLE_DATA
