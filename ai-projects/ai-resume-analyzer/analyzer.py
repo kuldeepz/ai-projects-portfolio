@@ -172,44 +172,10 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict:
                 "role": "system",
                 "content": (
                     "You are an expert resume reviewer and career coach with 15+ years of experience "
-                    "in technical recruiting. Analyze resumes critically and provide honest, actionable feedback."
-                )
-            },
-            {
-                "role": "user",
-                "content": f"Analyze this resume:{role_context}\n\n{resume_text}"
+                    "in techn"
+                ),
             }
         ],
-        tools=[{"type": "function", "function": ANALYSIS_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "resume_analysis"}},
-        temperature=0.3,
     )
     print_usage(response)
-
-    tool_call = response.choices[0].message.tool_calls[0]
-    return json.loads(tool_call.function.arguments)
-
-
-def score_color(score: int) -> str:
-    if score >= 80:
-        return "green"
-    elif score >= 60:
-        return "yellow"
-    return "red"
-
-
-def display_results(analysis: dict):
-    console.print()
-    console.print(Panel.fit(
-        f"[bold white]{analysis['candidate_name']}[/bold white]\n"
-        f"[dim]{analysis['current_role']} · {analysis['years_experience']} yrs exp[/dim]",
-        title="[bold cyan]Resume Analysis Report[/bold cyan]",
-        border_style="cyan"
-    ))
-
-    # Scores
-    score_table = Table(show_header=False, box=None, padding=(0, 2))
-    score_table.add_column(style="dim")
-
-
-
+    return {}
