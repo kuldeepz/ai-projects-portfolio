@@ -26,10 +26,8 @@ def test_version_format():
 )
 def test_empty_string_inputs(value):
     """Covers empty-string-like inputs for required text fields."""
-    fields = ["version", "headline", "executive_summary", "full_markdown"]
-    for field in fields:
-        assert isinstance(value, str)
-        assert value.strip() == ""
+    assert isinstance(value, str)
+    assert value.strip() == ""
 
 @pytest.mark.parametrize(
     "value",
