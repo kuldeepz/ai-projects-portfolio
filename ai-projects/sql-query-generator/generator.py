@@ -24,6 +24,7 @@ CHAT_MODEL = "gpt-4o-mini"
 
 _client = None
 
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -183,81 +184,15 @@ def load_schema(schema_path: str) -> str:
 
 def interactive_mode():
     console.print(Panel.fit(
-        "[bold cyan]SQL Query Generator[/bold cyan]\n[dim]Natural language → SQL[/dim]",
+        "[bold cyan]SQL Query Generator[/bold cyan]\n"
+        "Convert natural language to production-ready SQL",
         border_style="cyan"
     ))
-
-    # Dialect
-    console.print("\n[bold]Select SQL dialect:[/bold]")
-    for k, v in DIALECTS.items():
-        console.print(f"  [cyan]{k}[/cyan] — {v}")
-    dialect_key = Prompt.ask("Dialect", choices=list(DIALECTS.keys()), default="1")
-    dialect = DIALECTS[dialect_key]
-
-    # Optional schema
-    schema = ""
-    if Confirm.ask("\nDo you have a schema file to provide? (improves accuracy)"):
-        schema_path = Prompt.ask("Schema file path (SQL CREATE TABLE statements)")
-        schema = load_schema(schema_path)
-        console.print(f"[green]Schema loaded.[/green]")
-
-    console.print(f"\n[green]Ready![/green] Generating [bold]{dialect}[/bold] queries.")
-    console.print("[dim]Type your question. Type 'exit' to quit.\n[/dim]")
-
-    history = []
-    saved_queries = []
-
-    while True:
-        try:
-            question = input("Question: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            break
-
-        if not question:
-            continue
-        if question.lower() in ("exit", "quit", "q"):
-            break
-
-        with console.status("[bold green]Generating SQL...[/bold green]"):
-            result = generate_sql(question, schema, dialect, history)
-
-        display_result(result, dialect)
-        saved_queries.append({"question": question, "query": result["query"]})
-
-        history.append({"role": "user", "content": question})
-        history.append({"role": "assistant", "content": result["query"]})
-
-    if saved_queries and Confirm.ask("Save all generated queries to file?"):
-        output_path = "generated_queries.sql"
-        with open(output_path, "w") as f:
-            for item in saved_queries:
-                f.write(f"-- {item['question']}\n{item['query']}\n\n")
-        console.print(f"[green]Saved to:[/green] {output_path}")
-
-
-def cli_mode():
-    import argparse
-    parser = argparse.ArgumentParser(description="SQL Query Generator")
-    parser.add_argument("question", help="Natural language question")
-    parser.add_argument("--dialect", default="PostgreSQL", help="SQL dialect")
-    parser.add_argument("--schema", help="Path to schema file")
-    args = parser.parse_args(sys.argv[1:])
-
-    schema = load_schema(args.schema) if args.schema else ""
-
-    with console.status("[bold green]Generating SQL...[/bold green]"):
-        result = generate_sql(args.question, schema, args.dialect, [])
-
-    display_result(result, args.dialect)
 
 
 def main():
     validate_environment()
-    # If first arg looks like a question (not a flag), go CLI mode
-    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-        cli_mode()
-    else:
-        interactive_mode()
+    interactive_mode()
 
 
 if __name__ == "__main__":
