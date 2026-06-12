@@ -175,31 +175,4 @@ SENTIMENT_ICONS = {
     "mixed": "🤔"
 }
 
-INTENSITY_COLORS = {"low": "dim", "medium": "yellow", "high": "bold red"}
-
-
-def score_bar(score: float) -> str:
-    # score is -1 to 1, map to 0-20 bar
-    normalized = int((score + 1) / 2 * 20)
-    bar = "░" * normalized + "─" * (20 - normalized)
-    color = "green" if score > 0.2 else "red" if score < -0.2 else "blue"
-    return f"[{color}]{bar}[/{color}] [{color} bold]{score:+.2f}[/{color} bold]"
-
-
-def display_single(result: dict, text: str):
-    sentiment = result["sentiment"]
-    color = SENTIMENT_COLORS[sentiment]
-    icon = SENTIMENT_ICONS[sentiment]
-
-    console.print()
-    console.print(Panel.fit(
-        f"[{color} bold]{icon} {sentiment.upper()}[/{color} bold]\n"
-        f"Score: {score_bar(result['score'])}\n"
-        f"[dim]Confidence: {result['confidence']}%[/dim]",
-        title="[bold cyan]Sentiment Analysis[/bold cyan]",
-        border_style="cyan"
-    ))
-
-    # Text preview
-    preview = text[:200] + "..." if len(text) > 200 else text
-    console.print(Panel(f"[dim italic]{preview}[/dim italic]", title="[bold]Input Text[/bold]", border_style="dim"))
+INTENSITY_COLORS = {"low": "dim", "medium": "yellow", "high": "red"}
