@@ -134,47 +134,33 @@ def validate_environment():
         console.print("[red]Error:[/red] Missing required file or directory path argument.")
         sys.exit(1)
 
-    path_args = []
-    args = sys.argv[1:]
-    skip_next = False
-    for i, arg in enumerate(args):
-        if skip_next:
-            skip_next = False
+    out_path = None
+    path_arg = None
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        if arg == "--out":
+            if i + 1 >= len(sys.argv):
+                console.print("[red]Error:[/red] --out flag requires an output file path.")
+                sys.exit(1)
+            out_path = sys.argv[i + 1]
+            i += 2
             continue
-        if arg in ("--out",):
-            if i + 1 < len(args):
-                path_args.append(args[i + 1])
-                skip_next = True
-            continue
-        if arg.startswith("-"):
-            continue
-        if i == 0:
-            path_args.append(arg)
+        if path_arg is None:
+            path_arg = arg
+        i += 1
 
-    for path_str in path_args:
-        p = Path(path_str)
-        if not p.exists():
-            console.print(f"[red]Error:[/red] Path does not exist: {path_str}")
-            sys.exit(1)
-        if not os.access(p, os.R_OK):
-            console.print(f"[red]Error:[/red] Path is not readable: {path_str}")
-            sys.exit(1)
-
-    console.print("[green]Setup OK ✓[/green]")
-
-def main():
-    validate_environment()
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export json] [--out <file>]")
-        console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export json --out report.json[/dim]")
+    if not path_arg:
+        console.print("[red]Error:[/red] Missing required file or directory path argument.")
         sys.exit(1)
 
-    args = sys.argv[1:]
-    export_format = None
-    output_path = None
+    p = Path(path_arg)
+    if not p.exists():
+        console.print(f"[red]Error:[/red] Path does not exist: {path_arg}")
+        sys.exit(1)
 
-    if "--export" in args or "-e" in args:
-        pass
+    if not os.access(p, os.R_OK):
+        console.print(f"[red]Error:[/red] Path is not readable: {path_arg}")
+        sys.exit(1)
 
-    target = args[0]
-    context = " ".join(args[1:]) if len(args) > 1 else ""
+    return path_arg, out_path
