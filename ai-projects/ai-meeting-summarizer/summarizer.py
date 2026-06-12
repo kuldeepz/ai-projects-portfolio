@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, ParamSpec, Protocol, TypeVar
 
 from openai import OpenAI
 from rich.console import Console
@@ -11,9 +11,18 @@ from rich.console import Console
 console = Console()
 _client: OpenAI | None = None
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-def retry_with_backoff(func: Any) -> Any:
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+
+class PathConfigLike(Protocol):
+    input_path: str | Path | None
+    output_path: str | Path | None
+    template_path: str | Path | None
+
+
+def retry_with_backoff(func: Callable[P, R]) -> Callable[P, R]:
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         delays = [1, 2, 4]
         for attempt in range(len(delays) + 1):
             try:
@@ -34,7 +43,7 @@ def get_client() -> OpenAI:
     return _client
 
 
-def validate_paths(config: Any) -> list[Path]:
+def validate_paths(config: PathConfigLike) -> list[Path]:
     paths_to_check: list[str | Path] = []
 
     for attr in ("input_path", "output_path", "template_path"):
