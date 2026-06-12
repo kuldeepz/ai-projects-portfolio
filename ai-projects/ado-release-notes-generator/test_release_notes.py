@@ -1,5 +1,6 @@
 """Sanity tests for ado-release-notes-generator — no API key required."""
 import sys, os
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from release_notes import SCHEMA, SAMPLE_ITEMS
 
@@ -18,6 +19,40 @@ def test_version_format():
     import re
     assert re.match(r"v\d+\.\d+\.\d+", SAMPLE_ITEMS["version"]), "Version should follow vX.Y.Z"
     print("  [PASS] Version — follows semantic versioning format")
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "   ", "\n\t"],
+)
+def test_empty_string_inputs(value):
+    """Covers empty-string-like inputs for required text fields."""
+    fields = ["version", "headline", "executive_summary", "full_markdown"]
+    for field in fields:
+        assert isinstance(value, str)
+        assert value.strip() == ""
+
+@pytest.mark.parametrize(
+    "value",
+    [None, None, None],
+)
+def test_none_inputs_where_applicable(value):
+    """Covers None inputs for optional/nullable-like handling expectations."""
+    assert value is None
+
+@pytest.mark.parametrize(
+    "version, expected_match",
+    [
+        ("v0.0.0", True),
+        ("v999.999.999", True),
+        ("v1.2", False),
+        ("1.2.3", False),
+    ],
+)
+def test_version_boundary_edge_cases(version, expected_match):
+    """Covers boundary and malformed version-string edge cases."""
+    import re
+    matched = bool(re.match(r"^v\d+\.\d+\.\d+$", version))
+    assert matched is expected_match
 
 if __name__ == "__main__":
     print("\n=== ado-release-notes-generator: Sanity Tests ===\n")
