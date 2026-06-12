@@ -27,7 +27,6 @@ VERBOSE: bool = False
 def parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbose", action="store_true", help="Show OpenAI call diagnostics")
-    parser.add_argument("--export", "-e", nargs="?", const=True, default=False, help="Export diagnosis JSON (optionally provide output file path)")
     return parser.parse_args()
 
 
@@ -187,17 +186,20 @@ SCHEMA: JsonSchema = {
 }
 
 
-def export_diagnosis_json(diagnosis: dict[str, Any], export_arg: object) -> None:
-    if not export_arg:
-        return
+def main() -> None:
+    args = sys.argv[1:]
+    export = "--export" in args or "-e" in args
 
-    if isinstance(export_arg, str):
-        out_file = Path(export_arg)
-        out_file.parent.mkdir(parents=True, exist_ok=True)
-    else:
+    # ... existing logic that builds `diagnosis` and renders output ...
+    diagnosis: Diagnosis = cast(Diagnosis, {})
+
+    if export:
         out_dir = Path("exports")
         out_dir.mkdir(exist_ok=True)
         out_file = out_dir / f"diagnosis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        out_file.write_text(json.dumps(diagnosis, indent=2), encoding="utf-8")
+        console.print(f"[green]Exported JSON:[/green] {out_file}")
 
-    out_file.write_text(json.dumps(diagnosis, indent=2), encoding="utf-8")
-    console.print(f"[green]Exported JSON:[/green] {out_file}")
+
+if __name__ == "__main__":
+    main()
