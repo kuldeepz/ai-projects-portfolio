@@ -168,3 +168,68 @@ def generate_tests(source_code: str, module_name: str, framework: str = "pytest"
     )
     print_usage(response)
     elapsed = time.time() - sta
+
+
+# -----------------------
+# Unit tests for print_usage
+# -----------------------
+
+def test_print_usage_with_no_usage_prints_nothing(monkeypatch):
+    calls = []
+
+    def fake_print(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(console, "print", fake_print)
+
+    class Response:
+        usage = None
+
+    print_usage(Response())
+    assert calls == []
+
+
+def test_print_usage_with_normal_usage_prints_tokens_and_cost(monkeypatch):
+    calls = []
+
+    def fake_print(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(console, "print", fake_print)
+
+    class Usage:
+        prompt_tokens = 1000
+        completion_tokens = 500
+        total_tokens = 1500
+
+    class Response:
+        usage = Usage()
+
+    print_usage(Response())
+
+    assert len(calls) == 1
+    printed = calls[0][0][0]
+    assert "1000 in + 500 out = 1500 total" in printed
+    assert "Est. cost: $0.0000" in printed
+
+
+def test_print_usage_with_missing_fields_defaults_to_zero(monkeypatch):
+    calls = []
+
+    def fake_print(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(console, "print", fake_print)
+
+    class Usage:
+        pass
+
+    class Response:
+        usage = Usage()
+
+    print_usage(Response())
+
+    assert len(calls) == 1
+    printed = calls[0][0][0]
+    assert "0 in + 0 out = 0 total" in printed
+    assert "Est. cost: $0.0000" in printed
