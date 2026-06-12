@@ -100,7 +100,7 @@ def create_adr(discussion: str, adr_number: str = "001") -> dict:
         console.print(f"[dim]Input tokens (est):[/dim] {max(1, len(prompt) // 4)}")
         console.print("⏳ Calling OpenAI API...")
         start = time.perf_counter()
-    with console.status("[bold green]Processing...[/bold green]"):
+    with console.status("[bold green]Calling OpenAI to generate ADR...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -133,6 +133,4 @@ def main():
     VERBOSE = ns.verbose
 
     if not ns.file:
-        console.print("[dim]No file provided — using sample discussion...[/dim]\n")
-        discussion = SAMPLE_DISCUSSION
-        adr_num = ""
+        console.print("[dim]No file provided — using sample discussion...[/dim]")
