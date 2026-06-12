@@ -3,7 +3,7 @@ import sys, os
 import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from sprint_planner import SCHEMA, SAMPLE_BACKLOG
+from sprint_planner import SCHEMA, SAMPLE_BACKLOG, is_capacity_valid
 
 def test_schema():
     required = SCHEMA["parameters"]["required"]
@@ -12,7 +12,10 @@ def test_schema():
     print("  [PASS] Schema — required fields present")
 
 def test_sample_backlog_integrity():
-    assert SAMPLE_BACKLOG["team"]["capacity_this_sprint"] <= SAMPLE_BACKLOG["team"]["velocity"] * 1.2
+    assert is_capacity_valid(
+        SAMPLE_BACKLOG["team"]["velocity"],
+        SAMPLE_BACKLOG["team"]["capacity_this_sprint"],
+    )
     total_available = sum(i["story_points"] for i in SAMPLE_BACKLOG["items"])
     assert total_available > SAMPLE_BACKLOG["team"]["capacity_this_sprint"], "Backlog should exceed capacity"
     print("  [PASS] Sample backlog — more items than capacity (requires selection logic)")
@@ -55,7 +58,7 @@ def test_none_inputs_where_applicable(value):
 )
 def test_capacity_boundary_cases(velocity, capacity, expected):
     """Covers edge boundaries for capacity relative to 120% of velocity."""
-    assert (capacity <= velocity * 1.2) is expected
+    assert is_capacity_valid(velocity, capacity) is expected
 
 
 if __name__ == "__main__":
