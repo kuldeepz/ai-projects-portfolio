@@ -1,23 +1,13 @@
 ...
 
-def validate_environment():
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.strip():
-        console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
-        sys.exit(1)
+def validate_environment(schema_paths=None, require_api_key=True):
+    if require_api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or not api_key.strip():
+            console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
+            sys.exit(1)
 
-    file_paths = []
-    args = sys.argv[1:]
-
-    for arg in args:
-        if arg.startswith("--schema="):
-            file_paths.append(arg.split("=", 1)[1])
-
-    for i, arg in enumerate(args):
-        if arg == "--schema" and i + 1 < len(args):
-            file_paths.append(args[i + 1])
-
-    for path_str in file_paths:
+    for path_str in schema_paths or []:
         path = Path(path_str)
         if not path.exists():
             console.print(f"[red]File not found:[/red] {path_str}")
