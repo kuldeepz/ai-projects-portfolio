@@ -4,6 +4,7 @@ Compares two documents (text or PDF) and identifies differences,
 similarities, conflicts, and produces a structured diff report.
 """
 
+import argparse
 import os
 import sys
 import json
@@ -92,8 +93,12 @@ def validate_environment() -> None:
     if not api_key or not api_key.strip():
         raise StartupValidationError("Missing OPENAI_API_KEY. Set it in your environment or .env file.")
 
-    file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
-    for file_path in file_args:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("doc1")
+    parser.add_argument("doc2")
+    args, _ = parser.parse_known_args(sys.argv[1:])
+
+    for file_path in (args.doc1, args.doc2):
         path = Path(file_path)
         if not path.exists():
             raise StartupValidationError(f"File not found: {file_path}")
@@ -179,4 +184,4 @@ def parse_response(response) -> dict:
     message = response.choices[0].message
 
     if getattr(message, "tool_calls", None):
-        tool_call = message.tool_calls[0]
+        tool_call = message.t
