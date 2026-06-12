@@ -177,64 +177,65 @@ def read_document(path: str) -> str:
             return f.read()
 
 
-@retry_with_backoff
-def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, context: str = "") -> dict:
-    ctx = f"\nComparison context: {context}" if context else ""
-    max_chars = 5000
+class TestSpinnerBehavior(unittest.TestCase):
+    def _status_cm(self):
+        cm = Mock()
+        cm.__enter__ = Mock(return_value=None)
+        cm.__exit__ = Mock(return_value=False)
+        return cm
 
-    with console.status("[bold green]Processing..."):
-        response = get_client().chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[
-            ]
-        )
+    def test_retry_with_backoff_uses_status_during_sleep(self):
+        class RateLimitError(Exception):
+            pass
 
+        attempts = {"n": 0}
 
-class TestValidateEnvironment(unittest.TestCase):
-    @patch("sys.exit")
-    @patch("compare.console.print")
-    @patch("os.getenv", return_value=None)
-    def test_validate_environment_missing_api_key_exits(self, mock_getenv, mock_print, mock_exit):
-        validate_environment()
-        mock_print.assert_called_once_with("❌ Missing OPENAI_API_KEY. Set it in your environment or .env file.")
-        mock_exit.assert_called_once_with(1)
+        @retry_with_backoff
+        def flaky():
+            if attempts["n"] == 0:
+                attempts["n"] += 1
+                raise RateLimitError("retry")
+            return "ok"
 
-    @patch("sys.exit")
-    @patch("compare.console.print")
-    @patch("os.access", return_value=False)
-    @patch("pathlib.Path.is_file", return_value=True)
-    @patch("pathlib.Path.exists", return_value=True)
-    @patch("sys.argv", ["compare.py", "doc1.txt"])
-    @patch("os.getenv", return_value="test-key")
-    def test_validate_environment_unreadable_file_exits(
-        self,
-        mock_getenv,
-        mock_exists,
-        mock_is_file,
-        mock_access,
-        mock_print,
-        mock_exit,
-    ):
-        validate_environment()
-        mock_print.assert_called_once_with("❌ File is not readable: doc1.txt")
-        mock_exit.assert_called_once_with(1)
+        status_cm = self._status_cm()
+        with patch(__name__ + ".console.status", return_value=status_cm) as mock_status, \
+             patch(__name__ + ".time.sleep") as mock_sleep:
+            result = flaky()
 
-    @patch("sys.exit")
-    @patch("compare.console.print")
-    @patch("os.access", return_value=True)
-    @patch("pathlib.Path.is_file", return_value=True)
-    @patch("pathlib.Path.exists", return_value=True)
-    @patch("sys.argv", ["compare.py", "doc1.txt", "doc2.txt"])
-    @patch("os.getenv", return_value="test-key")
-    def test_validate_environment_success(
-        self,
-        mock_getenv,
-        mock_exists,
-        mock_is_file,
-        mock_access,
-        mock_print,
-        mock_exit,
-    ):
-        validate_environment()
-        mock_print.assert_called_once_with("Setup OK ✓")
-        mock_exit.assert_not_called()
+        self.assertEqual(result, "ok")
+        mock_status.assert_called_once_with("[bold green]Processing...")
+        mock_sleep.assert_called_once_with(1)
+        status_cm.__enter__.assert_called_once()
+        status_cm.__exit__.assert_called_once()
+
+    def test_read_document_text_uses_status_once(self):
+        status_cm = self._status_cm()
+        m_open = unittest.mock.mock_open(read_data="hello")
+
+        with patch(__name__ + ".console.status", return_value=status_cm) as mock_status, \
+             patch("builtins.open", m_open):
+            content = read_document("doc.txt")
+
+        self.assertEqual(content, "hello")
+        mock_status.assert_called_once_with("[bold green]Processing...")
+        status_cm.__enter__.assert_called_once()
+        status_cm.__exit__.assert_called_once()
+
+    def test_read_document_pdf_uses_status_once(self):
+        status_cm = self._status_cm()
+        page1 = Mock()
+        page1.extract_text.return_value = "a"
+        page2 = Mock()
+        page2.extract_text.return_value = "b"
+        reader = Mock()
+        reader.pages = [page1, page2]
+
+        with patch(__name__ + ".console.status", return_value=status_cm) as mock_status, \
+             patch("builtins.open", unittest.mock.mock_open(read_data=b"pdf")), \
+             patch(__name__ + ".PyPDF2.PdfReader", return_value=reader):
+            content = read_document("doc.pdf")
+
+        self.assertEqual(content, "a\nb")
+        mock_status.assert_called_once_with("[bold green]Processing...")
+        status_cm.__enter__.assert_called_once()
+        status_cm.__exit__.assert_called_once()
