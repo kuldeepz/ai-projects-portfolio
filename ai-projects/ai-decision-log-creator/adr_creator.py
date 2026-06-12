@@ -18,6 +18,10 @@ console = Console()
 MODEL = "gpt-4o-mini"
 VERBOSE = False
 
+PRICING_PER_1K = {
+    "gpt-4o-mini": {"in": 0.000015, "out": 0.00006},
+}
+
 _client = None
 def get_client():
     global _client
@@ -45,8 +49,19 @@ def print_usage(response):
     prompt_tokens = usage.prompt_tokens
     completion_tokens = usage.completion_tokens
     total_tokens = usage.total_tokens
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+    rates = PRICING_PER_1K.get(MODEL)
+    if rates:
+        cost = (prompt_tokens / 1000) * rates["in"] + (completion_tokens / 1000) * rates["out"]
+        console.print(
+            f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | "
+            f"💰 Est. cost: ${cost:.6f}"
+        )
+    else:
+        console.print(
+            f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | "
+            f"💰 Est. cost: unknown for model {MODEL}"
+        )
 
 SCHEMA = {
     "name": "adr",
@@ -140,27 +155,4 @@ def create_adr(discussion: str, adr_number: str = "001") -> dict:
 
 def main():
     global VERBOSE
-    parser = argparse.ArgumentParser()
-    parser.add_argument("file", nargs="?", help="Discussion file path")
-    parser.add_argument("adr_num", nargs="?", default="001")
-    parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-e", "--export", action="store_true", help="Export ADR JSON to file")
-    ns = parser.parse_args()
-    VERBOSE = ns.verbose
-
-    if ns.file:
-        discussion = Path(ns.file).read_text(encoding="utf-8")
-    else:
-        discussion = SAMPLE_DISCUSSION
-
-    result = create_adr(discussion, ns.adr_num)
-
-    if ns.export:
-        out = Path(ns.file).with_suffix(".adr.json") if ns.file else Path(f"adr-{ns.adr_num}.json")
-        out.write_text(json.dumps(result, indent=2), encoding="utf-8")
-        console.print(f"Exported JSON to {out}")
-    else:
-        console.print(Panel(Markdown(result.get("full_markdown", "")), title=f"ADR {ns.adr_num}"))
-
-if __name__ == "__main__":
-    main()
+    p
