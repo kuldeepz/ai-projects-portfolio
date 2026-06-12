@@ -4,7 +4,7 @@ Converts raw bullet notes into polished standup / status reports
 for daily standups, weekly syncs, or executive status updates.
 """
 
-import os, sys, json
+import os, sys, json, argparse
 from datetime import date, datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -87,20 +87,17 @@ def generate_report(data: dict) -> dict:
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
-    export = False
-    args = sys.argv[1:]
-    if "--export" in args:
-        export = True
-        args.remove("--export")
-    if "-e" in args:
-        export = True
-        args.remove("-e")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_file", nargs="?")
+    parser.add_argument("--export", "-e", choices=["json"])
+    parser.add_argument("--export-out", default=None)
+    parsed = parser.parse_args()
 
-    if len(args) < 1:
+    if not parsed.input_file:
         console.print("[dim]No file provided — using sample notes...[/dim]\n")
         data = SAMPLE_NOTES
     else:
-        with open(args[0]) as f:
+        with open(parsed.input_file) as f:
             data = json.load(f)
 
     with console.status("[bold green]Generating report...[/bold green]"):
@@ -122,9 +119,9 @@ def main():
         f.write(report["formatted_report"])
     console.print(f"\n[green]Saved:[/green] {out}\n")
 
-    if export:
+    if parsed.export == "json":
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_out = f"output_{timestamp}.json"
+        export_out = parsed.export_out or f"output_{timestamp}.json"
         export_data = dict(report)
         export_data["generated_at"] = datetime.now().isoformat()
         with open(export_out, "w") as f:
