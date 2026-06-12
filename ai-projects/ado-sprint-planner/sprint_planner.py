@@ -128,51 +128,42 @@ def display(data: dict, plan: dict):
         t.add_row(item["id"], item["title"], str(item["story_points"]), item["reason"])
     console.print(Panel(t, title=f"[bold green]Recommended for Sprint ({plan['total_points']} pts)[/bold green]", border_style="green"))
 
-    if plan.get("deferred_items"):
+    if plan["deferred_items"]:
         dt = Table(show_header=True, header_style="bold dim")
         dt.add_column("ID"); dt.add_column("Title", ratio=2); dt.add_column("Reason", ratio=2, style="dim")
         for item in plan["deferred_items"]:
             dt.add_row(item["id"], item["title"], item["reason"])
-        console.print(Panel(dt, title="[bold]Deferred Items[/bold]", border_style="yellow"))
+        console.print(Panel(dt, title="[bold]Deferred[/bold]", border_style="yellow"))
 
-
-def _parse_args(argv):
-    export_path = None
+def main():
+    export = None
     input_path = None
+    args = sys.argv[1:]
+
     i = 0
-    while i < len(argv):
-        arg = argv[i]
-        if arg in ("--export", "-e"):
-            if i + 1 >= len(argv):
-                raise SystemExit("Missing value for export argument")
-            export_path = argv[i + 1]
+    while i < len(args):
+        a = args[i]
+        if a in ("--export", "-e") and i + 1 < len(args):
+            export = args[i + 1]
             i += 2
             continue
-        if not arg.startswith("-") and input_path is None:
-            input_path = arg
+        if not a.startswith("-") and input_path is None:
+            input_path = a
         i += 1
-    return input_path, export_path
 
-
-def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
-    input_path, export_path = _parse_args(argv)
-
-    if input_path:
-        with open(input_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    else:
-        data = SAMPLE_BACKLOG
-
+    data = SAMPLE_BACKLOG if input_path is None else json.load(open(input_path, "r", encoding="utf-8"))
     plan = plan_sprint(data)
     display(data, plan)
 
-    if export_path:
-        with open(export_path, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-
-    return plan
-
+    if export:
+        payload = {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "input": data,
+            "plan": plan,
+        }
+        with open(export, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        console.print(f"[green]Exported plan to {export}[/green]")
 
 if __name__ == "__main__":
     main()
