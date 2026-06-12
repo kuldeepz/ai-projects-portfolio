@@ -132,59 +132,69 @@ def display(item: dict, analysis: dict):
         title="[bold green]Improved Acceptance Criteria (BDD)[/bold green]", border_style="green"
     ))
 
-    t = Table(show_header=False, box=None, padding=(0,2))
-    t.add_column(style="dim"); t.add_column()
-    t.add_row("Suggested Story Points", f"[bold]{analysis['story_point_suggestion']}[/bold]")
-    console.print(Panel(t, title="Estimation", border_style="dim"))
 
-    if analysis["risks"]:
-        console.print(Panel("\n".join(f"  [red]⚡[/red] {r}" for r in analysis["risks"]),
-                            title="[bold]Risks & Dependencies[/bold]", border_style="red"))
+def test_validate_environment_missing_key(monkeypatch):
+    import types
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    args = types.SimpleNamespace(input=None)
+    try:
+        validate_environment(args)
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
 
-    console.print(Panel("\n".join(f"  [cyan]→[/cyan] {s}" for s in analysis["suggestions"]),
-                        title="[bold]Improvement Suggestions[/bold]", border_style="blue"))
-    console.print()
 
-def main():
-    parser = argparse.ArgumentParser(description="Analyze Azure DevOps work items")
-    parser.add_argument("input", nargs="?", help="Path to JSON work item input")
-    parser.add_argument(
-        "-e",
-        "--export",
-        nargs="?",
-        default=None,
-        const=f"ado_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-        help="Export analysis JSON to optional path",
-    )
-    args = parser.parse_args()
+def test_validate_environment_blank_key(monkeypatch):
+    import types
+    monkeypatch.setenv("OPENAI_API_KEY", "   ")
+    args = types.SimpleNamespace(input=None)
+    try:
+        validate_environment(args)
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
 
+
+def test_validate_environment_missing_file(monkeypatch):
+    import types
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    args = types.SimpleNamespace(input="/definitely/missing/file.json")
+    try:
+        validate_environment(args)
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+
+def test_validate_environment_not_file(monkeypatch, tmp_path):
+    import types
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    args = types.SimpleNamespace(input=str(tmp_path))
+    try:
+        validate_environment(args)
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+
+def test_validate_environment_unreadable_file(monkeypatch, tmp_path):
+    import types
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    p = tmp_path / "wi.json"
+    p.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(os, "access", lambda *_: False)
+    args = types.SimpleNamespace(input=str(p))
+    try:
+        validate_environment(args)
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+
+def test_validate_environment_success(monkeypatch, tmp_path):
+    import types
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    p = tmp_path / "wi.json"
+    p.write_text("{}", encoding="utf-8")
+    args = types.SimpleNamespace(input=str(p))
     validate_environment(args)
-
-    if args.input:
-        try:
-            with open(args.input, "r", encoding="utf-8") as f:
-                item = json.load(f)
-        except Exception as e:
-            console.print(f"[red]Failed to read input file:[/red] {e}")
-            sys.exit(1)
-    else:
-        item = SAMPLE_WORK_ITEM
-
-    analysis = analyze_workitem(item)
-    display(item, analysis)
-
-    if args.export:
-        payload = {
-            "generated_at": datetime.now().isoformat(),
-            "work_item": item,
-            "analysis": analysis,
-        }
-        try:
-            with open(args.export, "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2, ensure_ascii=False)
-            console.print(f"[green]Exported analysis to[/green] {args.export}")
-        except OSError as e:
-            console.print(f"[red]Failed to export:[/red] {e}")
-
-if __name__ == "__main__":
-    main()
