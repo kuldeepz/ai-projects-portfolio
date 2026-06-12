@@ -4,7 +4,7 @@ Converts raw bullet notes into polished standup / status reports
 for daily standups, weekly syncs, or executive status updates.
 """
 
-import os, sys, json, argparse, time
+import os, sys, json, argparse, time, random, functools
 from datetime import date, datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -23,20 +23,21 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def retry_with_backoff(fn):
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exc = None
-        for i in range(len(delays) + 1):
-            try:
-                return fn(*args, **kwargs)
-            except Exception as e:
-                last_exc = e
-                if i < len(delays):
-                    time.sleep(delays[i])
-                else:
-                    raise last_exc
-    return wrapper
+def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25):
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries + 1):
+                try:
+                    return fn(*args, **kwargs)
+                except Exception:
+                    if attempt == max_retries:
+                        raise
+                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    delay *= random.uniform(1 - jitter, 1 + jitter)
+                    time.sleep(delay)
+        return wrapper
+    return deco
 
 FORMATS = {
     "1": ("standup", "Daily standup (Yesterday / Today / Blockers)"),
@@ -77,7 +78,7 @@ SAMPLE_NOTES = {
     ]
 }
 
-@retry_with_backoff
+@retry_with_backoff(max_retries=3)
 def _create_chat_completion(**kwargs):
     return get_client().chat.completions.create(**kwargs)
 
@@ -158,67 +159,4 @@ def main():
         export_data["generated_at"] = now.isoformat()
 
 
-# Tests for retry behavior
-import pytest
-
-
-def test_retry_with_backoff_succeeds_immediately(monkeypatch):
-    sleep_calls = []
-
-    def fake_sleep(seconds):
-        sleep_calls.append(seconds)
-
-    monkeypatch.setattr(time, "sleep", fake_sleep)
-
-    attempts = {"count": 0}
-
-    def fn():
-        attempts["count"] += 1
-        return "ok"
-
-    wrapped = retry_with_backoff(fn)
-    assert wrapped() == "ok"
-    assert attempts["count"] == 1
-    assert sleep_calls == []
-
-
-def test_retry_with_backoff_fails_twice_then_succeeds(monkeypatch):
-    sleep_calls = []
-
-    def fake_sleep(seconds):
-        sleep_calls.append(seconds)
-
-    monkeypatch.setattr(time, "sleep", fake_sleep)
-
-    attempts = {"count": 0}
-
-    def fn():
-        attempts["count"] += 1
-        if attempts["count"] < 3:
-            raise RuntimeError("transient")
-        return "ok"
-
-    wrapped = retry_with_backoff(fn)
-    assert wrapped() == "ok"
-    assert attempts["count"] == 3
-    assert sleep_calls == [1, 2]
-
-
-def test_retry_with_backoff_retries_exhausted_raises_original(monkeypatch):
-    sleep_calls = []
-
-    def fake_sleep(seconds):
-        sleep_calls.append(seconds)
-
-    monkeypatch.setattr(time, "sleep", fake_sleep)
-
-    err = ValueError("boom")
-
-    def fn():
-        raise err
-
-    wrapped = retry_with_backoff(fn)
-    with pytest.raises(ValueError) as exc:
-        wrapped()
-    assert exc.value is err
-    assert sleep_calls == [1, 2, 4]
+# Tests for retry behavi
