@@ -6,6 +6,7 @@ and provides a step-by-step remediation plan.
 
 import os, sys, json
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -14,17 +15,17 @@ from rich.table import Table
 from rich.syntax import Syntax
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -34,7 +35,7 @@ def print_usage(response):
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-SCHEMA = {
+SCHEMA: dict[str, Any] = {
     "name": "pipeline_diagnosis",
     "description": "Root cause analysis of a failed CI/CD pipeline",
     "parameters": {
@@ -62,7 +63,7 @@ SCHEMA = {
     }
 }
 
-SAMPLE_LOG = """
+SAMPLE_LOG: str = """
 ##[section]Starting: Run tests
 ==============================================================================
 Task         : Bash
@@ -93,7 +94,7 @@ ModuleNotFoundError: No module named 'stripe'
 ##[section]Finishing: Run tests
 """
 
-def analyze_log(log: str) -> dict:
+def analyze_log(log: str) -> dict[str, Any]:
     response = get_client().chat.completions.create(
         model=MODEL,
         messages=[
@@ -110,7 +111,7 @@ def analyze_log(log: str) -> dict:
     print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-def display(diagnosis: dict):
+def display(diagnosis: dict[str, Any]) -> None:
     sev_color = {"blocking": "red", "warning": "yellow", "flaky": "blue"}.get(diagnosis["severity"], "white")
     console.print()
     console.print(Panel.fit(
@@ -140,7 +141,7 @@ def display(diagnosis: dict):
     if diagnosis.get("estimated_fix_time"):
         console.print(f"\n[dim]Estimated fix time:[/dim] [bold]{diagnosis['estimated_fix_time']}[/bold]\n")
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         console.print("[dim]No log file provided — analyzing sample failure log...[/dim]\n")
         log = SAMPLE_LOG
