@@ -34,6 +34,28 @@ EMBED_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
 
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        print(Fore.RED + "Missing OPENAI_API_KEY. Please set it in your environment or .env file.")
+        sys.exit(1)
+
+    if len(sys.argv) >= 2:
+        for arg in sys.argv[1:]:
+            path = Path(arg)
+            if not path.exists():
+                print(Fore.RED + f"File not found: {arg}")
+                sys.exit(1)
+            if not path.is_file():
+                print(Fore.RED + f"Not a file: {arg}")
+                sys.exit(1)
+            if not os.access(path, os.R_OK):
+                print(Fore.RED + f"File is not readable: {arg}")
+                sys.exit(1)
+
+    print(Fore.GREEN + "Setup OK ✓")
+
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extract all text from a PDF file."""
     text = []
@@ -183,4 +205,5 @@ if __name__ == "__main__":
         print(Fore.WHITE + "Example: python chatbot.py sample.pdf")
         sys.exit(1)
 
+    validate_environment()
     run_chat(sys.argv[1])
