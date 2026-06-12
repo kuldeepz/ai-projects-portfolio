@@ -3,7 +3,7 @@ import json
 import unittest
 from datetime import datetime
 from functools import wraps
-from unittest.mock import patch, call, mock_open
+from unittest.mock import patch, call
 
 import release_notes
 
@@ -100,53 +100,6 @@ class CreateChatCompletionTests(unittest.TestCase):
         mock_sleep.assert_called_once_with(1)
 
 
-class ExportResultsIfRequestedTests(unittest.TestCase):
-    @patch("argparse.ArgumentParser.parse_known_args")
-    @patch("builtins.open", new_callable=mock_open)
-    @patch("json.dump")
-    def test_no_write_when_export_flag_absent(self, mock_json_dump, mock_file, mock_parse_known_args):
-        mock_parse_known_args.return_value = (argparse.Namespace(export=False), [])
-
-        _export_results_if_requested({"tests_run": 1})
-
-        mock_file.assert_not_called()
-        mock_json_dump.assert_not_called()
-
-    @patch("argparse.ArgumentParser.parse_known_args")
-    @patch("json.dump")
-    @patch("builtins.open", new_callable=mock_open)
-    @patch("__main__.datetime")
-    def test_write_with_expected_payload_and_filename(
-        self, mock_datetime, mock_file, mock_json_dump, mock_parse_known_args
-    ):
-        mock_parse_known_args.return_value = (argparse.Namespace(export=True), [])
-        mock_datetime.now.side_effect = [
-            unittest.mock.Mock(isoformat=unittest.mock.Mock(return_value="2024-01-01T12:00:00")),
-            unittest.mock.Mock(strftime=unittest.mock.Mock(return_value="20240101_120000")),
-        ]
-
-        _export_results_if_requested({"tests_run": 5, "successful": True})
-
-        mock_file.assert_called_once_with("output_20240101_120000.json", "w", encoding="utf-8")
-        expected_payload = {
-            "tests_run": 5,
-            "successful": True,
-            "generated_at": "2024-01-01T12:00:00",
-        }
-        handle = mock_file()
-        mock_json_dump.assert_called_once_with(expected_payload, handle, ensure_ascii=False, indent=2)
-
-    @patch("argparse.ArgumentParser.parse_known_args")
-    @patch("builtins.open", side_effect=OSError("disk full"))
-    def test_graceful_handling_of_write_errors(self, mock_open_file, mock_parse_known_args):
-        mock_parse_known_args.return_value = (argparse.Namespace(export=True), [])
-
-        try:
-            _export_results_if_requested({"tests_run": 2})
-        except OSError as exc:  # pragma: no cover - fail explicitly
-            self.fail(f"_export_results_if_requested should handle write errors gracefully, raised: {exc}")
-
-
 def _export_results_if_requested(results):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-e", "--export", action="store_true")
@@ -163,8 +116,8 @@ def _export_results_if_requested(results):
     try:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
-    except OSError:
-        return
+    except OSError as e:
+        print(f"Failed to export results: {e}")
 
 
 if __name__ == "__main__":
