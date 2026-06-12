@@ -104,6 +104,31 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
+def validate_environment() -> None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Setup error:[/red] OPENAI_API_KEY is missing or empty.")
+        console.print("[yellow]Set OPENAI_API_KEY in your environment or .env file and try again.[/yellow]")
+        sys.exit(1)
+
+    for arg in sys.argv[1:]:
+        if arg.startswith("-"):
+            continue
+        if os.path.sep not in arg and not arg.startswith("."):
+            continue
+        if not os.path.exists(arg):
+            console.print(f"[red]Setup error:[/red] File path does not exist: {arg}")
+            sys.exit(1)
+        if not os.path.isfile(arg):
+            console.print(f"[red]Setup error:[/red] Path is not a file: {arg}")
+            sys.exit(1)
+        if not os.access(arg, os.R_OK):
+            console.print(f"[red]Setup error:[/red] File is not readable: {arg}")
+            sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
+
 @retry_with_backoff
 def _create_chat_completion(**kwargs):
     return get_client().chat.completions.create(**kwargs)
@@ -190,6 +215,10 @@ def display_result(result: EmailOutput) -> None:
 
     alt_text = "\n".join(f"  [dim]{i+1}.[/dim] {s}" for i, s in enumerate(result["alternative_subjects"]))
     console.print(Panel(alt_text, title="[bold]Alternative Subject Lines[/bold]", border_style="dim"))
+
+
+def main() -> None:
+    validate_environment()
 
 
 class _StatusSpy:
