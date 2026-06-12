@@ -33,6 +33,17 @@ console: Console = Console()
 
 CHAT_MODEL = "gpt-4o-mini"
 
+
+def print_usage(response: Any) -> None:
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", 0) or 0
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
@@ -168,6 +179,7 @@ def review_code(code: str, language: str = "", context: str = "") -> dict[str, A
         tool_choice={"type": "function", "function": {"name": "code_review"}},
         temperature=0.2,
     )
+    print_usage(response)
 
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
