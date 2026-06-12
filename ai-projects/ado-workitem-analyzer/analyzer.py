@@ -24,6 +24,14 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def print_usage(response):
+    usage = response.usage
+    prompt_tokens = usage.prompt_tokens
+    completion_tokens = usage.completion_tokens
+    total_tokens = usage.total_tokens
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 SCHEMA = {
     "name": "workitem_analysis",
     "description": "Analysis of an ADO work item for completeness and quality",
@@ -73,6 +81,7 @@ def analyze_workitem(item: dict) -> dict:
             tool_choice={"type": "function", "function": {"name": "workitem_analysis"}},
             temperature=0.2,
         )
+    print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def display(item: dict, analysis: dict):
