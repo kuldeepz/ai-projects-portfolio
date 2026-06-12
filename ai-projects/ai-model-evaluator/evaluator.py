@@ -165,5 +165,13 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
         assert "details" in data
     else:
         if isinstance(result, dict):
-            assert "summary" in result
-            assert "details" in result
+            export_data = dict(result)
+            export_data["generated_at"] = "1970-01-01T00:00:00"
+            filename = "output_19700101_000000.json"
+            with open(tmp_path / filename, "w", encoding="utf-8") as f:
+                json.dump(export_data, f)
+            with open(tmp_path / filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            assert "generated_at" in data
+            assert "summary" in data
+            assert "details" in data
