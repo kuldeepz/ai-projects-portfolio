@@ -35,10 +35,6 @@ def validate_environment() -> None:
         print(Fore.RED + "Missing OPENAI_API_KEY. Please set it in your .env file.")
         sys.exit(1)
 
-    if len(sys.argv) < 2:
-        print(Fore.YELLOW + "Usage: python chatbot.py <path_to_pdf>")
-        sys.exit(1)
-
     args = sys.argv[1:]
     filtered_args = []
     i = 0
