@@ -78,6 +78,8 @@ def get_client() -> OpenAI:
 
 
 def print_usage(response) -> None:
+    if not VERBOSE:
+        return
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -181,6 +183,6 @@ def read_document(path: str) -> str:
             with open(path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
                 return "\n".join(p.extract_text() or "" for p in reader.pages)
-    with console.status("[cyan]Reading text document..."):
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
