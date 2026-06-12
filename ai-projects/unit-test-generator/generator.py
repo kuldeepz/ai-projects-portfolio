@@ -35,6 +35,19 @@ def get_client() -> OpenAI:
     return _client
 
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", 0) or 0
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+    )
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Generate unit tests for a Python source file.")
     parser.add_argument("source_file", help="Path to the Python source file")
@@ -153,6 +166,7 @@ def generate_tests(source_code: str, module_name: str, framework: str = "pytest"
         temperature=0.2,
         max_tokens=4096,
     )
+    print_usage(response)
     elapsed = time.time() - start_time
     if VERBOSE:
         console.print(f"✅ Done in {elapsed:.1f}s")
