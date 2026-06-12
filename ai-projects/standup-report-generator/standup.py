@@ -156,3 +156,69 @@ def main():
         export_out = parsed.export_out or f"output_{timestamp}.json"
         export_data = dict(report)
         export_data["generated_at"] = now.isoformat()
+
+
+# Tests for retry behavior
+import pytest
+
+
+def test_retry_with_backoff_succeeds_immediately(monkeypatch):
+    sleep_calls = []
+
+    def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+
+    attempts = {"count": 0}
+
+    def fn():
+        attempts["count"] += 1
+        return "ok"
+
+    wrapped = retry_with_backoff(fn)
+    assert wrapped() == "ok"
+    assert attempts["count"] == 1
+    assert sleep_calls == []
+
+
+def test_retry_with_backoff_fails_twice_then_succeeds(monkeypatch):
+    sleep_calls = []
+
+    def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+
+    attempts = {"count": 0}
+
+    def fn():
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RuntimeError("transient")
+        return "ok"
+
+    wrapped = retry_with_backoff(fn)
+    assert wrapped() == "ok"
+    assert attempts["count"] == 3
+    assert sleep_calls == [1, 2]
+
+
+def test_retry_with_backoff_retries_exhausted_raises_original(monkeypatch):
+    sleep_calls = []
+
+    def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+
+    err = ValueError("boom")
+
+    def fn():
+        raise err
+
+    wrapped = retry_with_backoff(fn)
+    with pytest.raises(ValueError) as exc:
+        wrapped()
+    assert exc.value is err
+    assert sleep_calls == [1, 2, 4]
