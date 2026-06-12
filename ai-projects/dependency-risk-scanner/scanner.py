@@ -63,7 +63,8 @@ def retry_with_backoff(func):
                 last_exc = e
                 if i == len(delays) - 1:
                     break
-                time.sleep(delay)
+                with console.status("[bold green]Processing..."):
+                    time.sleep(delay)
         raise last_exc
 
     return wrapper
@@ -107,22 +108,23 @@ def parse_requirements(content: str, filename: str) -> str:
 
 @retry_with_backoff
 def _create_scan_response(dep_content: str):
-    return get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {"role": "system", "content": (
-                "You are a security engineer specializing in supply chain security. "
-                "Analyze dependency files for: known vulnerabilities (CVEs), deprecated packages, "
-                "packages with no recent maintenance, overly broad version pins, and security-sensitive "
-                "packages that need careful version management. Use your knowledge of package ecosystems "
-                "up to your training cutoff."
-            )},
-            {"role": "user", "content": f"Scan these dependencies for risks:\n\n{dep_content}"}
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "dependency_report"}},
-        temperature=0.1,
-    )
+    with console.status("[bold green]Processing..."):
+        return get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a security engineer specializing in supply chain security. "
+                    "Analyze dependency files for: known vulnerabilities (CVEs), deprecated packages, "
+                    "packages with no recent maintenance, overly broad version pins, and security-sensitive "
+                    "packages that need careful version management. Use your knowledge of package ecosystems "
+                    "up to your training cutoff."
+                )},
+                {"role": "user", "content": f"Scan these dependencies for risks:\n\n{dep_content}"}
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "dependency_report"}},
+            temperature=0.1,
+        )
 
 
 def scan(dep_content: str) -> dict:
