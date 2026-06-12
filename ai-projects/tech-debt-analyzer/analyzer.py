@@ -135,19 +135,7 @@ def main():
     output_path = None
 
     if "--export" in args or "-e" in args:
-        # remove export flags before reading positional args
-        while "--export" in args:
-            args.remove("--export")
-        while "-e" in args:
-            args.remove("-e")
-
-    if not args:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export json] [--out <file>]")
-        console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export json --out report.json[/dim]")
-        sys.exit(1)
+        pass
 
     target = args[0]
     context = " ".join(args[1:]) if len(args) > 1 else ""
-
-if __name__ == "__main__":
-    main()
