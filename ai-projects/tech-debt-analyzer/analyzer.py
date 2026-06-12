@@ -132,25 +132,4 @@ def validate_environment(argv):
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="Analyze Python code for technical debt")
-    parser.add_argument("target", help="Path to file or directory")
-    parser.add_argument("--context", default="", help="Optional project context")
-    parser.add_argument("--out", default=None, help="Optional output path for JSON report")
-    return parser.parse_args(argv)
-
-def main(argv=None):
-    args = validate_environment(argv if argv is not None else sys.argv[1:])
-
-    with console.status("[bold cyan]Collecting code..."):
-        code = collect_code(args.target)
-
-    report = analyze(code, args.context)
-    display(report)
-
-    out_path = Path(args.out) if args.out else Path(f"tech_debt_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
-    with console.status("[bold cyan]Writing report..."):
-        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    console.print(f"[green]Saved report to[/green] {out_path}")
-
-if __name__ == "__main__":
-    main()
+    parser = a
