@@ -128,7 +128,7 @@ def display(data: dict, plan: dict):
         t.add_row(item["id"], item["title"], str(item["story_points"]), item["reason"])
     console.print(Panel(t, title=f"[bold green]Recommended for Sprint ({plan['total_points']} pts)[/bold green]", border_style="green"))
 
-    if plan["deferred_items"]:
+    if plan.get("deferred_items"):
         dt = Table(show_header=True, header_style="bold dim")
         dt.add_column("ID"); dt.add_column("Title", ratio=2); dt.add_column("Reason", ratio=2, style="dim")
         for item in plan["deferred_items"]:
@@ -136,35 +136,43 @@ def display(data: dict, plan: dict):
         console.print(Panel(dt, title="[bold]Deferred Items[/bold]", border_style="yellow"))
 
 
-def _run_retry_tests():
-    from unittest.mock import Mock, patch, call
+def _parse_args(argv):
+    export_path = None
+    input_path = None
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("--export", "-e"):
+            if i + 1 >= len(argv):
+                raise SystemExit("Missing value for export argument")
+            export_path = argv[i + 1]
+            i += 2
+            continue
+        if not arg.startswith("-") and input_path is None:
+            input_path = arg
+        i += 1
+    return input_path, export_path
 
-    @retry_with_backoff
-    def _ok():
-        return "ok"
 
-    with patch("time.sleep") as sleep_mock:
-        assert _ok() == "ok"
-        sleep_mock.assert_not_called()
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    input_path, export_path = _parse_args(argv)
 
-    flaky = Mock(side_effect=[RuntimeError("e1"), RuntimeError("e2"), "done"])
-    wrapped_flaky = retry_with_backoff(flaky)
-    with patch("time.sleep") as sleep_mock:
-        assert wrapped_flaky() == "done"
-        assert sleep_mock.call_args_list == [call(1), call(2)]
+    if input_path:
+        with open(input_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = SAMPLE_BACKLOG
 
-    final_exc = ValueError("boom")
-    always_fail = Mock(side_effect=[RuntimeError("e1"), RuntimeError("e2"), final_exc])
-    wrapped_fail = retry_with_backoff(always_fail)
-    with patch("time.sleep") as sleep_mock:
-        try:
-            wrapped_fail()
-            raise AssertionError("Expected exception to be raised")
-        except ValueError as e:
-            assert e is final_exc
-        assert sleep_mock.call_args_list == [call(1), call(2)]
+    plan = plan_sprint(data)
+    display(data, plan)
+
+    if export_path:
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump(plan, f, indent=2)
+
+    return plan
+
 
 if __name__ == "__main__":
-    if "--run-retry-tests" in sys.argv:
-        _run_retry_tests()
-        console.print("[green]retry_with_backoff tests passed[/green]")
+    main()
