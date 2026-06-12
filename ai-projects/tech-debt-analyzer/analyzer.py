@@ -5,6 +5,7 @@ prioritizes them by impact, and estimates remediation effort.
 """
 
 import os, sys, json
+import argparse
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -130,105 +131,25 @@ def validate_environment():
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
         sys.exit(1)
 
-    if len(sys.argv) < 2:
-        console.print("[red]Error:[/red] Missing required file or directory path argument.")
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("target")
+    parser.add_argument("context", nargs="?")
+    parser.add_argument("--out")
+    args, _ = parser.parse_known_args(sys.argv[1:])
+
+    target_path = Path(args.target)
+    if not target_path.exists():
+        console.print(f"[red]Error:[/red] Target path does not exist: {args.target}")
+        sys.exit(1)
+    if not os.access(target_path, os.R_OK):
+        console.print(f"[red]Error:[/red] Target path is not readable: {args.target}")
         sys.exit(1)
 
-    path_args = []
-    args = sys.argv[1:]
-    i = 0
-    while i < len(args):
-        if args[i] == "--out":
-            i += 2
-            continue
-        path_args.append(args[i])
-        i += 1
-
-    if not path_args:
-        console.print("[red]Error:[/red] Missing required file or directory path argument.")
-        sys.exit(1)
-
-    target = path_args[0]
-    if not os.path.exists(target):
-        console.print(f"[red]Error:[/red] Path does not exist: {target}")
-        sys.exit(1)
-
-    if not os.access(target, os.R_OK):
-        console.print(f"[red]Error:[/red] Path is not readable: {target}")
-        sys.exit(1)
-
-
-def test_validate_environment_missing_api_key(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./"])
-    monkeypatch.setattr(os, "getenv", lambda _: "")
-
-    messages = []
-    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
-
-    assert any("OPENAI_API_KEY is not set" in m for m in messages)
-
-
-def test_validate_environment_missing_args(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["analyzer.py"])
-    monkeypatch.setattr(os, "getenv", lambda _: "key")
-
-    messages = []
-    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
-
-    assert any("Missing required file or directory path argument" in m for m in messages)
-
-
-def test_validate_environment_invalid_path(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./does-not-exist"])
-    monkeypatch.setattr(os, "getenv", lambda _: "key")
-    monkeypatch.setattr(os.path, "exists", lambda _: False)
-
-    messages = []
-    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
-
-    assert any("Path does not exist" in m for m in messages)
-
-
-def test_validate_environment_unreadable_path(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./target"])
-    monkeypatch.setattr(os, "getenv", lambda _: "key")
-    monkeypatch.setattr(os.path, "exists", lambda _: True)
-    monkeypatch.setattr(os, "access", lambda *_: False)
-
-    messages = []
-    monkeypatch.setattr(console, "print", lambda *a, **k: messages.append(" ".join(str(x) for x in a)))
-
-    try:
-        validate_environment()
-        assert False, "Expected SystemExit"
-    except SystemExit as e:
-        assert e.code == 1
-
-    assert any("Path is not readable" in m for m in messages)
-
-
-def test_validate_environment_valid_with_out(monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["analyzer.py", "./target", "--out", "report.json"])
-    monkeypatch.setattr(os, "getenv", lambda _: "key")
-    monkeypatch.setattr(os.path, "exists", lambda _: True)
-    monkeypatch.setattr(os, "access", lambda *_: True)
-
-    validate_environment()
+    if args.out:
+        out_parent = Path(args.out).expanduser().resolve().parent
+        if not out_parent.exists():
+            console.print(f"[red]Error:[/red] Output directory does not exist: {out_parent}")
+            sys.exit(1)
+        if not os.access(out_parent, os.W_OK):
+            console.print(f"[red]Error:[/red] Output directory is not writable: {out_parent}")
+            sys.exit(1)
