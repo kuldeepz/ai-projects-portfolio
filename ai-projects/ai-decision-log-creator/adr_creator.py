@@ -128,21 +128,20 @@ def main():
     parser.add_argument("file", nargs="?", help="Discussion file path")
     parser.add_argument("adr_num", nargs="?", default="001")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-e", "--export", action="store_true")
+    parser.add_argument("-e", "--export", action="store_true", help="Export ADR JSON to file")
     ns = parser.parse_args()
     VERBOSE = ns.verbose
 
-    if not ns.file:
-        console.print("[dim]No file provided — using sample discussion...[/dim]")
-        discussion = SAMPLE_DISCUSSION.strip()
+    if ns.file:
+        discussion = Path(ns.file).read_text(encoding="utf-8")
     else:
-        discussion = Path(ns.file).read_text(encoding="utf-8").strip()
+        discussion = SAMPLE_DISCUSSION
 
     result = create_adr(discussion, ns.adr_num)
 
     if ns.export:
-        out = Path(ns.file).with_suffix('.adr.json') if ns.file else Path(f'adr-{ns.adr_num}.json')
-        out.write_text(json.dumps(result, indent=2), encoding='utf-8')
+        out = Path(ns.file).with_suffix(".adr.json") if ns.file else Path(f"adr-{ns.adr_num}.json")
+        out.write_text(json.dumps(result, indent=2), encoding="utf-8")
         console.print(f"Exported JSON to {out}")
     else:
         console.print(Panel(Markdown(result.get("full_markdown", "")), title=f"ADR {ns.adr_num}"))
