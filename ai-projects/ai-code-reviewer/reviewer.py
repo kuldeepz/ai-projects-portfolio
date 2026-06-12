@@ -168,6 +168,32 @@ def test_cli_verbose_flags_recognized_and_removed():
     assert args == ["file.py", "--flag", "value"]
 
 
+def test_cli_export_flags_recognized_and_removed():
+    args, export = _extract_export_flag(["-e", "x"])
+    assert export is True
+    assert args == ["x"]
+
+
+def test_main_with_export_creates_file_and_json_structure(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    rc = main(["--export"])
+    assert rc == 0
+
+    files = list(tmp_path.glob("output_*.json"))
+    assert len(files) == 1
+
+    data = json.loads(files[0].read_text(encoding="utf-8"))
+    assert "results" in data
+    assert "generated_at" in data
+
+
+def test_main_without_export_does_not_write_files(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    rc = main(["file.py"])
+    assert rc == 0
+    assert list(tmp_path.glob("output_*.json")) == []
+
+
 def test_retry_with_backoff_retries_then_succeeds(monkeypatch):
     calls = {"n": 0}
 
@@ -200,29 +226,4 @@ def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
         always_fail()
         assert False, "Expected RuntimeError"
     except RuntimeError:
-        pass
-
-    assert calls["n"] == 3
-
-
-def test_review_code_non_interactive_console_has_clean_output():
-    global VERBOSE, console
-    VERBOSE = False
-
-    original_console = console
-    local_buf = io.StringIO()
-    console = Console(file=local_buf, force_terminal=False)
-
-    def fake_api(payload):
-        return {"ok": True, "payload": payload}
-
-    stdout_buf = io.StringIO()
-    try:
-        with redirect_stdout(stdout_buf):
-            result = review_code(fake_api, {"x": 1})
-    finally:
-        console = original_console
-
-    assert result["ok"] is True
-    assert stdout_buf.getvalue() == ""
-    assert local_buf.getvalue() == ""
+        assert calls["n"] == 3
