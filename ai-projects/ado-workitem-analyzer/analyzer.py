@@ -127,7 +127,16 @@ def display(item: dict, analysis: dict):
 def main():
     parser = argparse.ArgumentParser(description="Analyze Azure DevOps work items")
     parser.add_argument("input", nargs="?", help="Path to JSON work item input")
-    parser.add_argument("-e", "--export", action="store_true", help="Export analysis output to JSON file")
+    parser.add_argument(
+        "-e",
+        "--export",
+        nargs="?",
+        const=True,
+        default=False,
+        metavar="FILE",
+        help="Export analysis output to JSON; optionally provide output file path"
+    )
+
     args = parser.parse_args()
 
     if args.input:
@@ -139,11 +148,12 @@ def main():
     analysis = analyze_workitem(item)
     display(item, analysis)
 
-    if args.export:
-        filename = f"workitem-analysis-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump({"item": item, "analysis": analysis}, f, indent=2)
-        console.print(f"[green]Exported analysis to[/green] {filename}")
+    if args.export is not False:
+        default_name = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        export_path = default_name if args.export is True else args.export
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump({"work_item": item, "analysis": analysis}, f, indent=2)
+        console.print(f"[green]Exported analysis to {export_path}[/green]")
 
 if __name__ == "__main__":
     main()
