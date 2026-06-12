@@ -24,6 +24,16 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = usage.prompt_tokens
+    completion_tokens = usage.completion_tokens
+    total_tokens = usage.total_tokens
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 SCHEMA = {
     "name": "pipeline_diagnosis",
     "description": "Root cause analysis of a failed CI/CD pipeline",
@@ -97,6 +107,7 @@ def analyze_log(log: str) -> dict:
         tool_choice={"type": "function", "function": {"name": "pipeline_diagnosis"}},
         temperature=0.1,
     )
+    print_usage(response)
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def display(diagnosis: dict):
