@@ -1,4 +1,5 @@
 import argparse
+import sys
 import time
 from functools import wraps
 
@@ -95,6 +96,10 @@ def configure_verbose(argv=None):
     DEBUG_SENSITIVE = args.debug_sensitive
 
 
+def main(argv=None):
+    configure_verbose(argv)
+
+
 @retry_with_backoff
 def call_openai(*args, **kwargs):
     """Production OpenAI call path wrapped with retry/backoff.
@@ -185,3 +190,7 @@ def test_call_openai_verbose_logging_suppressed(capsys):
         pass
     out = capsys.readouterr().out
     assert out == ""
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
