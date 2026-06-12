@@ -10,7 +10,8 @@ skills/
 ├── _template/          ← blank template to copy when creating a new skill
 ├── developer/          ← hands-on coding skills for engineers
 ├── it-ops/             ← infrastructure, pipelines, and incident response
-└── lead/               ← engineering leadership, planning, and communication
+├── lead/               ← engineering leadership, planning, and communication
+└── code-checks/        ← deep static analysis: async, exceptions, security, memory, concurrency
 ```
 
 ## Skills Index
@@ -44,6 +45,20 @@ skills/
 | `/standup-write` | `lead/standup-write/` | Raw notes → standup / weekly / executive / Slack update |
 | `/skill-gap-review` | `lead/skill-gap-review/` | Team skills vs project requirements → gap analysis, training plan, hiring recs |
 | `/release-notes` | `lead/release-notes/` | Work items → developer changelog + business summary + executive highlights |
+
+### Code Checks (9 skills)
+
+| Skill | Folder | What it checks |
+|-------|--------|----------------|
+| `/async-check` | `code-checks/async-check/` | Missing awaits, blocking calls in async, fire-and-forget exception loss |
+| `/exception-check` | `code-checks/exception-check/` | Bare excepts, swallowed exceptions, missing try/except on risky calls |
+| `/null-safety` | `code-checks/null-safety/` | Unguarded None access, Optional return not checked, chained attribute risk |
+| `/type-check` | `code-checks/type-check/` | Missing annotations, Any leakage, wrong return types, mutable defaults |
+| `/security-scan` | `code-checks/security-scan/` | SQL/cmd injection, hardcoded secrets, insecure crypto, OWASP Top 10 |
+| `/memory-check` | `code-checks/memory-check/` | Unclosed handles, unbounded collections, missing `with` blocks, resource leaks |
+| `/concurrency-check` | `code-checks/concurrency-check/` | Race conditions, missing locks, deadlock risk, thread-unsafe shared state |
+| `/dead-code` | `code-checks/dead-code/` | Unused imports, unreachable code, orphaned functions, commented-out blocks |
+| `/log-check` | `code-checks/log-check/` | Missing error logs, PII in logs, wrong levels, no stack traces, print() usage |
 
 ---
 
