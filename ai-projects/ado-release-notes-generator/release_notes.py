@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch, call
+from functools import wraps
 
 import release_notes
 
@@ -48,6 +49,7 @@ class RetryWithBackoffTests(unittest.TestCase):
 
     def test_non_retriable_exception_not_retried_when_filtered(self):
         def retry_with_filter(func):
+            @wraps(func)
             def wrapped(*args, **kwargs):
                 delays = [1, 2, 4]
                 last_exception = None
