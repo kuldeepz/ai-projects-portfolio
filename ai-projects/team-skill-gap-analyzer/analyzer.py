@@ -1,5 +1,4 @@
 import os, sys, pytest
-from pathlib import Path
 
 import analyzer
 
@@ -36,7 +35,7 @@ def test_validate_environment_exits_when_api_key_blank(
 
 def test_validate_environment_exits_for_missing_file_path(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _set_api_key(monkeypatch)
@@ -53,7 +52,7 @@ def test_validate_environment_exits_for_missing_file_path(
 
 def test_validate_environment_exits_for_directory_path(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _set_api_key(monkeypatch)
@@ -71,7 +70,7 @@ def test_validate_environment_exits_for_directory_path(
 
 def test_validate_environment_exits_for_unreadable_file(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _set_api_key(monkeypatch)
@@ -91,7 +90,7 @@ def test_validate_environment_exits_for_unreadable_file(
 
 def test_validate_environment_success_with_valid_setup(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    tmp_path: pytest.TempPathFactory,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _set_api_key(monkeypatch)
