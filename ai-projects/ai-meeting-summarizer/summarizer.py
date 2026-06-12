@@ -171,56 +171,30 @@ def summarize_transcript(transcript: str) -> dict:
             total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
             console.print(f"✅ API call complete in {elapsed:.2f}s")
             console.print(
-                f"[dim]Tokens:[/dim] {prompt_tokens} in + {completion_tokens} out = {total_tokens} total"
+                f"[dim]Tokens:[/dim] prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}"
             )
 
-    tool_calls = response.choices[0].message.tool_calls
+    message = response.choices[0].message
+    tool_calls = getattr(message, "tool_calls", None)
     if not tool_calls:
-        raise RuntimeError("Model did not return structured meeting notes.")
-
-    arguments = tool_calls[0].function.arguments
-    if isinstance(arguments, str):
-        return json.loads(arguments)
-    return arguments
-
-
-def _extract_verbose_flag(argv: list[str]) -> tuple[list[str], bool]:
-    verbose = False
-    filtered = []
-    for arg in argv:
-        if arg in ("-v", "--verbose"):
-            verbose = True
-        else:
-            filtered.append(arg)
-    return filtered, verbose
-
-
-def main() -> int:
-    global VERBOSE
-
-    args, cli_verbose = _extract_verbose_flag(sys.argv[1:])
-    VERBOSE = cli_verbose
-
-    if not args:
-        console.print("Usage: python summarizer.py <transcript-file>")
-        return 1
-
-    transcript_path = Path(args[0])
-    if not transcript_path.exists():
-        console.print(f"File not found: {transcript_path}")
-        return 1
-
-    transcript = transcript_path.read_text(encoding="utf-8")
-    notes = summarize_transcript(transcript)
-
-    console.print(Panel.fit(f"# {notes.get('title', 'Meeting Notes')}", title="Summary"))
-    console.print(Markdown(notes.get("executive_summary", "")))
-
-    if VERBOSE:
-        print_usage(type("Resp", (), {"usage": None})())
-
-    return 0
+        raise ValueError("Model did not return structured tool output")
+    args = tool_calls[0].function.arguments
+    if isinstance(args, str):
+        return json.loads(args)
+    return args
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if len(sys.argv) < 2:
+        print("Usage: python summarizer.py <transcript_file> [-v|--verbose]")
+        sys.exit(1)
+
+    VERBOSE = "-v" in sys.argv or "--verbose" in sys.argv
+    transcript_path = next((a for a in sys.argv[1:] if a not in {"-v", "--verbose"}), None)
+    if not transcript_path:
+        print("Usage: python summarizer.py <transcript_file> [-v|--verbose]")
+        sys.exit(1)
+
+    text = Path(transcript_path).read_text(encoding="utf-8")
+    notes = summarize_transcript(text)
+    print(json.dumps(notes, indent=2, ensure_ascii=False))
