@@ -178,79 +178,81 @@ ImportError while collecting tests/test_payments.py
     from src.payments import StripeClient
 ModuleNotFoundError: No module named 'stripe'
 
-=============================== 2 failed, 140 passed ==============================
-##[error]Bash exited with code '1'.
-##[section]Finishing: Run tests
+===========================
 """
 
-def analyze_log(log: str) -> Diagnosis:
-    with console.status("[bold green]Processing..."):
-        response = create_chat_completion(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": (
-                    "You are a DevOps expert and CI/CD specialist. Analyze pipeline logs to identify "
-                    "root causes of failures. Provide specific, actionable fix steps with exact commands where possible."
-                )},
-                {"role": "user", "content": f"Analyze this pipeline failure log:\n\n{log}"}
-            ],
-            tools=[{"type": "function", "function": SCHEMA}],
-            tool_choice={"type": "function", "function": {"name": "pipeline_diagnosis"}},
-            temperature=0.1,
-        )
-    print_usage(cast(ResponseLike, response))
-    return cast(Diagnosis, json.loads(response.choices[0].message.tool_calls[0].function.arguments))
 
-def display(diagnosis: Diagnosis) -> None:
-    sev_color = {"blocking": "red", "warning": "yellow", "flaky": "blue"}.get(diagnosis["severity"], "white")
-    console.print()
-    console.print(Panel.fit(
-        f"[bold red]✘ Pipeline Failed[/bold red]\n"
-        f"Stage: [bold]{diagnosis['failure_stage']}[/bold]  |  "
-        f"Type: [yellow]{diagnosis['error_type']}[/yellow]  |  "
-        f"Severity: [{sev_color} bold]{diagnosis['severity'].upper()}[/{sev_color} bold]",
-        title="[bold cyan]Pipeline Failure Analysis[/bold cyan]", border_style="cyan"
-    ))
-    console.print(Panel(diagnosis["root_cause"], title="[bold red]Root Cause[/bold red]", border_style="red"))
-
-    t = Table(show_header=True, header_style="bold green")
-    t.add_column("Step", width=5); t.add_column("Action", ratio=2); t.add_column("Command", ratio=2)
-    for s in diagnosis["fix_steps"]:
-        cmd = s.get("command", "—")
-        t.add_row(str(s["step"]), s["action"],
-                  f"[cyan]{cmd}[/cyan]" if cmd != "—" else "[dim]—[/dim]")
-    console.print(Panel(t, title="[bold green]Fix Steps[/bold green]", border_style="green"))
-
-    if diagnosis.get("affected_files"):
-        console.print(Panel("\n".join(f"  [yellow]•[/yellow] {f}" for f in diagnosis["affected_files"]),
-                            title="[bold]Affected Files[/bold]", border_style="yellow"))
-
-    console.print(Panel("\n".join(f"  [dim]→[/dim] {p}" for p in diagnosis["prevention_tips"]),
-                        title="[bold blue]Prevention Tips[/bold blue]", border_style="blue"))
-
-
-def main() -> None:
+def _run_verbose_diagnostics_tests() -> None:
     global VERBOSE
-    args = sys.argv[1:]
-    if "--verbose" in args or "-v" in args:
+
+    class _FakeCompletions:
+        def __init__(self, fail_times: int = 0):
+            self.calls = 0
+            self.fail_times = fail_times
+
+        def create(self, **kwargs):
+            self.calls += 1
+            if self.calls <= self.fail_times:
+                raise RuntimeError("transient")
+            return {"ok": True, "kwargs": kwargs}
+
+    class _FakeChat:
+        def __init__(self, completions):
+            self.completions = completions
+
+    class _FakeClient:
+        def __init__(self, completions):
+            self.chat = _FakeChat(completions)
+
+    class _CaptureConsole:
+        def __init__(self):
+            self.lines: list[str] = []
+
+        def print(self, *args, **kwargs):
+            self.lines.append(" ".join(str(a) for a in args))
+
+    original_get_client = globals()["get_client"]
+    original_console = globals()["console"]
+    original_sleep = time.sleep
+    original_verbose = VERBOSE
+
+    try:
+        # (1) VERBOSE=False: single API call, no diagnostics
+        cap = _CaptureConsole()
+        fake_comp = _FakeCompletions()
+        globals()["console"] = cast(Console, cap)
+        globals()["get_client"] = lambda: _FakeClient(fake_comp)  # type: ignore[assignment]
+        VERBOSE = False
+        create_chat_completion(model="x", messages=[{"content": "hello"}])
+        assert fake_comp.calls == 1
+        assert cap.lines == []
+
+        # (2) VERBOSE=True: diagnostics printed, API still called once
+        cap = _CaptureConsole()
+        fake_comp = _FakeCompletions()
+        globals()["console"] = cast(Console, cap)
+        globals()["get_client"] = lambda: _FakeClient(fake_comp)  # type: ignore[assignment]
         VERBOSE = True
-        args = [a for a in args if a not in ("--verbose", "-v")]
+        create_chat_completion(model="x", messages=[{"content": "hello"}])
+        assert fake_comp.calls == 1
+        out = "\n".join(cap.lines)
+        assert "Model:" in out
+        assert "Input size:" in out
+        assert "Calling OpenAI API" in out
+        assert "Done in" in out
 
-    if args:
-        p = Path(args[0])
-        if p.exists() and p.is_file():
-            log = p.read_text(encoding="utf-8", errors="ignore")
-        else:
-            log = " ".join(args)
-    else:
-        if not sys.stdin.isatty():
-            log = sys.stdin.read()
-        else:
-            log = SAMPLE_LOG
+        # (3) retry logic: transient failures retried up to max attempts
+        cap = _CaptureConsole()
+        fake_comp = _FakeCompletions(fail_times=2)
+        globals()["console"] = cast(Console, cap)
+        globals()["get_client"] = lambda: _FakeClient(fake_comp)  # type: ignore[assignment]
+        time.sleep = lambda _: None  # type: ignore[assignment]
+        VERBOSE = False
+        create_chat_completion(model="x", messages=[{"content": "hello"}])
+        assert fake_comp.calls == 3
 
-    diagnosis = analyze_log(log)
-    display(diagnosis)
-
-
-if __name__ == "__main__":
-    main()
+    finally:
+        globals()["get_client"] = original_get_client
+        globals()["console"] = original_console
+        time.sleep = original_sleep
+        VERBOSE = original_verbose
