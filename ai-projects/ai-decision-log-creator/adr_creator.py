@@ -25,6 +25,14 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def print_usage(response):
+    usage = response.usage
+    prompt_tokens = usage.prompt_tokens
+    completion_tokens = usage.completion_tokens
+    total_tokens = usage.total_tokens
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 SCHEMA = {
     "name": "adr",
     "description": "Architecture Decision Record",
@@ -108,6 +116,7 @@ def create_adr(discussion: str, adr_number: str = "001") -> dict:
             tool_choice={"type": "function", "function": {"name": "adr"}},
             temperature=0.2,
         )
+    print_usage(response)
     if VERBOSE:
         elapsed = time.perf_counter() - start
         console.print(f"✅ Done in {elapsed:.1f}s")
@@ -139,4 +148,6 @@ def main():
     console.print(Panel(Markdown(adr["full_markdown"]),
                         title=f"[bold cyan]ADR-{adr_num}: {adr['title']}[/bold cyan]",
                         border_style="cyan"))
+
+
 
