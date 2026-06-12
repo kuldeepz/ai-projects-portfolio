@@ -7,6 +7,7 @@ Supports tone selection, length control, and follow-up suggestions.
 import os
 import sys
 import json
+import time
 from datetime import datetime
 from typing import TypedDict
 
@@ -32,6 +33,19 @@ class EmailOutput(TypedDict):
 
 
 JSONValue = str | int | float | bool | None | dict[str, "JSONValue"] | list["JSONValue"]
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception:
+                if attempt == len(delays):
+                    raise
+                time.sleep(delays[attempt])
+    return wrapper
 
 
 def get_client() -> OpenAI:
@@ -90,6 +104,11 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
+@retry_with_backoff
+def _create_chat_completion(**kwargs):
+    return get_client().chat.completions.create(**kwargs)
+
+
 def compose_email(
     bullet_points: str,
     tone: str,
@@ -118,7 +137,7 @@ def compose_email(
     )
 
     with console.status("[bold green]Processing..."):
-        response = get_client().chat.completions.create(
+        response = _create_chat_completion(
             model=CHAT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
