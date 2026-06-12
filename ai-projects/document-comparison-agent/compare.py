@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -24,15 +25,15 @@ from rich.text import Text
 
 load_dotenv()
 
-console = Console()
-CHAT_MODEL = "gpt-4o-mini"
-VERBOSE = False
+console: Console = Console()
+CHAT_MODEL: str = "gpt-4o-mini"
+VERBOSE: bool = False
 
-MODEL_PRICING = {
+MODEL_PRICING: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"in_per_1m": 0.15, "out_per_1m": 0.60},
 }
 
-_client = None
+_client: OpenAI | None = None
 
 
 class StartupValidationError(Exception):
@@ -54,9 +55,9 @@ def _is_retryable_openai_error(exc: Exception) -> bool:
     return exc_name in retryable_names
 
 
-def retry_with_backoff(func):
+def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         delays = [1, 2, 4]
         last_exception = None
         for attempt in range(len(delays) + 1):
@@ -82,7 +83,7 @@ def get_client() -> OpenAI:
     return _client
 
 
-def print_usage(response) -> None:
+def print_usage(response: Any) -> None:
     if not VERBOSE:
         return
     usage = getattr(response, "usage", None)
@@ -133,7 +134,7 @@ def validate_environment() -> None:
     console.print("Setup OK ✓")
 
 
-COMPARE_SCHEMA = {
+COMPARE_SCHEMA: dict[str, Any] = {
     "name": "comparison_report",
     "description": "Structured comparison between two documents",
     "parameters": {
@@ -200,7 +201,7 @@ def read_document(path: str) -> str:
                 return
 
 
-def export_results(results: dict) -> None:
+def export_results(results: dict[str, Any]) -> None:
     generated_at = datetime.now().isoformat()
     payload = dict(results)
     payload["generated_at"] = generated_at
