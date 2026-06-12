@@ -23,6 +23,23 @@ def get_client():
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
+        sys.exit(1)
+
+    if len(sys.argv) >= 2:
+        path = sys.argv[1]
+        if not os.path.isfile(path):
+            console.print(f"[red]Error:[/red] Input file not found: {path}")
+            sys.exit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"[red]Error:[/red] Input file is not readable: {path}")
+            sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
 SCHEMA = {
     "name": "release_notes",
     "description": "Structured release notes for multiple audiences",
@@ -79,6 +96,8 @@ def generate_notes(data: dict) -> dict:
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
+    validate_environment()
+
     if len(sys.argv) < 2:
         console.print("[dim]No file provided — using sample release data...[/dim]\n")
         data = SAMPLE_ITEMS
