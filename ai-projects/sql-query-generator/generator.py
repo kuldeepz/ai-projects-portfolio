@@ -16,7 +16,7 @@ def retry_with_backoff(func):
         for attempt in range(len(delays) + 1):
             try:
                 return func(*args, **kwargs)
-            except Exception as exc:
+            except (TimeoutError, ConnectionError) as exc:
                 last_exc = exc
                 if attempt < len(delays):
                     time.sleep(delays[attempt])
