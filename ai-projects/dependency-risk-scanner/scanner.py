@@ -46,6 +46,28 @@ def get_client():
     return _client
 
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        print("Error: OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
+        sys.exit(1)
+
+    file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    for file_arg in file_args:
+        p = Path(file_arg)
+        if not p.exists():
+            print(f"Error: File does not exist: {file_arg}")
+            sys.exit(1)
+        if not p.is_file():
+            print(f"Error: Path is not a file: {file_arg}")
+            sys.exit(1)
+        if not os.access(p, os.R_OK):
+            print(f"Error: File is not readable: {file_arg}")
+            sys.exit(1)
+
+    print("Setup OK ✓")
+
+
 RETRYABLE_EXCEPTIONS = (APIConnectionError, APITimeoutError, RateLimitError, APIError)
 NON_RETRYABLE_EXCEPTIONS = (BadRequestError, AuthenticationError)
 
