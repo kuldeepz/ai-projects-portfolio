@@ -7,6 +7,7 @@ similarities, conflicts, and produces a structured diff report.
 import os
 import sys
 import json
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -24,6 +25,21 @@ console = Console()
 CHAT_MODEL = "gpt-4o-mini"
 
 _client = None
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if attempt < len(delays):
+                    time.sleep(delays[attempt])
+                else:
+                    raise last_exception
+    return wrapper
 
 def get_client() -> OpenAI:
     global _client
@@ -100,6 +116,7 @@ def read_document(path: str) -> str:
         return f.read()
 
 
+@retry_with_backoff
 def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, context: str = "") -> dict:
     ctx = f"\nComparison context: {context}" if context else ""
     max_chars = 5000
