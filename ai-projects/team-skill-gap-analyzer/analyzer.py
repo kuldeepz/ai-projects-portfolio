@@ -3,11 +3,13 @@ import os, sys, pytest
 import analyzer
 
 
-def _set_api_key(monkeypatch, value="test-key"):
+def _set_api_key(monkeypatch: pytest.MonkeyPatch, value: str = "test-key") -> None:
     monkeypatch.setenv("OPENAI_API_KEY", value)
 
 
-def test_validate_environment_exits_when_api_key_missing(monkeypatch, capsys):
+def test_validate_environment_exits_when_api_key_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(SystemExit) as exc:
@@ -18,7 +20,9 @@ def test_validate_environment_exits_when_api_key_missing(monkeypatch, capsys):
     assert "OPENAI_API_KEY is not set or is empty" in out
 
 
-def test_validate_environment_exits_when_api_key_blank(monkeypatch, capsys):
+def test_validate_environment_exits_when_api_key_blank(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _set_api_key(monkeypatch, "   ")
 
     with pytest.raises(SystemExit) as exc:
@@ -29,7 +33,11 @@ def test_validate_environment_exits_when_api_key_blank(monkeypatch, capsys):
     assert "OPENAI_API_KEY is not set or is empty" in out
 
 
-def test_validate_environment_exits_for_missing_file_path(monkeypatch, tmp_path, capsys):
+def test_validate_environment_exits_for_missing_file_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pytest.TempPathFactory,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     _set_api_key(monkeypatch)
     bad_path = tmp_path / "does_not_exist.json"
 
@@ -42,7 +50,11 @@ def test_validate_environment_exits_for_missing_file_path(monkeypatch, tmp_path,
     assert str(bad_path) in out
 
 
-def test_validate_environment_exits_for_directory_path(monkeypatch, tmp_path, capsys):
+def test_validate_environment_exits_for_directory_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pytest.TempPathFactory,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     _set_api_key(monkeypatch)
     dir_path = tmp_path / "data_dir"
     dir_path.mkdir()
@@ -56,7 +68,11 @@ def test_validate_environment_exits_for_directory_path(monkeypatch, tmp_path, ca
     assert str(dir_path) in out
 
 
-def test_validate_environment_exits_for_unreadable_file(monkeypatch, tmp_path, capsys):
+def test_validate_environment_exits_for_unreadable_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pytest.TempPathFactory,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     _set_api_key(monkeypatch)
     file_path = tmp_path / "input.json"
     file_path.write_text("{}", encoding="utf-8")
@@ -72,7 +88,11 @@ def test_validate_environment_exits_for_unreadable_file(monkeypatch, tmp_path, c
     assert str(file_path) in out
 
 
-def test_validate_environment_success_with_valid_setup(monkeypatch, tmp_path, capsys):
+def test_validate_environment_success_with_valid_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pytest.TempPathFactory,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     _set_api_key(monkeypatch)
     file_path = tmp_path / "input.json"
     file_path.write_text("{}", encoding="utf-8")
