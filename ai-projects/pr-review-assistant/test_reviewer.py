@@ -40,19 +40,18 @@ def test_invalid_candidates_not_present(candidate):
     assert candidate not in VERDICT_ICONS
 
 @pytest.mark.parametrize(
-    "field_path, expected_min_len",
+    "field_path, expected",
     [
-        (("parameters", "required"), 5),
-        (("parameters", "properties", "comments", "items", "properties", "severity", "enum"), 5),
-        (("parameters", "properties"), 5),
+        (("parameters", "required"), {"overall_verdict", "summary", "comments", "positives", "checklist"}),
+        (("parameters", "properties", "comments", "items", "properties", "severity", "enum"), {"blocking", "major", "minor", "nit", "praise"}),
     ],
 )
-def test_schema_boundary_cases(field_path, expected_min_len):
-    """Covers boundary conditions for schema collection sizes and nesting."""
+def test_schema_boundary_cases(field_path, expected):
+    """Covers boundary conditions with exact expectations for stable schema collections."""
     node = SCHEMA
     for key in field_path:
         node = node[key]
-    assert len(node) >= expected_min_len
+    assert set(node) == expected
 
 if __name__ == "__main__":
     print("\n=== pr-review-assistant: Sanity Tests ===\n")
