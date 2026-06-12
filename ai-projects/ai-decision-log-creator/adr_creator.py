@@ -138,15 +138,93 @@ def main():
     console.print()
     console.print(Panel(Markdown(adr["full_markdown"]),
                         title=f"[bold cyan]ADR-{adr_num}: {adr['title']}[/bold cyan]",
-                        border_style="cyan", padding=(1, 2)))
+                        border_style="cyan"))
 
-    out_dir = Path("decisions")
-    with console.status("[bold green]Processing...[/bold green]"):
-        out_dir.mkdir(exist_ok=True)
-        safe_title = adr["title"].lower().replace(" ", "-").replace("/", "-")[:50]
-        out = out_dir / f"ADR-{adr_num}-{safe_title}.md"
-        out.write_text(adr["full_markdown"])
-    console.print(f"\n[green]Saved:[/green] {out}\n")
+
+def _run_tests_for_status_behavior():
+    class DummyStatus:
+        def __init__(self, calls, message):
+            self.calls = calls
+            self.message = message
+
+        def __enter__(self):
+            self.calls.append(("enter", self.message))
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.calls.append(("exit", self.message))
+            return False
+
+    class DummyConsole:
+        def __init__(self):
+            self.calls = []
+
+        def status(self, message):
+            self.calls.append(("status", message))
+            return DummyStatus(self.calls, message)
+
+        def print(self, *args, **kwargs):
+            return None
+
+    # test create_adr status usage
+    original_console = globals()["console"]
+    original_get_client = globals()["get_client"]
+
+    dummy_console = DummyConsole()
+
+    class DummyResponse:
+        class Choice:
+            class Message:
+                class ToolCall:
+                    class Function:
+                        arguments = '{"title":"T","status":"accepted","context":"c","decision":"d","rationale":"r","alternatives_considered":[],"consequences":{"positive":[],"negative":[],"risks":[]},"full_markdown":"# ADR"}'
+                    function = Function()
+                tool_calls = [ToolCall()]
+            message = Message()
+        choices = [Choice()]
+
+    class DummyClient:
+        class Chat:
+            class Completions:
+                @staticmethod
+                def create(**kwargs):
+                    return DummyResponse()
+            completions = Completions()
+        chat = Chat()
+
+    try:
+        globals()["console"] = dummy_console
+        globals()["get_client"] = lambda: DummyClient()
+        create_adr("discussion", "001")
+        assert ("status", "[bold green]Processing...[/bold green]") in dummy_console.calls
+    finally:
+        globals()["console"] = original_console
+        globals()["get_client"] = original_get_client
+
+    # test main file-input status usage
+    original_argv = sys.argv[:]
+    original_create_adr = globals()["create_adr"]
+    tmp_path = Path(".tmp_test_discussion.txt")
+    tmp_path.write_text("hello")
+    dummy_console = DummyConsole()
+
+    try:
+        globals()["console"] = dummy_console
+        globals()["create_adr"] = lambda discussion, adr_num: {"title": "T", "full_markdown": "# ADR"}
+        sys.argv = ["adr_creator.py", str(tmp_path)]
+        main()
+        assert ("status", "[bold green]Processing...[/bold green]") in dummy_console.calls
+        assert ("status", "[bold green]Generating ADR...[/bold green]") in dummy_console.calls
+    finally:
+        globals()["console"] = original_console
+        globals()["create_adr"] = original_create_adr
+        sys.argv = original_argv
+        if tmp_path.exists():
+            tmp_path.unlink()
+
 
 if __name__ == "__main__":
-    main()
+    if os.getenv("ADR_CREATOR_RUN_STATUS_TESTS") == "1":
+        _run_tests_for_status_behavior()
+    else:
+        main()
