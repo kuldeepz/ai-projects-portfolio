@@ -128,6 +128,7 @@ def main():
     parser.add_argument("file", nargs="?", help="Discussion file path")
     parser.add_argument("adr_num", nargs="?", default="001")
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-e", "--export", action="store_true")
     ns = parser.parse_args()
     VERBOSE = ns.verbose
 
