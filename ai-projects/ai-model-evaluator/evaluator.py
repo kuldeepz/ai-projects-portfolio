@@ -58,6 +58,53 @@ SAMPLE_SUITE: dict[str, Any] = {
     ]
 }
 
+
+def validate_eval_result(data: dict[str, Any]) -> dict[str, Any]:
+    required_keys = ["score", "correctness", "reasoning", "hallucination_detected"]
+    missing = [k for k in required_keys if k not in data]
+    if missing:
+        raise ValueError(f"Evaluator output missing required keys: {missing}")
+
+    score = data["score"]
+    if not isinstance(score, int):
+        raise TypeError("Evaluator output 'score' must be int")
+    if score < 0 or score > 100:
+        raise ValueError("Evaluator output 'score' must be between 0 and 100")
+
+    correctness = data["correctness"]
+    if correctness not in {"correct", "partial", "incorrect"}:
+        raise ValueError("Evaluator output 'correctness' must be one of: correct, partial, incorrect")
+
+    reasoning = data["reasoning"]
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        raise TypeError("Evaluator output 'reasoning' must be a non-empty string")
+
+    hallucination_detected = data["hallucination_detected"]
+    if not isinstance(hallucination_detected, bool):
+        raise TypeError("Evaluator output 'hallucination_detected' must be bool")
+
+    if "key_missing" in data and not isinstance(data["key_missing"], list):
+        raise TypeError("Evaluator output 'key_missing' must be a list when provided")
+
+    return data
+
+
+def validate_suite_schema(suite: dict[str, Any]) -> None:
+    if not isinstance(suite.get("name"), str) or not suite["name"].strip():
+        raise ValueError("suite.name must be a non-empty string")
+    if not isinstance(suite.get("system_prompt"), str) or not suite["system_prompt"].strip():
+        raise ValueError("suite.system_prompt must be a non-empty string")
+    test_cases = suite.get("test_cases")
+    if not isinstance(test_cases, list) or not test_cases:
+        raise ValueError("suite.test_cases must be a non-empty list")
+    for i, tc in enumerate(test_cases):
+        if not isinstance(tc, dict):
+            raise TypeError(f"test_cases[{i}] must be an object")
+        for key in ("id", "input", "expected"):
+            if not isinstance(tc.get(key), str) or not tc[key].strip():
+                raise ValueError(f"test_cases[{i}].{key} must be a non-empty string")
+
+
 def run_model(system_prompt: str, user_input: str) -> str:
     r = get_client().chat.completions.create(
         model=MODEL,
@@ -65,7 +112,10 @@ def run_model(system_prompt: str, user_input: str) -> str:
                   {"role": "user", "content": user_input}],
         temperature=0.3,
     )
-    return r.choices[0].message.content
+    content = r.choices[0].message.content
+    if content is None:
+        raise ValueError("Model returned null content")
+    return content
 
 def score_output(actual: str, expected: str, question: str) -> dict[str, Any]:
     r = get_client().chat.completions.create(
@@ -83,9 +133,11 @@ def score_output(actual: str, expected: str, question: str) -> dict[str, Any]:
         tool_choice={"type": "function", "function": {"name": "eval_score"}},
         temperature=0.1,
     )
-    return json.loads(r.choices[0].message.tool_calls[0].function.arguments)
+    parsed = json.loads(r.choices[0].message.tool_calls[0].function.arguments)
+    return validate_eval_result(parsed)
 
 def run_evaluation(suite: dict[str, Any]) -> dict[str, Any]:
+    validate_suite_schema(suite)
     results: list[dict[str, Any]] = []
     for tc in track(suite["test_cases"], description="Evaluating..."):
         actual = run_model(suite["system_prompt"], tc["input"])
@@ -127,20 +179,15 @@ def display(report: dict[str, Any]) -> None:
     console.print(Panel(t, title="[bold]Test Case Results[/bold]", border_style="dim"))
 
     out = f"eval_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-    console.print(f"\n[green]Full report saved:[/green] {out}\n")
+    console.print(f"\nSaved report: [bold]{out}[/bold]")
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        console.print("[dim]No suite file provided — running sample evaluation suite...[/dim]\n")
-        suite = SAMPLE_SUITE
-    else:
-        with open(sys.argv[1]) as f:
-            suite = json.load(f)
-
-    report = run_evaluation(suite)
-    display(report)
 
 if __name__ == "__main__":
-    main()
+    suite = SAMPLE_SUITE
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], "r", encoding="utf-8") as f:
+            suite = json.load(f)
+    report = run_evaluation(suite)
+    display(report)
