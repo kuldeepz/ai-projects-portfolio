@@ -91,18 +91,20 @@ def validate_environment():
         sys.exit(1)
 
     file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
-    for path_arg in file_args:
-        p = Path(path_arg)
-        if p.suffix.lower() in (".pdf", ".txt", ".md"):
-            if not p.exists():
-                console.print(f"[red]File not found:[/red] {path_arg}")
-                sys.exit(1)
-            if not p.is_file():
-                console.print(f"[red]Not a file:[/red] {path_arg}")
-                sys.exit(1)
-            if not os.access(p, os.R_OK):
-                console.print(f"[red]File is not readable:[/red] {path_arg}")
-                sys.exit(1)
+    if file_args:
+        resume_path = Path(file_args[0])
+        if not resume_path.exists():
+            console.print(f"[red]File not found:[/red] {resume_path}")
+            sys.exit(1)
+        if not resume_path.is_file():
+            console.print(f"[red]Not a file:[/red] {resume_path}")
+            sys.exit(1)
+        if not os.access(resume_path, os.R_OK):
+            console.print(f"[red]File is not readable:[/red] {resume_path}")
+            sys.exit(1)
+        if resume_path.suffix.lower() not in (".pdf", ".txt", ".md"):
+            console.print(f"[red]Unsupported file type:[/red] {resume_path.suffix}")
+            sys.exit(1)
 
     console.print("[green]Setup OK ✓[/green]")
 
@@ -179,14 +181,3 @@ def display_results(analysis: dict):
     score_table.add_column(style="dim")
 
 
-def main():
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py <resume.pdf|resume.txt> [target_role]")
-        console.print("[dim]Example: python analyzer.py my_resume.pdf 'Senior Data Engineer'[/dim]")
-        sys.exit(1)
-
-    validate_environment()
-
-
-if __name__ == "__main__":
-    main()
