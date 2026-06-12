@@ -1,8 +1,8 @@
 # AI Projects Portfolio
 
-A collection of 10 practical AI-powered tools and agents built with OpenAI's GPT-4o-mini. Each project solves a real-world problem and is fully runnable from the command line.
+A collection of 25 practical AI-powered tools and agents built with OpenAI's GPT-4o-mini. Each project solves a real-world problem and is fully runnable from the command line.
 
-## Projects
+## Projects — Core AI Tools (1–10)
 
 | # | Project | Description | Key Tech |
 |---|---------|-------------|----------|
@@ -17,115 +17,84 @@ A collection of 10 practical AI-powered tools and agents built with OpenAI's GPT
 | 9 | [document-comparison-agent](./document-comparison-agent/) | Compare two docs, find conflicts | Similarity Score, Side-by-side |
 | 10 | [sentiment-dashboard](./sentiment-dashboard/) | Sentiment + emotion analysis, batch CSV | Aspect-level, Batch Mode |
 
+## Projects — Advanced AI Skills (11–25)
+
+> DevOps, Engineering Leadership, Architecture & MLOps skills for AI Leads.
+
+| # | Project | Description | Key Tech |
+|---|---------|-------------|----------|
+| 11 | [ado-workitem-analyzer](./ado-workitem-analyzer/) | Score ADO work items, rewrite AC in BDD, suggest story points | DoR Scoring, BDD, Fibonacci SP |
+| 12 | [ado-sprint-planner](./ado-sprint-planner/) | Capacity-aware sprint planning from backlog | Velocity, Dependency Mgmt |
+| 13 | [ado-release-notes-generator](./ado-release-notes-generator/) | Work items → multi-audience release notes | Semver, Markdown Export |
+| 14 | [ado-pipeline-failure-analyzer](./ado-pipeline-failure-analyzer/) | CI/CD log → root cause + fix commands | Error Enum, Log Truncation |
+| 15 | [ado-test-case-generator](./ado-test-case-generator/) | User stories → BDD test cases (5 types) | BDD, Automation Flags |
+| 16 | [pr-review-assistant](./pr-review-assistant/) | Git diff → full PR review with verdict | Severity Levels, Checklist |
+| 17 | [architecture-review-agent](./architecture-review-agent/) | Architecture → Well-Architected Framework review | WAF, SPoF Detection |
+| 18 | [tech-debt-analyzer](./tech-debt-analyzer/) | File/dir scan → debt score + quick wins | 7 Categories, Effort Days |
+| 19 | [dependency-risk-scanner](./dependency-risk-scanner/) | requirements.txt → CVE risk report | 5 Risk Levels, Upgrade Cmds |
+| 20 | [incident-postmortem-generator](./incident-postmortem-generator/) | Incident notes → blameless RCA + action items | RCA Types, Priority Tiers |
+| 21 | [standup-report-generator](./standup-report-generator/) | Raw notes → standup/weekly/exec/Slack reports | 4 Formats, Tone-aware |
+| 22 | [prompt-library-manager](./prompt-library-manager/) | Versioned prompt registry with A/B testing | MD5 Versioning, CLI |
+| 23 | [ai-model-evaluator](./ai-model-evaluator/) | Test suite → LLM-as-judge scoring + hallucination detection | Eval Framework, Judge Pattern |
+| 24 | [ai-decision-log-creator](./ai-decision-log-creator/) | Discussion → ADR (Architecture Decision Record) | Nygard Format, Auto-numbering |
+| 25 | [team-skill-gap-analyzer](./team-skill-gap-analyzer/) | Team skills vs project needs → gap analysis + hiring plan | Coverage Score, Training Plan |
+
 ---
 
 ## Quick Start
 
-All projects use Python and OpenAI. Each has its own `requirements.txt` and `.env.example`.
-
 ```bash
-# 1. Go into any project folder
+# Clone the repo
+git clone https://github.com/kuldeepz/ai-projects-portfolio
+cd ai-projects-portfolio
+
+# Set up environment (once)
+cp pdf-chatbot-rag/.env.example pdf-chatbot-rag/.env
+# Add your OPENAI_API_KEY to each project's .env
+
+# Run any project
 cd pdf-chatbot-rag
-
-# 2. Set up virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
 pip install -r requirements.txt
-
-# 4. Set your API key
-cp .env.example .env
-# Edit .env — add your OpenAI API key
-
-# 5. Run
-python chatbot.py document.pdf
+python chatbot.py
 ```
 
----
+## Running Sanity Tests (No API Key Required)
 
-## Project Summaries
-
-### 1. PDF Chatbot (RAG)
-> `python chatbot.py document.pdf`
-
-Implements Retrieval-Augmented Generation from scratch. Chunks your PDF, generates embeddings, and retrieves the top-4 most relevant chunks per query using cosine similarity. GPT-4o-mini answers using only that context. Embeddings are cached locally.
-
-### 2. AI Resume Analyzer
-> `python analyzer.py resume.pdf "Senior Engineer"`
-
-Structured resume scoring using function calling — scores 1-100, checks ATS compatibility, lists skills, identifies gaps, and gives specific improvement suggestions. Rich terminal dashboard.
-
-### 3. Smart Research Agent
-> `python agent.py "topic" deep`
-
-Autonomous multi-step agent: searches DuckDuckGo, fetches and reads web pages, summarizes content, and compiles a markdown report without human intervention. Saves timestamped reports.
-
-### 4. AI Code Reviewer
-> `python reviewer.py app.py "context"`
-
-Reviews code for security vulnerabilities (SQL injection, XSS, hardcoded secrets), bugs, performance issues, and best practices. Severity-tagged findings (Critical/High/Medium/Low) with specific fixes and refactored snippets.
-
-### 5. Email Composer AI
-> `python composer.py`
-
-Converts bullet points to polished emails with 5 tone options (formal, friendly, assertive, empathetic, persuasive) and 3 length controls. Returns the email, 2 subject line alternatives, and follow-up suggestions.
-
-### 6. AI Meeting Notes Summarizer
-> `python summarizer.py transcript.txt`
-
-Turns raw meeting transcripts into structured notes: executive summary, action items table (task/owner/due), decisions, blockers, key topics, and sentiment. Auto-saves as a shareable markdown file.
-
-### 7. SQL Query Generator
-> `python generator.py "show top customers by revenue last 90 days"`
-
-Natural language to SQL across 6 dialects (PostgreSQL, MySQL, SQLite, SQL Server, BigQuery, Snowflake). Schema-aware when you provide CREATE TABLE statements. Multi-turn session with history.
-
-### 8. AI Unit Test Generator
-> `python generator.py my_module.py`
-
-Reads a Python file, parses function signatures via AST, then generates a complete pytest suite covering happy paths, edge cases, boundary values, and error conditions. Uses parametrize and mocking.
-
-### 9. Document Comparison Agent
-> `python compare.py doc1.pdf doc2.txt "contract"`
-
-Compares two documents side-by-side: similarity score (0-100), common themes, unique content per doc, direct conflicts/contradictions, tone differences, and a recommendation on which to use.
-
-### 10. Sentiment Analysis Dashboard
-> `python dashboard.py "text"` or `python dashboard.py --batch reviews.csv`
-
-Nuanced sentiment analysis: 4 classes, -1.0 to +1.0 score, specific emotions with intensity, aspect-level breakdown, and key phrases. Batch mode processes CSV files with a progress bar and exports results.
-
----
-
-## Running All Tests
-
-Each project includes a `test_*.py` file with sanity tests that run **without an API key**:
+All projects include sanity tests that validate structure and logic without calling the OpenAI API.
 
 ```bash
-python pdf-chatbot-rag/test_chatbot.py
-python ai-resume-analyzer/test_analyzer.py
-python smart-research-agent/test_agent.py
-python ai-code-reviewer/test_reviewer.py
-python email-composer-ai/test_composer.py
-python ai-meeting-summarizer/test_summarizer.py
-python sql-query-generator/test_generator.py
-python unit-test-generator/test_generator.py
-python document-comparison-agent/test_compare.py
-python sentiment-dashboard/test_dashboard.py
+# Run all core project tests
+python incident-postmortem-generator/test_postmortem.py
+
+# Run individual project tests
+python ado-workitem-analyzer/test_analyzer.py
+python pr-review-assistant/test_reviewer.py
+python architecture-review-agent/test_reviewer.py
+python tech-debt-analyzer/test_analyzer.py
+python dependency-risk-scanner/test_scanner.py
+python standup-report-generator/test_standup.py
+python prompt-library-manager/test_manager.py
+python ai-model-evaluator/test_evaluator.py
+python ai-decision-log-creator/test_adr_creator.py
+python team-skill-gap-analyzer/test_analyzer.py
 ```
 
 ## Tech Stack
 
+- **LLM:** OpenAI GPT-4o-mini (function calling + structured outputs)
 - **Language:** Python 3.10+
-- **LLM:** OpenAI GPT-4o-mini
-- **Embeddings:** OpenAI text-embedding-3-small (Project 1)
-- **Structured Outputs:** OpenAI Function Calling (all projects)
-- **Terminal UI:** Rich
-- **PDF Parsing:** PyPDF2
-- **Web Scraping:** BeautifulSoup4 (Project 3)
-- **Code Analysis:** Python `ast` module (Project 8)
+- **UI:** Rich terminal (panels, tables, syntax highlighting)
+- **Patterns:** Lazy client init · Agent loops · LLM-as-judge · BDD generation · RAG
 
----
+## Structure
 
-*Built with OpenAI GPT-4o-mini · Python 3.10+*
+```
+ai-projects-portfolio/
+├── pdf-chatbot-rag/          # Project 1-10: core AI tools
+├── ...
+├── ado-workitem-analyzer/    # Project 11-25: advanced AI skills
+├── ...
+└── README.md
+```
+
+> Each project folder contains: `main_script.py`, `test_*.py`, `README.md`, `requirements.txt`, `.env.example`
