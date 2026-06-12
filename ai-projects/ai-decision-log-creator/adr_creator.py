@@ -128,9 +128,26 @@ def main():
     parser.add_argument("file", nargs="?", help="Discussion file path")
     parser.add_argument("adr_num", nargs="?", default="001")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-e", "--export", action="store_true")
+    parser.add_argument("-e", "--export", action="store_true", help="Export ADR markdown to file")
     ns = parser.parse_args()
     VERBOSE = ns.verbose
 
     if not ns.file:
         console.print("[dim]No file provided — using sample discussion...[/dim]")
+        discussion = SAMPLE_DISCUSSION
+    else:
+        discussion = Path(ns.file).read_text(encoding="utf-8")
+
+    adr = create_adr(discussion, ns.adr_num)
+
+    if ns.export:
+        out_dir = Path("adrs")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = out_dir / f"ADR-{ns.adr_num}.md"
+        out_file.write_text(adr["full_markdown"], encoding="utf-8")
+        console.print(f"✅ Exported ADR to [bold]{out_file}[/bold]")
+    else:
+        console.print(Panel(Markdown(adr["full_markdown"]), title=f"ADR {ns.adr_num}"))
+
+if __name__ == "__main__":
+    main()
