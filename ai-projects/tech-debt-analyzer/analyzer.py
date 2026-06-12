@@ -75,7 +75,7 @@ def collect_code(target: str, max_chars: int = 8000) -> str:
 
 def analyze(code: str, context: str = "") -> dict:
     ctx = f"\nContext: {context}" if context else ""
-    with console.status("[bold green]Processing..."):
+    with console.status("[bold green]Analyzing technical debt with AI..."):
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -132,33 +132,4 @@ def validate_environment(argv):
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("target")
-    parser.add_argument("context", nargs="?")
-    parser.add_argument("--out", default=f"tech_debt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
-    return parser.parse_args(argv)
-
-def main():
-    args = validate_environment(sys.argv[1:])
-
-    target_path = Path(args.target)
-    if not target_path.exists():
-        console.print(f"[red]Error:[/red] Target '{args.target}' does not exist.")
-        sys.exit(1)
-
-    with console.status("[bold green]Processing..."):
-        code = collect_code(args.target)
-    if not code.strip():
-        console.print("[red]Error:[/red] No analyzable Python code found in target.")
-        sys.exit(1)
-
-    report = analyze(code, args.context or "")
-    display(report)
-
-    out_path = Path(args.out)
-    with console.status("[bold green]Processing..."):
-        out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    console.print(f"[green]Saved report to:[/green] {out_path}")
-
-if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser
