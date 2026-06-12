@@ -6,6 +6,7 @@ categorized by severity — ready to paste into GitHub/ADO PR.
 
 import os, sys, json, subprocess, time
 from pathlib import Path
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -196,3 +197,15 @@ def _run_retry_with_backoff_tests():
 
 if __name__ == "__main__" and "--test-retry" in sys.argv:
     _run_retry_with_backoff_tests()
+
+if __name__ == "__main__" and "--test-retry" not in sys.argv:
+    export = "--export" in sys.argv or "-e" in sys.argv
+    review = review_diff(SAMPLE_DIFF)
+    display(review)
+    if export:
+        generated_at = datetime.now().isoformat()
+        output = dict(review)
+        output["generated_at"] = generated_at
+        filename = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
