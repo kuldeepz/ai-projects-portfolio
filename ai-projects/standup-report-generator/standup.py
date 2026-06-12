@@ -148,26 +148,78 @@ def main():
 
     console.print()
     console.print(Panel(Markdown(report["formatted_report"]),
-                        title=f"[bold cyan]{report['title']}[/bold cyan]",
-                        border_style="cyan", padding=(1, 2)))
-
-    if report["key_highlights"]:
-        console.print(Panel(
-            "\n".join(f"  [cyan]★[/cyan] {h}" for h in report["key_highlights"]),
-            title="[bold]Key Highlights[/bold]", border_style="dim"
-        ))
-
-    out = f"standup_{date.today().isoformat()}.md"
-    with open(out, "w") as f:
-        f.write(report["formatted_report"])
-    console.print(f"\n[green]Saved:[/green] {out}\n")
-
-    if parsed.export == "json":
-        now = datetime.now()
-        timestamp = now.strftime("%Y%m%d_%H%M%S")
-        export_out = parsed.export_out or f"output_{timestamp}.json"
-        export_data = dict(report)
-        export_data["generated_at"] = now.isoformat()
+                        title=report.get("title", "Standup Report"),
+                        border_style="cyan"))
 
 
-# Tests for retry behavi
+# -------------------------
+# Unit tests (pytest)
+# -------------------------
+
+def test_print_usage_no_usage(monkeypatch):
+    calls = []
+    monkeypatch.setattr(console, "print", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    class Response:
+        usage = None
+
+    print_usage(Response())
+    assert calls == []
+
+
+def test_print_usage_token_fallback_and_format(monkeypatch):
+    captured = []
+    monkeypatch.setattr(console, "print", lambda msg, *args, **kwargs: captured.append(msg))
+
+    class Usage:
+        prompt_tokens = None
+        completion_tokens = 10
+        total_tokens = None
+
+    class Response:
+        usage = Usage()
+
+    print_usage(Response())
+
+    assert len(captured) == 1
+    line = captured[0]
+    assert "📊 Tokens: 0 in + 10 out = 10 total" in line
+    assert "💰 Est. cost: $0.0000" in line
+
+
+def test_retry_with_backoff_retries_and_sleeps(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
+    monkeypatch.setattr(random, "uniform", lambda a, b: 1.0)
+
+    state = {"n": 0}
+
+    @retry_with_backoff(max_retries=3, base_delay=0.1, max_delay=1.0, jitter=0.25)
+    def flaky():
+        state["n"] += 1
+        if state["n"] < 3:
+            raise ValueError("transient")
+        return "ok"
+
+    assert flaky() == "ok"
+    assert state["n"] == 3
+    assert sleeps == [0.1, 0.2]
+
+
+def test_retry_with_backoff_reraises_after_boundary(monkeypatch):
+    monkeypatch.setattr(time, "sleep", lambda d: None)
+    monkeypatch.setattr(random, "uniform", lambda a, b: 1.0)
+
+    state = {"n": 0}
+
+    @retry_with_backoff(max_retries=2, base_delay=0.1, max_delay=1.0, jitter=0.25)
+    def always_fail():
+        state["n"] += 1
+        raise RuntimeError("fatal")
+
+    try:
+        always_fail()
+        assert False, "Expected RuntimeError"
+    except RuntimeError as e:
+        assert str(e) == "fatal"
+    assert state["n"] == 3
