@@ -58,7 +58,7 @@ SAMPLE_WORK_ITEM = {
 }
 
 def analyze_workitem(item: dict) -> dict:
-    with console.status("[bold green]Processing...[/bold green]"):
+    with console.status("[bold green]Calling OpenAI for analysis...[/bold green]"):
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -119,12 +119,11 @@ def main():
         console.print("[dim]Running with built-in sample work item...[/dim]\n")
         item = SAMPLE_WORK_ITEM
     else:
-        with console.status("[bold green]Processing...[/bold green]"):
+        with console.status("[bold green]Loading work item JSON...[/bold green]"):
             with open(sys.argv[1]) as f:
                 item = json.load(f)
 
-    with console.status("[bold green]Analyzing work item...[/bold green]"):
-        analysis = analyze_workitem(item)
+    analysis = analyze_workitem(item)
     display(item, analysis)
 
 if __name__ == "__main__":
