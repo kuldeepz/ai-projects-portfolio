@@ -1,42 +1,57 @@
-"""
-ADO Sprint Planner
-Analyzes a product backlog (JSON) + team capacity/velocity and recommends
-the optimal sprint composition with story point distribution.
-"""
-
-import os, sys, json, time
 from datetime import datetime
+from functools import wraps
+import json
+import os
+import sys
+import time
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+"""
+ADO Sprint Planner
+Analyzes a product backlog (JSON) + team capacity/velocity and recommends
+the optimal sprint composition with story point distribution.
+"""
+
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exc = None
-        for i, delay in enumerate(delays):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                last_exc = e
-                if i == len(delays) - 1:
-                    break
-                time.sleep(delay)
-        raise last_exc
-    return wrapper
+
+def retry_with_backoff(max_attempts=3, base_delay=1, factor=2, retryable_exceptions=(Exception,)):
+    def deco(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except retryable_exceptions as e:
+                    last_exc = e
+                    if attempt == max_attempts - 1:
+                        break
+                    delay = base_delay * (factor ** attempt)
+                    time.sleep(delay)
+            raise last_exc
+
+        return wrapper
+
+    return deco
+
 
 _client = None
+
+
 def get_client():
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
 
 SCHEMA = {
     "name": "sprint_plan",
@@ -53,27 +68,38 @@ SCHEMA = {
                         "id": {"type": "string"},
                         "title": {"type": "string"},
                         "story_points": {"type": "integer"},
-                        "reason": {"type": "string"}
+                        "reason": {"type": "string"},
                     },
-                    "required": ["id", "title", "story_points", "reason"]
-                }
+                    "required": ["id", "title", "story_points", "reason"],
+                },
             },
             "deferred_items": {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "reason": {"type": "string"}},
-                    "required": ["id", "title", "reason"]
-                }
+                    "properties": {
+                        "id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["id", "title", "reason"],
+                },
             },
             "total_points": {"type": "integer"},
             "capacity_utilization_pct": {"type": "integer"},
             "risks": {"type": "array", "items": {"type": "string"}},
-            "recommendations": {"type": "array", "items": {"type": "string"}}
+            "recommendations": {"type": "array", "items": {"type": "string"}},
         },
-        "required": ["sprint_goal", "recommended_items", "deferred_items",
-                     "total_points", "capacity_utilization_pct", "risks", "recommendations"]
-    }
+        "required": [
+            "sprint_goal",
+            "recommended_items",
+            "deferred_items",
+            "total_points",
+            "capacity_utilization_pct",
+            "risks",
+            "recommendations",
+        ],
+    },
 }
 
 SAMPLE_BACKLOG = {
@@ -88,8 +114,9 @@ SAMPLE_BACKLOG = {
         {"id": "US-105", "title": "Admin user management panel", "priority": "Medium", "story_points": 13, "dependencies": ["US-101"]},
         {"id": "US-106", "title": "API rate limiting", "priority": "Low", "story_points": 5, "dependencies": []},
         {"id": "TECH-12", "title": "Upgrade React to v18", "priority": "Low", "story_points": 8, "dependencies": []},
-    ]
+    ],
 }
+
 
 def parse_export_arg(argv):
     args = argv[:]
@@ -100,24 +127,28 @@ def parse_export_arg(argv):
             i = args.index(flag)
             if i + 1 < len(args) and not args[i + 1].startswith("-"):
                 export_path = args[i + 1]
-                del args[i:i + 2]
+                del args[i : i + 2]
             else:
                 export_path = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
                 del args[i]
 
     return args, export_path
 
-@retry_with_backoff
+
+@retry_with_backoff()
 def plan_sprint(data: dict) -> dict:
     response = get_client().chat.completions.create(
         model=MODEL,
         messages=[
-            {"role": "system", "content": (
-                "You are an experienced Scrum Master and AI sprint planner. "
-                "Select backlog items that fit within team capacity, respect dependencies, "
-                "prioritize critical bugs and high-value stories, and define a clear sprint goal."
-            )},
-            {"role": "user", "content": f"Plan the sprint for this backlog:\n\n{json.dumps(data, indent=2)}"}
+            {
+                "role": "system",
+                "content": (
+                    "You are an experienced Scrum Master and AI sprint planner. "
+                    "Select backlog items that fit within team capacity, respect dependencies, "
+                    "prioritize critical bugs and high-value stories, and define a clear sprint goal."
+                ),
+            },
+            {"role": "user", "content": f"Plan the sprint for this backlog:\n\n{json.dumps(data, indent=2)}"},
         ],
         tools=[{"type": "function", "function": SCHEMA}],
         tool_choice={"type": "function", "function": {"name": "sprint_plan"}},
@@ -125,53 +156,38 @@ def plan_sprint(data: dict) -> dict:
     )
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
+
 def display(data: dict, plan: dict):
     team = data["team"]
     util = plan["capacity_utilization_pct"]
     color = "green" if util <= 95 else "yellow" if util <= 105 else "red"
     console.print()
-    console.print(Panel.fit(
-        f"[bold]Sprint {data['sprint_number']} — Team {team['name']}[/bold]\n"
-        f"[dim]Velocity: {team['velocity']}  |  Capacity: {team['capacity_this_sprint']} pts  |  Members: {team['members']}[/dim]\n"
-        f"Utilization: [{color} bold]{util}%[/{color} bold]  ({plan['total_points']}/{team['capacity_this_sprint']} pts)",
-        title="[bold cyan]Sprint Plan[/bold cyan]", border_style="cyan"
-    ))
-    console.print(Panel(f"[italic bold]{plan['sprint_goal']}[/italic bold]", title="[bold]Sprint Goal[/bold]", border_style="green"))
+    console.print(
+        Panel.fit(
+            f"[bold]Sprint {data['sprint_number']} — Team {team['name']}[/bold]\n"
+            f"[dim]Velocity: {team['velocity']}  |  Capacity: {team['capacity_this_sprint']} pts  |  Members: {team['members']}[/dim]\n"
+            f"Utilization: [{color} bold]{util}%[/{color} bold]  ({plan['total_points']}/{team['capacity_this_sprint']} pts)",
+            title="[bold cyan]Sprint Plan[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+    console.print(Panel(f"[italic bold]{plan['sprint_goal']}[/italic bold]", title="[bold]Sprint Goal[/bold]"))
 
-    t = Table(show_header=True, header_style="bold green")
-    t.add_column("ID"); t.add_column("Title", ratio=2); t.add_column("Pts", width=5); t.add_column("Why", ratio=2, style="dim")
-    for item in plan["recommended_items"]:
-        t.add_row(item["id"], item["title"], str(item["story_points"]), item["reason"])
-    console.print(Panel(t, title=f"[bold green]Recommended for Sprint ({plan['total_points']} pts)[/bold green]", border_style="green"))
 
-    if plan["deferred_items"]:
-        dt = Table(show_header=True, header_style="bold dim")
-        dt.add_column("ID"); dt.add_column("Title", ratio=2); dt.add_column("Reason", ratio=2, style="dim")
-        for item in plan["deferred_items"]:
-            dt.add_row(item["id"], item["title"], item["reason"])
-        console.print(Panel(dt, title="[bold]Deferred Items[/bold]", border_style="yellow"))
+def export_output(filename: str, output: dict):
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2)
+    except OSError as e:
+        console.print(f"[red]Failed to export JSON: {e}[/red]")
 
-    if plan["risks"]:
-        console.print(Panel("\n".join(f"• {r}" for r in plan["risks"]), title="[bold red]Risks[/bold red]", border_style="red"))
 
-    if plan["recommendations"]:
-        console.print(Panel("\n".join(f"• {r}" for r in plan["recommendations"]), title="[bold cyan]Recommendations[/bold cyan]", border_style="cyan"))
-
-def main():
+if __name__ == "__main__":
     args, export_path = parse_export_arg(sys.argv[1:])
-
     data = SAMPLE_BACKLOG
-    if args:
-        with open(args[0], "r", encoding="utf-8") as f:
-            data = json.load(f)
-
     plan = plan_sprint(data)
     display(data, plan)
 
     if export_path:
-        with open(export_path, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-        console.print(f"\n[green]Exported sprint plan to {export_path}[/green]")
-
-if __name__ == "__main__":
-    main()
+        output = {"input": data, "plan": plan}
+        export_output(export_path, output)
