@@ -7,6 +7,7 @@ and provides a step-by-step remediation plan.
 import os, sys, json
 import time
 import argparse
+from functools import wraps
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict, NotRequired, Literal, Protocol, cast
@@ -30,6 +31,7 @@ def parse_cli_args() -> argparse.Namespace:
 
 
 def retry_with_backoff(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
         last_exception = None
@@ -177,14 +179,6 @@ tests/test_auth.py::test_login_invalid PASSED
 tests/test_api.py::test_create_user PASSED
 tests/test_api.py::test_delete_user FAILED
 
-FAILED tests/test_api.py::test_delete_user - AssertionError: assert 404 == 200
-Expected: 200 (user deleted successfully)
-Actual:   404 (user not found)
-
-ImportError while collecting tests/test_payments.py
-  tests/test_payments.py:3: i
+FAILED 
+```
 """
-
-if __name__ == "__main__":
-    args = parse_cli_args()
-    VERBOSE = args.verbose
