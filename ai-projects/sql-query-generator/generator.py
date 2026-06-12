@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 from rich.console import Console
 
@@ -12,13 +13,13 @@ except ImportError:  # pragma: no cover
     OpenAI = None
 
 
-console = Console()
+console: Console = Console()
 
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exc = None
+def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        delays: list[int] = [1, 2, 4]
+        last_exc: TimeoutError | ConnectionError | None = None
         for attempt in range(len(delays) + 1):
             try:
                 return func(*args, **kwargs)
@@ -33,11 +34,11 @@ def retry_with_backoff(func):
 
 
 @retry_with_backoff
-def _create_response(client, **kwargs):
+def _create_response(client: Any, **kwargs: Any) -> Any:
     return client.responses.create(**kwargs)
 
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -50,11 +51,11 @@ def print_usage(response):
     )
 
 
-def get_client():
+def get_client() -> Any:
     return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
-def validate_environment(schema_paths=None, require_api_key=True):
+def validate_environment(schema_paths: list[str] | None = None, require_api_key: bool = True) -> None:
     if require_api_key and not os.environ.get("OPENAI_API_KEY"):
         console.print("[red]OPENAI_API_KEY is not set[/red]")
         raise SystemExit(1)
@@ -66,9 +67,9 @@ def validate_environment(schema_paths=None, require_api_key=True):
                 raise SystemExit(1)
 
 
-def load_schema(schema_paths):
+def load_schema(schema_paths: list[str]) -> str:
     with console.status("Loading schema..."):
-        parts = []
+        parts: list[str] = []
         for path in schema_paths:
             p = Path(path)
             if not p.exists():
@@ -78,7 +79,7 @@ def load_schema(schema_paths):
         return "\n\n".join(parts)
 
 
-def generate_sql(prompt, schema_paths):
+def generate_sql(prompt: str, schema_paths: list[str]) -> dict[str, str]:
     client = get_client()
 
     with console.status("Generating SQL..."):
@@ -110,8 +111,8 @@ def generate_sql(prompt, schema_paths):
     return {"sql": ""}
 
 
-def interactive_mode(schema_paths=None, export=False):
-    all_results = []
+def interactive_mode(schema_paths: list[str] | None = None, export: bool = False) -> None:
+    all_results: list[dict[str, Any]] = []
     while True:
         try:
             prompt = input("sql> ").strip()
@@ -139,7 +140,7 @@ def interactive_mode(schema_paths=None, export=False):
         output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def main():
+def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -165,13 +166,13 @@ from unittest.mock import patch
 
 
 class TestPrintUsage(unittest.TestCase):
-    def test_print_usage_no_usage_prints_nothing(self):
+    def test_print_usage_no_usage_prints_nothing(self) -> None:
         response = SimpleNamespace(usage=None)
         with patch.object(console, "print") as mock_print:
             print_usage(response)
         mock_print.assert_not_called()
 
-    def test_print_usage_fallback_total_tokens_when_missing(self):
+    def test_print_usage_fallback_total_tokens_when_missing(self) -> None:
         usage = SimpleNamespace(input_tokens=100, output_tokens=50)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
@@ -180,7 +181,7 @@ class TestPrintUsage(unittest.TestCase):
         message = mock_print.call_args[0][0]
         self.assertIn("100 in + 50 out = 150 total", message)
 
-    def test_print_usage_uses_provided_total_tokens(self):
+    def test_print_usage_uses_provided_total_tokens(self) -> None:
         usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=999)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
@@ -189,7 +190,7 @@ class TestPrintUsage(unittest.TestCase):
         message = mock_print.call_args[0][0]
         self.assertIn("100 in + 50 out = 999 total", message)
 
-    def test_print_usage_contains_expected_counts_and_cost_format(self):
+    def test_print_usage_contains_expected_counts_and_cost_format(self) -> None:
         usage = SimpleNamespace(input_tokens=1000, output_tokens=500, total_tokens=1500)
         response = SimpleNamespace(usage=usage)
         with patch.object(console, "print") as mock_print:
