@@ -117,16 +117,17 @@ def compose_email(
         f"and 2-3 follow-up suggestions."
     )
 
-    response = get_client().chat.completions.create(
-        model=CHAT_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        tools=[{"type": "function", "function": EMAIL_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "email_output"}},
-        temperature=0.7,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            tools=[{"type": "function", "function": EMAIL_SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "email_output"}},
+            temperature=0.7,
+        )
 
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
@@ -183,8 +184,9 @@ def maybe_export_result(result: EmailOutput, export_enabled: bool) -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"output_{timestamp}.json"
     payload: dict[str, JSONValue] = {**result, "generated_at": datetime.now().isoformat()}
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    with console.status("[bold green]Processing..."):
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
 
 
 if __name__ == "__main__":
