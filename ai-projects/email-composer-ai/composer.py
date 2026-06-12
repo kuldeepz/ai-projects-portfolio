@@ -1,9 +1,3 @@
-"""
-AI Email Composer
-Generate professional emails from bullet points.
-Supports tone selection, length control, and follow-up suggestions.
-"""
-
 import os
 import sys
 import json
@@ -105,12 +99,6 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
-def _parse_cli_args() -> str | None:
-    global VERBOSE
-    VERBOSE = ("--verbose" in sys.argv) or ("-v" in sys.argv)
-    return next((arg for arg in sys.argv[1:] if not arg.startswith("-")), None)
-
-
 @retry_with_backoff
 def _create_chat_completion(**kwargs):
     if VERBOSE:
@@ -182,4 +170,80 @@ def print_usage(prompt_tokens: int, completion_tokens: int) -> None:
         )
 
 
-_parse_cli_args()
+# -----------------------------
+# Tests for verbose diagnostics
+# -----------------------------
+
+def test_create_chat_completion_non_verbose(monkeypatch):
+    class DummyCompletions:
+        def __init__(self):
+            self.calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+            return {"ok": True, "kwargs": kwargs}
+
+    class DummyChat:
+        def __init__(self):
+            self.completions = DummyCompletions()
+
+    class DummyClient:
+        def __init__(self):
+            self.chat = DummyChat()
+
+    dummy_client = DummyClient()
+
+    printed = []
+
+    def fake_print(msg):
+        printed.append(msg)
+
+    monkeypatch.setattr(sys.modules[__name__], "VERBOSE", False)
+    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: dummy_client)
+    monkeypatch.setattr(console, "print", fake_print)
+
+    response = _create_chat_completion(model="m", messages=[{"content": "hello"}])
+
+    assert response["ok"] is True
+    assert dummy_client.chat.completions.calls == 1
+    assert printed == []
+
+
+def test_create_chat_completion_verbose(monkeypatch):
+    class DummyCompletions:
+        def __init__(self):
+            self.calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+            return {"ok": True, "kwargs": kwargs}
+
+    class DummyChat:
+        def __init__(self):
+            self.completions = DummyCompletions()
+
+    class DummyClient:
+        def __init__(self):
+            self.chat = DummyChat()
+
+    dummy_client = DummyClient()
+    printed = []
+
+    def fake_print(msg):
+        printed.append(msg)
+
+    monkeypatch.setattr(sys.modules[__name__], "VERBOSE", True)
+    monkeypatch.setattr(sys.modules[__name__], "get_client", lambda: dummy_client)
+    monkeypatch.setattr(console, "print", fake_print)
+
+    response = _create_chat_completion(
+        model="gpt-test",
+        messages=[{"content": "abc"}, {"content": "defg"}],
+    )
+
+    assert response["ok"] is True
+    assert dummy_client.chat.completions.calls == 1
+    assert any("Model: gpt-test" in m for m in printed)
+    assert any("Input size: 7 chars" in m for m in printed)
+    assert any("⏳ Calling OpenAI API..." in m for m in printed)
+    assert any("✅ Done in" in m for m in printed)
