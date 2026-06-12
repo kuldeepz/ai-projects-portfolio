@@ -1,11 +1,29 @@
 import os
 import sys
+import time
 from pathlib import Path
 from contextlib import nullcontext
 
 import pytest
 
 import generator
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exc = None
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < len(delays):
+                    time.sleep(delays[attempt])
+                else:
+                    raise last_exc
+
+    return wrapper
 
 
 class _DummyStatus:
@@ -34,6 +52,7 @@ def test_generate_sql_returns_parsed_tool_args_with_status(monkeypatch):
 
     class _Responses:
         @staticmethod
+        @retry_with_backoff
         def create(*args, **kwargs):
             return _Resp()
 
