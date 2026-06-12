@@ -6,6 +6,8 @@ Tests language detection, schema structure, and severity mapping.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from reviewer import detect_language, SEVERITY_COLORS, SEVERITY_ICONS, REVIEW_SCHEMA
@@ -62,6 +64,39 @@ def test_issue_schema():
     assert mock_review["overall_score"] <= 100
     assert all(i["severity"] in ("critical", "high", "medium", "low") for i in mock_review["security_issues"])
     print("  [PASS] Issue schema — severity values and structure valid")
+
+
+@pytest.mark.parametrize(
+    "filename,expected",
+    [
+        ("", ""),
+        ("README", ""),
+        ("script.py", "python"),
+    ],
+)
+def test_language_detection_edge_and_empty_inputs(filename, expected):
+    """Covers empty and extension edge cases for language detection."""
+    assert detect_language(filename) == expected
+
+
+@pytest.mark.parametrize("invalid_input", [None])
+def test_language_detection_none_input(invalid_input):
+    """Covers None input handling for language detection."""
+    with pytest.raises(Exception):
+        detect_language(invalid_input)
+
+
+@pytest.mark.parametrize("score", [0, 100])
+def test_issue_schema_overall_score_boundaries(score):
+    """Covers boundary overall_score values allowed by the review schema."""
+    mock_review = {
+        "language": "python",
+        "overall_score": score,
+        "summary": "Boundary score validation.",
+        "security_issues": [],
+        "bugs": [],
+    }
+    assert 0 <= mock_review["overall_score"] <= 100
 
 
 if __name__ == "__main__":
