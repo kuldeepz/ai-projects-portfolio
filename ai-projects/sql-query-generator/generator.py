@@ -2,7 +2,6 @@ import json
 import os
 import sys
 import time
-from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Protocol, TypedDict
 
@@ -23,7 +22,7 @@ class UsageLike(Protocol):
     total_tokens: int | None
 
 
-class ResponseOutputItemLike(Protocol):
+class OutputItemLike(Protocol):
     type: str | None
     name: str | None
     arguments: str
@@ -31,7 +30,7 @@ class ResponseOutputItemLike(Protocol):
 
 class ResponseLike(Protocol):
     usage: UsageLike | None
-    output: list[ResponseOutputItemLike]
+    output: list[OutputItemLike]
 
 
 class ResponsesAPI(Protocol):
@@ -47,7 +46,6 @@ class SQLResult(TypedDict):
 
 
 def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
-    @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         delays: list[int] = [1, 2, 4]
         last_exc: TimeoutError | ConnectionError | None = None
@@ -215,4 +213,4 @@ class TestPrintUsage(unittest.TestCase):
 
     def test_print_usage_uses_provided_total_tokens(self) -> None:
         usage = SimpleNamespace(input_tokens=100, output_tokens=50, total_tokens=999)
-        
+        response = SimpleNamespace(usage=usage)
