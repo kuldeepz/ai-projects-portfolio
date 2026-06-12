@@ -49,6 +49,31 @@ def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25
         return wrapper
     return deco
 
+def validate_environment(parsed):
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("❌ OPENAI_API_KEY is not set. Please set it in your environment or .env file.")
+        sys.exit(1)
+
+    paths_to_check = []
+    if getattr(parsed, "input_file", None):
+        paths_to_check.append(parsed.input_file)
+    if getattr(parsed, "export_out", None):
+        paths_to_check.append(parsed.export_out)
+
+    for path in paths_to_check:
+        if not os.path.exists(path):
+            console.print(f"❌ File path does not exist: {path}")
+            sys.exit(1)
+        if not os.path.isfile(path):
+            console.print(f"❌ Path is not a file: {path}")
+            sys.exit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"❌ File is not readable: {path}")
+            sys.exit(1)
+
+    console.print("Setup OK ✓")
+
 FORMATS = {
     "1": ("standup", "Daily standup (Yesterday / Today / Blockers)"),
     "2": ("weekly", "Weekly status report (Accomplishments / Plan / Risks)"),
@@ -135,6 +160,8 @@ def main():
     parser.add_argument("--export-out", default=None)
     parser.add_argument("--verbose", "-v", action="store_true")
     parsed = parser.parse_args()
+
+    validate_environment(parsed)
 
     if not parsed.input_file:
         console.print("[dim]No file provided — using sample notes...[/dim]\n")
