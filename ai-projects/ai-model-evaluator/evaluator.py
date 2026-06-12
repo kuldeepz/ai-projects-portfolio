@@ -98,62 +98,71 @@ def call_openai(*args, **kwargs):
             print(f"✅ Done in {elapsed:.1f}s")
 
 
-# ----------------------
-# Unit tests (pytest)
-# ----------------------
-
-def test_parse_args_verbose_true():
-    args, unknown = parse_args(["--verbose"])
-    assert args.verbose is True
-    assert unknown == []
-
-
-def test_configure_verbose_mutates_global_state():
+def _reset_verbose_for_tests(value=False):
+    """Test helper: reset global verbose flag deterministically."""
     global VERBOSE
-    VERBOSE = False
-    configure_verbose(["--verbose"])
-    assert VERBOSE is True
-    configure_verbose([])
-    assert VERBOSE is False
+    VERBOSE = value
 
 
-def test_helper_extraction_behavior():
-    assert _extract_model_name(("gpt-4o-mini",), {}) == "gpt-4o-mini"
-    assert _extract_model_name((), {"model": "gpt-4.1"}) == "gpt-4.1"
-    assert _extract_model_name((1, 2), {}) == "unknown"
+if __name__ == "__main__":
+    import io
+    import contextlib
+    import unittest
 
-    assert _extract_input_text((), {"input": "hello"}) == "hello"
-    assert _extract_input_text((), {"prompt": "hi"}) == "hi"
-    assert _extract_input_text((), {"messages": [{"role": "user", "content": "x"}]}) == [{"role": "user", "content": "x"}]
-    assert _extract_input_text(("fallback",), {}) == "fallback"
-    assert _extract_input_text((), {}) == ""
+    class TestEvaluatorCLIAndVerbose(unittest.TestCase):
+        def setUp(self):
+            _reset_verbose_for_tests(False)
 
-    assert _estimate_token_count("") == 0
-    assert _estimate_token_count("abcd") == 1
-    assert _estimate_token_count("abcdefgh") == 2
-    assert _estimate_token_count([1, 2, 3]) >= 1
+        def tearDown(self):
+            _reset_verbose_for_tests(False)
 
+        def test_parse_args_verbose_flag(self):
+            args, unknown = parse_args(["--verbose"])
+            self.assertTrue(args.verbose)
+            self.assertEqual(unknown, [])
 
-def test_call_openai_verbose_logging_emitted(capsys):
-    global VERBOSE
-    VERBOSE = True
-    try:
-        call_openai("gpt-4o-mini", input="hello world")
-    except NotImplementedError:
-        pass
-    out = capsys.readouterr().out
-    assert "Model:" in out
-    assert "Input chars:" in out
-    assert "Calling OpenAI API" in out
-    assert "Done in" in out
+        def test_configure_verbose_mutates_global_state(self):
+            self.assertFalse(VERBOSE)
+            configure_verbose(["--verbose"])
+            self.assertTrue(VERBOSE)
+            configure_verbose([])
+            self.assertFalse(VERBOSE)
 
+        def test_helper_extractors_and_token_estimator(self):
+            self.assertEqual(_extract_model_name(("gpt-4",), {}), "gpt-4")
+            self.assertEqual(_extract_model_name((), {"model": "gpt-4o"}), "gpt-4o")
+            self.assertEqual(_extract_model_name((123, object()), {}), "unknown")
 
-def test_call_openai_verbose_logging_suppressed(capsys):
-    global VERBOSE
-    VERBOSE = False
-    try:
-        call_openai("gpt-4o-mini", input="hello world")
-    except NotImplementedError:
-        pass
-    out = capsys.readouterr().out
-    assert out == ""
+            self.assertEqual(_extract_input_text((), {"input": "abc"}), "abc")
+            self.assertEqual(_extract_input_text((), {"prompt": "p"}), "p")
+            self.assertEqual(_extract_input_text((), {"messages": [{"role": "user", "content": "x"}]}), [{"role": "user", "content": "x"}])
+            self.assertEqual(_extract_input_text(("fallback",), {}), "fallback")
+            self.assertEqual(_extract_input_text((), {}), "")
+
+            self.assertEqual(_estimate_token_count(""), 0)
+            self.assertEqual(_estimate_token_count("abcd"), 1)
+            self.assertEqual(_estimate_token_count("abcdefgh"), 2)
+            self.assertEqual(_estimate_token_count(None), 0)
+            self.assertGreaterEqual(_estimate_token_count({"k": "v"}), 1)
+
+        def test_verbose_logging_emitted(self):
+            configure_verbose(["--verbose"])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(NotImplementedError):
+                    call_openai(model="gpt-4o", input="hello world")
+            output = buf.getvalue()
+            self.assertIn("Model: gpt-4o", output)
+            self.assertIn("Input chars:", output)
+            self.assertIn("⏳ Calling OpenAI API...", output)
+            self.assertIn("✅ Done in", output)
+
+        def test_verbose_logging_suppressed(self):
+            configure_verbose([])
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(NotImplementedError):
+                    call_openai(model="gpt-4o", input="hello world")
+            self.assertEqual(buf.getvalue(), "")
+
+    unittest.main()
