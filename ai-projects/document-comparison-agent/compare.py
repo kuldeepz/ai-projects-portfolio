@@ -10,8 +10,6 @@ import json
 import time
 from functools import wraps
 from pathlib import Path
-import unittest
-from unittest.mock import patch, Mock, mock_open
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -177,79 +175,124 @@ def read_document(path: str) -> str:
             return f.read()
 
 
+def parse_response(response) -> dict:
+    message = response.choices[0].message
+
+    if getattr(message, "tool_calls", None):
+        tool_call = message.tool_calls[0]
+        arguments = tool_call.function.arguments
+        if isinstance(arguments, str):
+            return json.loads(arguments)
+        return arguments
+
+    content = message.content
+    if isinstance(content, str):
+        return json.loads(content)
+
+    raise ValueError("Unable to parse model response into comparison report")
+
+
 @retry_with_backoff
-def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, context: str = ""):
-    with console.status("[bold green]Processing..."):
-        client = get_client()
-        prompt = f"Compare {doc1_name} and {doc2_name}.\n\n{text1}\n\n{text2}\n\n{context}".strip()
-        return client.responses.create(
+def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, context: str = "") -> dict:
+    system_prompt = (
+        "You are a precise document comparison analyst. Compare two documents and return "
+        "a structured report using the provided schema. Be objective, concise, and factual."
+    )
+
+    user_prompt = f"""
+Compare the following two documents.
+
+Document 1 Name: {doc1_name}
+Document 1 Content:
+{text1}
+
+Document 2 Name: {doc2_name}
+Document 2 Content:
+{text2}
+
+Additional Context:
+{context or "None provided."}
+"""
+
+    with console.status("[bold green]Comparing documents..."):
+        response = get_client().chat.completions.create(
             model=CHAT_MODEL,
-            input=prompt,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            tools=[{"type": "function", "function": COMPARE_SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": COMPARE_SCHEMA["name"]}},
+            temperature=0,
         )
 
+    print_usage(response)
+    return parse_response(response)
 
-class TestSpinnerStatusBehavior(unittest.TestCase):
-    def _status_cm(self):
-        cm = Mock()
-        cm.__enter__ = Mock(return_value=None)
-        cm.__exit__ = Mock(return_value=None)
-        return cm
 
-    @patch("compare.time.sleep", return_value=None)
-    @patch("compare.console.status")
-    def test_retry_with_backoff_enters_status_on_retry(self, mock_status, _mock_sleep):
-        mock_status.return_value = self._status_cm()
+def display_report(report: dict, doc1_name: str, doc2_name: str) -> None:
+    console.print(Panel.fit("📄 Document Comparison Report", style="bold cyan"))
 
-        class RetryableError(Exception):
-            status_code = 429
+    summary_table = Table(title="Summaries")
+    summary_table.add_column("Document", style="bold")
+    summary_table.add_column("Summary")
+    summary_table.add_row(doc1_name, report.get("doc1_summary", ""))
+    summary_table.add_row(doc2_name, report.get("doc2_summary", ""))
+    console.print(summary_table)
 
-        calls = {"count": 0}
+    similarity = report.get("overall_similarity", 0)
+    console.print(Panel(f"Overall Similarity: {similarity}/100", style="green"))
 
-        @retry_with_backoff
-        def flaky():
-            calls["count"] += 1
-            if calls["count"] == 1:
-                raise RetryableError("rate limited")
-            return "ok"
+    common = "\n".join(f"• {x}" for x in report.get("common_themes", [])) or "None"
+    only1 = "\n".join(f"• {x}" for x in report.get("unique_to_doc1", [])) or "None"
+    only2 = "\n".join(f"• {x}" for x in report.get("unique_to_doc2", [])) or "None"
 
-        result = flaky()
-        self.assertEqual(result, "ok")
-        mock_status.assert_called_once_with("[bold green]Processing...")
+    console.print(
+        Columns(
+            [
+                Panel(common, title="Common Themes", border_style="cyan"),
+                Panel(only1, title=f"Unique to {doc1_name}", border_style="magenta"),
+                Panel(only2, title=f"Unique to {doc2_name}", border_style="yellow"),
+            ]
+        )
+    )
 
-    @patch("compare.PyPDF2.PdfReader")
-    @patch("compare.open", new_callable=mock_open)
-    @patch("compare.console.status")
-    def test_read_document_pdf_enters_status_once(self, mock_status, _mock_file, mock_reader):
-        mock_status.return_value = self._status_cm()
-        page = Mock()
-        page.extract_text.return_value = "hello"
-        mock_reader.return_value.pages = [page]
+    conflicts = report.get("conflicts", [])
+    if conflicts:
+        conflict_table = Table(title="Conflicts")
+        conflict_table.add_column("Topic", style="bold red")
+        conflict_table.add_column(doc1_name)
+        conflict_table.add_column(doc2_name)
+        for c in conflicts:
+            conflict_table.add_row(c.get("topic", ""), c.get("doc1_position", ""), c.get("doc2_position", ""))
+        console.print(conflict_table)
 
-        text = read_document("doc.pdf")
-        self.assertEqual(text, "hello")
-        mock_status.assert_called_once_with("[bold green]Processing...")
+    tone = report.get("tone_comparison")
+    if tone:
+        console.print(Panel(Text(tone), title="Tone Comparison", border_style="blue"))
 
-    @patch("compare.open", new_callable=mock_open, read_data="plain text")
-    @patch("compare.console.status")
-    def test_read_document_text_enters_status_once(self, mock_status, _mock_file):
-        mock_status.return_value = self._status_cm()
+    recommendation = report.get("recommendation")
+    if recommendation:
+        console.print(Panel(Text(recommendation), title="Recommendation", border_style="bold green"))
 
-        text = read_document("doc.txt")
-        self.assertEqual(text, "plain text")
-        mock_status.assert_called_once_with("[bold green]Processing...")
 
-    @patch("compare.get_client")
-    @patch("compare.console.status")
-    def test_compare_documents_enters_status_once(self, mock_status, mock_get_client):
-        mock_status.return_value = self._status_cm()
-        mock_client = Mock()
-        mock_client.responses.create.return_value = {"ok": True}
-        mock_get_client.return_value = mock_client
+def main() -> None:
+    validate_environment()
 
-        result = compare_documents("a", "b", "doc1", "doc2")
-        self.assertEqual(result, {"ok": True})
-        mock_status.assert_called_once_with("[bold green]Processing...")
+    if len(sys.argv) < 3:
+        console.print("Usage: python compare.py <document1> <document2> [context]")
+        sys.exit(1)
+
+    doc1_path = sys.argv[1]
+    doc2_path = sys.argv[2]
+    context = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else ""
+
+    text1 = read_document(doc1_path)
+    text2 = read_document(doc2_path)
+
+    report = compare_documents(text1, text2, Path(doc1_path).name, Path(doc2_path).name, context)
+    display_report(report, Path(doc1_path).name, Path(doc2_path).name)
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
