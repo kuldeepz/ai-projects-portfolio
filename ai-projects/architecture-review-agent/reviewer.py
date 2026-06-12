@@ -6,6 +6,7 @@ single points of failure, scalability concerns, and security gaps.
 
 import os, sys, json
 import time
+import random
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -38,20 +39,25 @@ def print_usage(response):
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exc = None
-        for i in range(len(delays) + 1):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                last_exc = e
-                if i < len(delays):
-                    time.sleep(delays[i])
-                else:
-                    raise last_exc
-    return wrapper
+def retry_with_backoff(func=None, *, retries=3, base=1.0, jitter=0.2):
+    def decorator(f):
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(retries + 1):
+                try:
+                    return f(*args, **kwargs)
+                except Exception as e:
+                    last_exc = e
+                    if attempt < retries:
+                        delay = base * (2 ** attempt) + random.uniform(0, jitter)
+                        time.sleep(delay)
+                    else:
+                        raise last_exc
+        return wrapper
+
+    if func is not None:
+        return decorator(func)
+    return decorator
 
 SCHEMA = {
     "name": "architecture_review",
