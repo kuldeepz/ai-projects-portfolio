@@ -174,151 +174,58 @@ def review_code(code: str, language: str = "", context: str = "") -> dict[str, A
                 "role": "user",
                 "content": f"{lang_hint}{ctx_hint}\nCode to review:\n```\n{code}\n```"
             }
-        ],
-        tools=[{"type": "function", "function": REVIEW_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "code_review"}},
-        temperature=0.2,
+        ]
     )
-    print_usage(response)
-
-    tool_call = response.choices[0].message.tool_calls[0]
-    return json.loads(tool_call.function.arguments)
 
 
-def severity_label(severity: str) -> Text:
-    icon = SEVERITY_ICONS.get(severity, "")
-    text = Text(f"{icon} {severity.upper()}")
-    text.stylize(SEVERITY_COLORS.get(severity, "white"))
-    return text
+def _run_retry_with_backoff_tests() -> None:
+    from unittest.mock import patch
+
+    # succeeds immediately (no sleep)
+    calls = {"n": 0}
+
+    @retry_with_backoff
+    def immediate_success():
+        calls["n"] += 1
+        return "ok"
+
+    with patch("time.sleep") as sleep_mock:
+        assert immediate_success() == "ok"
+        assert calls["n"] == 1
+        sleep_mock.assert_not_called()
+
+    # fails twice then succeeds (sleep called with 1,2)
+    calls = {"n": 0}
+
+    @retry_with_backoff
+    def flaky_success():
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise RuntimeError("transient")
+        return "ok"
+
+    with patch("time.sleep") as sleep_mock:
+        assert flaky_success() == "ok"
+        assert calls["n"] == 3
+        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2]
+
+    # always fails (raises after 4 attempts)
+    calls = {"n": 0}
+
+    @retry_with_backoff
+    def always_fail():
+        calls["n"] += 1
+        raise ValueError("permanent")
+
+    with patch("time.sleep") as sleep_mock:
+        try:
+            always_fail()
+            raise AssertionError("expected ValueError")
+        except ValueError as exc:
+            assert str(exc) == "permanent"
+        assert calls["n"] == 4
+        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2, 4]
 
 
-def display_review(review: dict[str, Any], code: str, language: str) -> None:
-    detected_lang = review.get("language", language or "unknown")
-    score = review["overall_score"]
-    score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
-
-    console.print()
-    console.print(Panel.fit(
-        f"[bold white]Code Review Report[/bold white]\n"
-        f"[dim]Language: {detected_lang}[/dim]\n"
-        f"Score: [{score_color} bold]{score}/100[/{score_color} bold]",
-        border_style="cyan"
-    ))
-
-    console.print(Panel(
-        f"[italic]{review['summary']}[/italic]",
-        title="[bold]Summary[/bold]", border_style="dim"
-    ))
-
-    if review["security_issues"]:
-        table = Table(show_header=True, header_style="bold red")
-        table.add_column("Severity", width=10)
-        table.add_column("Issue")
-        table.add_column("Fix", style="green")
-        for item in review["security_issues"]:
-            table.add_row(severity_label(item["severity"]), item["issue"], item["fix"])
-        console.print(Panel(table, title="[bold red]Security Issues[/bold red]", border_style="red"))
-    else:
-        console.print(Panel("[green]No security issues found.[/green]", title="[bold]Security[/bold]", border_style="green"))
-
-    if review["bugs"]:
-        table = Table(show_header=True, header_style="bold yellow")
-        table.add_column("Severity", width=10)
-        table.add_column("Bug")
-        table.add_column("Fix", style="green")
-        for item in review["bugs"]:
-            table.add_row(severity_label(item["severity"]), item["issue"], item["fix"])
-        console.print(Panel(table, title="[bold yellow]Bugs[/bold yellow]", border_style="yellow"))
-
-    if review["performance_issues"]:
-        perf_text = "\n".join(
-            f"  [yellow]⚡[/yellow] {p['issue']}\n    [dim]→ {p['fix']}[/dim]"
-            for p in review["performance_issues"]
-        )
-        console.print(Panel(perf_text, title="[bold]Performance[/bold]", border_style="yellow"))
-
-    if review["best_practice_violations"]:
-        bp_text = "\n".join(f"  [dim]•[/dim] {v}" for v in review["best_practice_violations"])
-        console.print(Panel(bp_text, title="[bold]Best Practice Violations[/bold]", border_style="dim"))
-
-    if review["positive_aspects"]:
-        pos_text = "\n".join(f"  [green]✔[/green] {p}" for p in review["positive_aspects"])
-        console.print(Panel(pos_text, title="[bold green]What's Good[/bold green]", border_style="green"))
-
-    if review.get("refactored_snippet"):
-        console.print(Panel(
-            Syntax(review["refactored_snippet"], detected_lang.lower(), theme="monokai", line_numbers=True),
-            title="[bold cyan]Suggested Fix[/bold cyan]",
-            border_style="cyan"
-        ))
-
-    console.print()
-
-
-def main() -> None:
-    if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow]")
-        console.print("  python reviewer.py <code_file> [context] [--export|-e]")
-        console.print("  echo 'code' | python reviewer.py - [context] [--export|-e]")
-        console.print('\n[dim]Example: python reviewer.py app.py "Django REST API view" --export[/dim]')
-        sys.exit(1)
-
-    args = sys.argv[1:]
-    export = False
-    filtered_args = []
-    for arg in args:
-        if arg in ("--export", "-e"):
-            export = True
-        else:
-            filtered_args.append(arg)
-
-    if not filtered_args:
-        console.print("[red]No input source provided.[/red]")
-        sys.exit(1)
-
-    file_arg = filtered_args[0]
-    context = filtered_args[1] if len(filtered_args) > 1 else ""
-
-    if file_arg == "-":
-        code = sys.stdin.read()
-        language = ""
-        display_path = "stdin"
-    else:
-        if not os.path.exists(file_arg):
-            console.print(f"[red]File not found:[/red] {file_arg}")
-            sys.exit(1)
-        with open(file_arg, "r", encoding="utf-8") as f:
-            code = f.read()
-        language = detect_language(file_arg)
-        display_path = file_arg
-
-    if not code.strip():
-        console.print("[red]No code provided.[/red]")
-        sys.exit(1)
-
-    if len(code) > 8000:
-        console.print("[yellow]Note: Code truncated to 8000 chars for review.[/yellow]")
-        code = code[:8000]
-
-    console.print(f"\n[cyan]Reviewing:[/cyan] {display_path}")
-    if context:
-        console.print(f"[cyan]Context:[/cyan] {context}")
-
-    with console.status("[bold green]Reviewing code with GPT-4o-mini...[/bold green]"):
-        review = review_code(code, language, context)
-
-    display_review(review, code, language)
-
-    if export:
-        generated_at = datetime.now().isoformat()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"output_{timestamp}.json"
-        export_data = dict(review)
-        export_data["generated_at"] = generated_at
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(export_data, f, indent=2, ensure_ascii=False)
-        console.print(f"[green]Exported results to:[/green] {output_file}")
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__" and os.getenv("RUN_RETRY_TESTS") == "1":
+    _run_retry_with_backoff_tests()
