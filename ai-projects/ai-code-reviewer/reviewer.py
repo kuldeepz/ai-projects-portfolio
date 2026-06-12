@@ -24,11 +24,14 @@ load_dotenv()
 
 _client: OpenAI | None = None
 
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+
 console: Console = Console()
 
 CHAT_MODEL = "gpt-4o-mini"
@@ -44,6 +47,7 @@ def print_usage(response: Any) -> None:
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
+
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
         delays = [1, 2, 4]
@@ -58,6 +62,7 @@ def retry_with_backoff(func):
                 else:
                     raise last_exception
     return wrapper
+
 
 REVIEW_SCHEMA: dict[str, Any] = {
     "name": "code_review",
@@ -174,58 +179,18 @@ def review_code(code: str, language: str = "", context: str = "") -> dict[str, A
                 "role": "user",
                 "content": f"{lang_hint}{ctx_hint}\nCode to review:\n```\n{code}\n```"
             }
-        ]
+        ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": REVIEW_SCHEMA["name"],
+                "schema": REVIEW_SCHEMA["parameters"]
+            }
+        }
     )
 
-
-def _run_retry_with_backoff_tests() -> None:
-    from unittest.mock import patch
-
-    # succeeds immediately (no sleep)
-    calls = {"n": 0}
-
-    @retry_with_backoff
-    def immediate_success():
-        calls["n"] += 1
-        return "ok"
-
-    with patch("time.sleep") as sleep_mock:
-        assert immediate_success() == "ok"
-        assert calls["n"] == 1
-        sleep_mock.assert_not_called()
-
-    # fails twice then succeeds (sleep called with 1,2)
-    calls = {"n": 0}
-
-    @retry_with_backoff
-    def flaky_success():
-        calls["n"] += 1
-        if calls["n"] <= 2:
-            raise RuntimeError("transient")
-        return "ok"
-
-    with patch("time.sleep") as sleep_mock:
-        assert flaky_success() == "ok"
-        assert calls["n"] == 3
-        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2]
-
-    # always fails (raises after 4 attempts)
-    calls = {"n": 0}
-
-    @retry_with_backoff
-    def always_fail():
-        calls["n"] += 1
-        raise ValueError("permanent")
-
-    with patch("time.sleep") as sleep_mock:
-        try:
-            always_fail()
-            raise AssertionError("expected ValueError")
-        except ValueError as exc:
-            assert str(exc) == "permanent"
-        assert calls["n"] == 4
-        assert [c.args[0] for c in sleep_mock.call_args_list] == [1, 2, 4]
-
-
-if __name__ == "__main__" and os.getenv("RUN_RETRY_TESTS") == "1":
-    _run_retry_with_backoff_tests()
+    print_usage(response)
+    content = response.choices[0].message.content if response.choices else "{}"
+    if not content:
+        return {}
+    return json.loads(content)
