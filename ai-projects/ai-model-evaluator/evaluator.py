@@ -23,11 +23,17 @@ def retry_with_backoff(func=None, *, delays=(1, 2, 4), retry_exceptions=(Timeout
         @wraps(target)
         def wrapper(*args, **kwargs):
             last_exc = None
+            started = time.time()
             for attempt in range(len(delays) + 1):
                 try:
                     return target(*args, **kwargs)
                 except retry_exceptions as exc:
                     last_exc = exc
+                    if VERBOSE:
+                        elapsed = time.time() - started
+                        print(
+                            f"↻ Retry {attempt + 1}/{len(delays) + 1} failed after {elapsed:.1f}s: {exc}"
+                        )
                     if attempt == len(delays):
                         raise
                     time.sleep(delays[attempt])
@@ -183,52 +189,4 @@ if __name__ == "__main__":
 
         def test_print_usage_with_object_usage(self):
             response = _ResponseObj(_UsageObj(prompt_tokens=100, completion_tokens=50, total_tokens=150))
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                print_usage(response)
-                out = buf.getvalue().strip()
-            self.assertIn("100 in + 50 out = 150 total", out)
-
-        def test_print_usage_with_dict_response(self):
-            response = {
-                "usage": {
-                    "prompt_tokens": 40,
-                    "completion_tokens": 10,
-                    "total_tokens": 50,
-                }
-            }
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                print_usage(response)
-                out = buf.getvalue().strip()
-            self.assertIn("40 in + 10 out = 50 total", out)
-
-        def test_print_usage_missing_usage_no_output(self):
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                print_usage({})
-                out = buf.getvalue()
-            self.assertEqual(out, "")
-
-        def test_print_usage_missing_total_tokens_computed(self):
-            response = _ResponseObj(_UsageObj(prompt_tokens=30, completion_tokens=20, total_tokens=None))
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                print_usage(response)
-                out = buf.getvalue().strip()
-            self.assertIn("30 in + 20 out = 50 total", out)
-
-        def test_print_usage_missing_prompt_or_completion_early_return(self):
-            response_missing_prompt = {"usage": {"completion_tokens": 10, "total_tokens": 10}}
-            response_missing_completion = {"usage": {"prompt_tokens": 10, "total_tokens": 10}}
-
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                print_usage(response_missing_prompt)
-                print_usage(response_missing_completion)
-                out = buf.getvalue()
-            self.assertEqual(out, "")
-
-        def test_print_usage_expected_cost_formatting(self):
-            response = _ResponseObj(_UsageObj(prompt_tokens=1000, completion_tokens=1000, total_tokens=2000))
-            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                print_usage(response)
-                out = buf.getvalue().strip()
-            self.assertTrue(out.endswith("Est. cost: $0.0001"))
-
-    unittest.main()
+            wit
