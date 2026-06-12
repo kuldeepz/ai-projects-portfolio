@@ -1,9 +1,11 @@
 import argparse
 import json
 import unittest
+from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
-from unittest.mock import patch, call
+from typing import Any
+from unittest.mock import call, patch
 
 import release_notes
 
@@ -13,7 +15,7 @@ class NonRetriableError(Exception):
 
 
 class RetryWithBackoffTests(unittest.TestCase):
-    def test_retry_immediate_success_no_sleep(self):
+    def test_retry_immediate_success_no_sleep(self) -> None:
         mock_func = unittest.mock.Mock(return_value="ok")
         wrapped = release_notes.retry_with_backoff(mock_func)
 
@@ -24,7 +26,7 @@ class RetryWithBackoffTests(unittest.TestCase):
         self.assertEqual(mock_func.call_count, 1)
         mock_sleep.assert_not_called()
 
-    def test_retry_succeeds_after_retries_expected_sleeps(self):
+    def test_retry_succeeds_after_retries_expected_sleeps(self) -> None:
         transient_error = release_notes.APIConnectionError("e1", request=None)
         timeout_error = release_notes.APITimeoutError(request=None)
         mock_func = unittest.mock.Mock(side_effect=[transient_error, timeout_error, "ok"])
@@ -38,7 +40,7 @@ class RetryWithBackoffTests(unittest.TestCase):
         mock_sleep.assert_has_calls([call(1), call(2)])
         self.assertEqual(mock_sleep.call_count, 2)
 
-    def test_retry_raises_last_exception_after_max_attempts(self):
+    def test_retry_raises_last_exception_after_max_attempts(self) -> None:
         e1 = release_notes.APIConnectionError("e1", request=None)
         e2 = release_notes.APITimeoutError(request=None)
         final_exc = release_notes.RateLimitError("final", response=None, body=None)
@@ -54,12 +56,12 @@ class RetryWithBackoffTests(unittest.TestCase):
         mock_sleep.assert_has_calls([call(1), call(2)])
         self.assertEqual(mock_sleep.call_count, 2)
 
-    def test_non_retriable_exception_not_retried_when_filtered(self):
-        def retry_with_filter(func):
+    def test_non_retriable_exception_not_retried_when_filtered(self) -> None:
+        def retry_with_filter(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
-            def wrapped(*args, **kwargs):
+            def wrapped(*args: Any, **kwargs: Any) -> Any:
                 delays = [1, 2, 4]
-                last_exception = None
+                last_exception: Exception | None = None
                 for i, delay in enumerate(delays):
                     try:
                         return func(*args, **kwargs)
@@ -85,7 +87,7 @@ class RetryWithBackoffTests(unittest.TestCase):
 
 
 class CreateChatCompletionTests(unittest.TestCase):
-    def test_create_chat_completion_uses_retry_wrapper(self):
+    def test_create_chat_completion_uses_retry_wrapper(self) -> None:
         with patch("release_notes.get_client") as mock_get_client, patch("release_notes.time.sleep") as mock_sleep:
             create = mock_get_client.return_value.chat.completions.create
             create.side_effect = [
@@ -100,7 +102,7 @@ class CreateChatCompletionTests(unittest.TestCase):
         mock_sleep.assert_called_once_with(1)
 
 
-def _export_results_if_requested(results):
+def _export_results_if_requested(results: dict[str, Any]) -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-e", "--export", action="store_true")
     args, _ = parser.parse_known_args()
@@ -108,9 +110,8 @@ def _export_results_if_requested(results):
     if not args.export:
         return
 
-    now = datetime.now()
-    generated_at = now.isoformat()
-    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    generated_at = datetime.now().isoformat()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = dict(results)
     output["generated_at"] = generated_at
     filename = f"output_{timestamp}.json"
