@@ -137,3 +137,65 @@ def test_cli_verbose_flags_recognized_and_removed():
     args, verbose = _extract_verbose_flag(["file.py", "--flag", "value"])
     assert verbose is False
     assert args == ["file.py", "--flag", "value"]
+
+
+def test_retry_with_backoff_retries_then_succeeds(monkeypatch):
+    calls = {"count": 0}
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
+
+    @retry_with_backoff(max_retries=3, base_delay=1.0, retry_exceptions=(ValueError,), operation_name="test")
+    def flaky():
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise ValueError("transient")
+        return "ok"
+
+    result = flaky()
+    assert result == "ok"
+    assert calls["count"] == 3
+    assert sleeps == [1.0, 2.0]
+
+
+def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
+    calls = {"count": 0}
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(time, "sleep", lambda d: sleeps.append(d))
+    monkeypatch.setattr(random, "uniform", lambda a, b: 0.0)
+
+    @retry_with_backoff(max_retries=2, base_delay=0.5, retry_exceptions=(RuntimeError,), operation_name="test")
+    def always_fail():
+        calls["count"] += 1
+        raise RuntimeError("boom")
+
+    try:
+        always_fail()
+        assert False, "Expected RuntimeError"
+    except RuntimeError as e:
+        assert str(e) == "boom"
+
+    assert calls["count"] == 3
+    assert sleeps == [0.5, 1.0]
+
+
+def test_review_code_status_non_interactive_output_clean(monkeypatch):
+    global console, VERBOSE
+    VERBOSE = False
+    original_console = console
+    try:
+        console = Console(file=io.StringIO(), force_terminal=False)
+
+        def fake_api(payload):
+            return {"ok": True, "payload": payload}
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            result = review_code(fake_api, {"x": 1})
+
+        assert buf.getvalue() == ""
+        assert result["ok"] is True
+    finally:
+        console = original_console
