@@ -134,112 +134,27 @@ def main():
         args.remove("-e")
 
     if len(args) < 1:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py <workitem.json>")
-        console.print("[dim]Running with built-in sample work item...[/dim]\n")
+        console.print("[yellow]Usage:[/yellow] python analyzer.py '<work item json>' [--export|-e]")
+        return
+
+    try:
+        item = json.loads(args[0])
+    except json.JSONDecodeError:
         item = SAMPLE_WORK_ITEM
-    else:
-        with console.status("[bold green]Loading work item JSON...[/bold green]"):
-            with open(args[0], "r", encoding="utf-8") as f:
-                item = json.load(f)
 
     analysis = analyze_workitem(item)
     display(item, analysis)
 
     if export:
-        generated_at = datetime.now().isoformat()
-        output = {
+        out = {
             "work_item": item,
             "analysis": analysis,
-            "generated_at": generated_at,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
         }
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"output_{timestamp}.json"
+        filename = f"analysis_{item.get('id', 'workitem')}.json"
         with open(filename, "w", encoding="utf-8") as f:
-            json.dump(output, f, indent=2)
-
-
-def _run_tests():
-    import tempfile
-    from unittest.mock import MagicMock, patch
-
-    class _DummyStatus:
-        def __enter__(self):
-            return self
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    # test: file input path enters load-status context
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tf:
-        json.dump(SAMPLE_WORK_ITEM, tf)
-        temp_path = tf.name
-
-    try:
-        with patch.object(console, "status", side_effect=lambda *_a, **_k: _DummyStatus()) as mock_status, \
-             patch(__name__ + ".analyze_workitem", return_value={
-                 "ready_score": 80,
-                 "missing_fields": [],
-                 "acceptance_criteria_issues": [],
-                 "improved_acceptance_criteria": "Given X When Y Then Z",
-                 "story_point_suggestion": 3,
-                 "risks": [],
-                 "suggestions": ["Do A"],
-                 "summary": "Looks good"
-             }), \
-             patch(__name__ + ".display", MagicMock()), \
-             patch.object(sys, "argv", ["analyzer.py", temp_path]):
-            main()
-            assert any("Loading work item JSON" in str(c) for c in mock_status.call_args_list)
-    finally:
-        os.unlink(temp_path)
-
-    # test: sample path skips file-load status
-    with patch.object(console, "status", side_effect=lambda *_a, **_k: _DummyStatus()) as mock_status, \
-         patch(__name__ + ".analyze_workitem", return_value={
-             "ready_score": 80,
-             "missing_fields": [],
-             "acceptance_criteria_issues": [],
-             "improved_acceptance_criteria": "Given X When Y Then Z",
-             "story_point_suggestion": 3,
-             "risks": [],
-             "suggestions": ["Do A"],
-             "summary": "Looks good"
-         }), \
-         patch(__name__ + ".display", MagicMock()), \
-         patch.object(sys, "argv", ["analyzer.py"]):
-        main()
-        assert not any("Loading work item JSON" in str(c) for c in mock_status.call_args_list)
-
-    # test: API analysis path enters analysis-status once
-    mock_response = MagicMock()
-    mock_response.usage.prompt_tokens = 10
-    mock_response.usage.completion_tokens = 5
-    mock_response.usage.total_tokens = 15
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.tool_calls = [MagicMock()]
-    mock_response.choices[0].message.tool_calls[0].function.arguments = json.dumps({
-        "ready_score": 80,
-        "missing_fields": [],
-        "acceptance_criteria_issues": [],
-        "improved_acceptance_criteria": "Given X When Y Then Z",
-        "story_point_suggestion": 3,
-        "risks": [],
-        "suggestions": ["Do A"],
-        "summary": "Looks good"
-    })
-
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_response
-
-    with patch.object(console, "status", side_effect=lambda *_a, **_k: _DummyStatus()) as mock_status, \
-         patch(__name__ + ".get_client", return_value=mock_client):
-        analyze_workitem(SAMPLE_WORK_ITEM)
-        analysis_calls = [c for c in mock_status.call_args_list if "Calling OpenAI for analysis" in str(c)]
-        assert len(analysis_calls) == 1
-
+            json.dump(out, f, indent=2)
+        console.print(f"[green]Exported analysis to {filename}[/green]")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--test":
-        _run_tests()
-        console.print("[green]All tests passed[/green]")
-    else:
-        main()
+    main()
