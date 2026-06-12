@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError, APIStatusError
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -47,12 +47,22 @@ def retry_with_backoff(func):
         for i in range(len(delays) + 1):
             try:
                 return func(*args, **kwargs)
-            except Exception as e:
+            except (APIConnectionError, APITimeoutError, RateLimitError) as e:
                 last_exc = e
                 if i < len(delays):
                     time.sleep(delays[i])
                 else:
                     raise last_exc
+            except APIStatusError as e:
+                status_code = getattr(e, "status_code", None)
+                if status_code is not None and 500 <= status_code < 600:
+                    last_exc = e
+                    if i < len(delays):
+                        time.sleep(delays[i])
+                    else:
+                        raise last_exc
+                else:
+                    raise
     return wrapper
 
 SCHEMA = {
@@ -156,25 +166,3 @@ def main():
     global VERBOSE
     args = sys.argv[1:]
     export = "--export" in args
-    design = SAMPLE_DESIGN
-
-    try:
-        review = review_architecture(design)
-        display(review)
-    except Exception as e:
-        console.print(f"[red]Review failed:[/red] {e}")
-        sys.exit(1)
-
-    if export:
-        try:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"output_{ts}.json"
-            payload = {**review, "generated_at": datetime.now().isoformat()}
-            Path(filename).write_text(json.dumps(payload, indent=2), encoding="utf-8")
-            console.print(f"[green]Exported:[/green] {filename}")
-        except OSError as e:
-            console.print(f"[red]Export failed:[/red] {e}")
-            sys.exit(2)
-
-if __name__ == "__main__":
-    main()
