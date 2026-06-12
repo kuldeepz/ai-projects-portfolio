@@ -171,4 +171,101 @@ def display_summary(result: dict, output_file: str):
     console.print(Panel(table, title="[bold cyan]Test Generation Summary[/bold cyan]", border_style="cyan"))
 
     # Functions covered
-    co
+
+
+# ---------------------------
+# Tests for verbose branches
+# ---------------------------
+
+def test_parse_args_short_verbose_flag(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["generator.py", "input.py", "-v"])
+    args = parse_args()
+    assert args.verbose is True
+    assert args.source_file == "input.py"
+
+
+def test_parse_args_long_verbose_flag(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["generator.py", "input.py", "--verbose"])
+    args = parse_args()
+    assert args.verbose is True
+    assert args.source_file == "input.py"
+
+
+def test_parse_args_verbose_before_file(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["generator.py", "--verbose", "input.py"])
+    args = parse_args()
+    assert args.verbose is True
+    assert args.source_file == "input.py"
+
+
+def _mock_openai_response():
+    class _Function:
+        arguments = json.dumps(
+            {
+                "test_file_content": "def test_example():\n    assert True\n",
+                "functions_covered": ["foo"],
+                "test_count": 1,
+                "coverage_notes": "basic",
+            }
+        )
+
+    class _ToolCall:
+        function = _Function()
+
+    class _Message:
+        tool_calls = [_ToolCall()]
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+    return _Response()
+
+
+def test_generate_tests_verbose_logs(monkeypatch):
+    printed = []
+
+    class _Completions:
+        def create(self, **kwargs):
+            return _mock_openai_response()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        chat = _Chat()
+
+    monkeypatch.setattr(__import__(__name__), "VERBOSE", True)
+    monkeypatch.setattr(__import__(__name__), "get_client", lambda: _Client())
+    monkeypatch.setattr(console, "print", lambda *args, **kwargs: printed.append(" ".join(map(str, args))))
+
+    generate_tests("def foo():\n    return 1\n", "sample")
+
+    joined = "\n".join(printed)
+    assert "Model:" in joined
+    assert "Input size:" in joined
+    assert "Done in" in joined
+
+
+def test_generate_tests_non_verbose_suppresses_logs(monkeypatch):
+    printed = []
+
+    class _Completions:
+        def create(self, **kwargs):
+            return _mock_openai_response()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        chat = _Chat()
+
+    monkeypatch.setattr(__import__(__name__), "VERBOSE", False)
+    monkeypatch.setattr(__import__(__name__), "get_client", lambda: _Client())
+    monkeypatch.setattr(console, "print", lambda *args, **kwargs: printed.append(args))
+
+    generate_tests("def foo():\n    return 1\n", "sample")
+
+    assert printed == []
