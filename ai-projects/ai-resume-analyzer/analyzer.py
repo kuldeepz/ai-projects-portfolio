@@ -81,6 +81,29 @@ ANALYSIS_SCHEMA = {
 }
 
 
+def validate_environment():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
+        sys.exit(1)
+
+    file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    for path_arg in file_args:
+        p = Path(path_arg)
+        if p.suffix.lower() in (".pdf", ".txt", ".md"):
+            if not p.exists():
+                console.print(f"[red]File not found:[/red] {path_arg}")
+                sys.exit(1)
+            if not p.is_file():
+                console.print(f"[red]Not a file:[/red] {path_arg}")
+                sys.exit(1)
+            if not os.access(p, os.R_OK):
+                console.print(f"[red]File is not readable:[/red] {path_arg}")
+                sys.exit(1)
+
+    console.print("[green]Setup OK ✓[/green]")
+
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
@@ -203,6 +226,8 @@ def display_results(analysis: dict):
 
 
 def main():
+    validate_environment()
+
     if len(sys.argv) < 2:
         console.print("[yellow]Usage:[/yellow] python analyzer.py <resume.pdf|resume.txt> [target_role]")
         console.print("[dim]Example: python analyzer.py my_resume.pdf 'Senior Data Engineer'[/dim]")
