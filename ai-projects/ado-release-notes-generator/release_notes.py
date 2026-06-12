@@ -4,7 +4,7 @@ Takes a list of ADO work items (completed in a sprint/release) and generates
 polished, audience-appropriate release notes.
 """
 
-import os, sys, json
+import os, sys, json, time
 from datetime import date
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -31,6 +31,20 @@ def get_client():
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for i, delay in enumerate(delays):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if i < len(delays) - 1:
+                    time.sleep(delay)
+        raise last_exception
+    return wrapper
 
 def print_usage(response):
     usage = getattr(response, "usage", None)
@@ -62,18 +76,19 @@ def print_usage(response):
     else:
         console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
-def validate_environment(input_path: str | None = None):
+def validate_environment():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
         sys.exit(1)
 
-    if input_path is not None:
-        if not os.path.isfile(input_path):
-            console.print(f"[red]Error:[/red] Input file not found: {input_path}")
+    if len(sys.argv) >= 2:
+        path = sys.argv[1]
+        if not os.path.isfile(path):
+            console.print(f"[red]Error:[/red] Input file not found: {path}")
             sys.exit(1)
-        if not os.access(input_path, os.R_OK):
-            console.print(f"[red]Error:[/red] Input file is not readable: {input_path}")
+        if not os.access(path, os.R_OK):
+            console.print(f"[red]Error:[/red] Input file is not readable: {path}")
             sys.exit(1)
 
     console.print("[green]Setup OK ✓[/green]")
@@ -115,8 +130,12 @@ SAMPLE_ITEMS = {
     ]
 }
 
+@retry_with_backoff
+def create_chat_completion(*args, **kwargs):
+    return get_client().chat.completions.create(*args, **kwargs)
+
 def generate_notes(data: dict) -> dict:
-    response = get_client().chat.completions.create(
+    response = create_chat_completion(
         model=MODEL,
         messages=[
             {"role": "system", "content": (
@@ -135,8 +154,22 @@ def generate_notes(data: dict) -> dict:
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
-    input_path = sys.argv[1] if len(sys.argv) >= 2 else None
-    validate_environment(input_path)
+    validate_environment()
 
     if len(sys.argv) < 2:
-        console.print("[dim]No file provided — using sample release data")
+        console.print("[dim]No file provided — using sample release data[/dim]")
+        data = SAMPLE_ITEMS
+    else:
+        with open(sys.argv[1], "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+    notes = generate_notes(data)
+
+    console.print(Panel.fit(
+        Markdown(notes.get("full_markdown", "")),
+        title=f"Release Notes {notes.get('version', '')}",
+        border_style="green"
+    ))
+
+if __name__ == "__main__":
+    main()
