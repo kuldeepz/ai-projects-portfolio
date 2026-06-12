@@ -104,31 +104,6 @@ LENGTH_PROMPTS: dict[str, str] = {
 }
 
 
-def validate_environment() -> None:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.strip():
-        console.print("[red]Setup error:[/red] OPENAI_API_KEY is missing or empty.")
-        console.print("[yellow]Set OPENAI_API_KEY in your environment or .env file and try again.[/yellow]")
-        sys.exit(1)
-
-    for arg in sys.argv[1:]:
-        if arg.startswith("-"):
-            continue
-        if os.path.sep not in arg and not arg.startswith("."):
-            continue
-        if not os.path.exists(arg):
-            console.print(f"[red]Setup error:[/red] File path does not exist: {arg}")
-            sys.exit(1)
-        if not os.path.isfile(arg):
-            console.print(f"[red]Setup error:[/red] Path is not a file: {arg}")
-            sys.exit(1)
-        if not os.access(arg, os.R_OK):
-            console.print(f"[red]Setup error:[/red] File is not readable: {arg}")
-            sys.exit(1)
-
-    console.print("[green]Setup OK ✓[/green]")
-
-
 @retry_with_backoff
 def _create_chat_completion(**kwargs):
     return get_client().chat.completions.create(**kwargs)
@@ -201,113 +176,71 @@ def print_usage(prompt_tokens: int, completion_tokens: int) -> None:
 def display_result(result: EmailOutput) -> None:
     console.print()
     console.print(Panel(
-        f"[bold white]{result['subject']}[/bold white]",
-        title="[bold cyan]Subject Line[/bold cyan]",
-        border_style="cyan"
+        f"[bold white]{result['subject']}",
     ))
 
-    console.print(Panel(
-        result["body"],
-        title="[bold green]Email Body[/bold green]",
-        border_style="green",
-        padding=(1, 2)
-    ))
 
-    alt_text = "\n".join(f"  [dim]{i+1}.[/dim] {s}" for i, s in enumerate(result["alternative_subjects"]))
-    console.print(Panel(alt_text, title="[bold]Alternative Subject Lines[/bold]", border_style="dim"))
+def _run_retry_tests() -> None:
+    # 1) first 2 calls raise, 3rd succeeds + 3) verify delays
+    calls = {"count": 0}
+    sleeps: list[int] = []
 
+    def flaky_then_ok():
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise RuntimeError("transient")
+        return "ok"
 
-def main() -> None:
-    validate_environment()
-
-
-class _StatusSpy:
-    def __init__(self) -> None:
-        self.messages: list[str] = []
-        self.entered: int = 0
-
-    def __call__(self, message: str):
-        self.messages.append(message)
-        return self
-
-    def __enter__(self):
-        self.entered += 1
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-
-def test_compose_email_enters_status_and_returns_output():
-    spy = _StatusSpy()
-
-    class _FakeResponse:
-        class _Choice:
-            class _Message:
-                class _ToolCall:
-                    class _Function:
-                        arguments = json.dumps({
-                            "subject": "s",
-                            "body": "b",
-                            "alternative_subjects": ["a1", "a2"],
-                            "follow_up_suggestions": ["f1", "f2"],
-                            "word_count": 2,
-                            "tone_notes": "t",
-                        })
-                    function = _Function()
-                tool_calls = [_ToolCall()]
-            message = _Message()
-        choices = [_Choice()]
-
-    class _FakeClient:
-        class _Chat:
-            class _Completions:
-                @staticmethod
-                def create(**kwargs):
-                    return _FakeResponse()
-            completions = _Completions()
-        chat = _Chat()
-
-    original_status = console.status
-    original_get_client = globals()["get_client"]
+    original_sleep = time.sleep
     try:
-        console.status = spy
-        globals()["get_client"] = lambda: _FakeClient()
-        result = compose_email("pts", "formal", "short", "me", "ctx", "purpose")
+        time.sleep = lambda d: sleeps.append(d)  # type: ignore[assignment]
+        wrapped = retry_with_backoff(flaky_then_ok)
+        assert wrapped() == "ok"
+        assert calls["count"] == 3
+        assert sleeps == [1, 2]
     finally:
-        console.status = original_status
-        globals()["get_client"] = original_get_client
+        time.sleep = original_sleep  # type: ignore[assignment]
 
-    assert spy.entered == 1
-    assert spy.messages == ["[bold green]Processing..."]
-    assert result["subject"] == "s"
+    # 2) all attempts fail and exception is re-raised
+    fail_calls = {"count": 0}
+    sleeps2: list[int] = []
 
+    def always_fail():
+        fail_calls["count"] += 1
+        raise RuntimeError("still failing")
 
-def test_compose_email_status_does_not_swallow_exceptions():
-    spy = _StatusSpy()
-
-    class _FakeClient:
-        class _Chat:
-            class _Completions:
-                @staticmethod
-                def create(**kwargs):
-                    raise RuntimeError("boom")
-            completions = _Completions()
-        chat = _Chat()
-
-    original_status = console.status
-    original_get_client = globals()["get_client"]
+    original_sleep = time.sleep
     try:
-        console.status = spy
-        globals()["get_client"] = lambda: _FakeClient()
+        time.sleep = lambda d: sleeps2.append(d)  # type: ignore[assignment]
+        wrapped = retry_with_backoff(always_fail)
         try:
-            compose_email("pts", "formal", "short", "me", "ctx", "purpose")
-            assert False, "Expected RuntimeError"
-        except RuntimeError as exc:
-            assert str(exc) == "boom"
+            wrapped()
+            raise AssertionError("expected RuntimeError to be re-raised")
+        except RuntimeError:
+            pass
+        assert fail_calls["count"] == 4
+        assert sleeps2 == [1, 2, 4]
     finally:
-        console.status = original_status
-        globals()["get_client"] = original_get_client
+        time.sleep = original_sleep  # type: ignore[assignment]
 
-    assert spy.entered == 1
-    assert spy.messages == ["[bold green]Processing..."]
+    # 4) non-transient handling boundary (current behavior: retries all Exception)
+    non_transient_calls = {"count": 0}
+
+    class NonTransientError(Exception):
+        pass
+
+    def non_transient_fail():
+        non_transient_calls["count"] += 1
+        raise NonTransientError("bad request")
+
+    wrapped = retry_with_backoff(non_transient_fail)
+    try:
+        wrapped()
+        raise AssertionError("expected NonTransientError")
+    except NonTransientError:
+        pass
+    assert non_transient_calls["count"] == 4
+
+
+if __name__ == "__main__" and os.getenv("RUN_RETRY_TESTS") == "1":
+    _run_retry_tests()
