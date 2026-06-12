@@ -1,8 +1,36 @@
+import os
+import sys
+from pathlib import Path
+
 import pytest
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import agent
+
+
+def validate_environment(argv: list[str] | None = None) -> None:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise SystemExit("Error: OPENAI_API_KEY is not set or is empty.")
+
+    args = list(sys.argv[1:] if argv is None else argv)
+    for arg in args:
+        if arg.startswith("-"):
+            continue
+        path = Path(arg)
+        if not path.exists():
+            raise SystemExit(f"Error: File path does not exist: {arg}")
+        if not path.is_file():
+            raise SystemExit(f"Error: Path is not a file: {arg}")
+        if not os.access(path, os.R_OK):
+            raise SystemExit(f"Error: File is not readable: {arg}")
+
+    print("Setup OK ✓")
+
+
+def main() -> None:
+    validate_environment()
 
 
 def _make_response_with_usage(
