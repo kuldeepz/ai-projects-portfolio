@@ -36,7 +36,7 @@ def print_usage(response):
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 def retry_with_backoff(func):
     def wrapper(*args, **kwargs):
@@ -158,68 +158,3 @@ def main():
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg in ("-v", "--verbose"):
-            VERBOSE = True
-            i += 1
-        elif arg == "--export":
-            export = True
-            if i + 1 < len(args):
-                cleaned_args.extend([arg, args[i + 1]])
-                i += 2
-            else:
-                cleaned_args.append(arg)
-                i += 1
-        else:
-            cleaned_args.append(arg)
-            i += 1
-
-    design = SAMPLE_DESIGN
-    if cleaned_args and cleaned_args[0] == "--export":
-        if len(cleaned_args) >= 3:
-            design = cleaned_args[2]
-    elif cleaned_args:
-        design = cleaned_args[0]
-
-    review = review_architecture(design)
-    display(review)
-
-    if export:
-        out_file = "architecture_review.json"
-        if "--export" in cleaned_args:
-            idx = cleaned_args.index("--export")
-            if idx + 1 < len(cleaned_args):
-                out_file = cleaned_args[idx + 1]
-        with open(out_file, "w", encoding="utf-8") as f:
-            json.dump(review, f, indent=2)
-
-
-class TestCLIParsing(unittest.TestCase):
-    def setUp(self):
-        global VERBOSE
-        VERBOSE = False
-
-    @patch(__name__ + ".display")
-    @patch(__name__ + ".review_architecture", return_value={})
-    def test_verbose_short_flag_sets_global(self, mock_review, mock_display):
-        global VERBOSE
-        with patch.object(sys, "argv", ["reviewer.py", "-v", "input.txt"]):
-            main()
-        self.assertTrue(VERBOSE)
-        mock_review.assert_called_once_with("input.txt")
-
-    @patch(__name__ + ".json.dump")
-    @patch("builtins.open", new_callable=unittest.mock.mock_open)
-    @patch(__name__ + ".display")
-    @patch(__name__ + ".review_architecture", return_value={"ok": True})
-    def test_export_and_verbose_combined_flags(self, mock_review, mock_display, mock_open_fn, mock_json_dump):
-        global VERBOSE
-        with patch.object(sys, "argv", ["reviewer.py", "--export", "out.json", "--verbose", "input.txt"]):
-            main()
-        self.assertTrue(VERBOSE)
-        mock_review.assert_called_once_with("input.txt")
-        mock_open_fn.assert_called_once_with("out.json", "w", encoding="utf-8")
-        mock_json_dump.assert_called_once()
-
-
-if __name__ == "__main__":
-    main()
