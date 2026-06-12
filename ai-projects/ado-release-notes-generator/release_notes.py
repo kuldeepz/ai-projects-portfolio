@@ -1,6 +1,6 @@
 import unittest
-from unittest.mock import patch, call
 from functools import wraps
+from unittest.mock import patch, call
 
 import release_notes
 
