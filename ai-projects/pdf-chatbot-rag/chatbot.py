@@ -173,11 +173,83 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     print(Fore.CYAN + "  Extracting text from PDF...")
     text = extract_text_from_pdf(pdf_path)
     if not text.strip():
-        print(Fore.RED + "  No text could be extracted. Is the PDF scanned/image-based?")
-        sys.exit(1)
+        print(Fore.RED + "  No text could be extracted. Is the PDF readable?")
+        return [], []
 
-    print(Fore.CYAN + f"  Chunking text ({len(text.split())} words)...")
-    chunks = chunk_text(text)
-    print(Fore.CYAN + f"  Created {len(chunks)} chunks. Generating embeddings...")
 
-    embeddings = get_embedd
+# -----------------------------
+# Tests for validate_environment
+# -----------------------------
+
+def test_validate_environment_missing_api_key_exits_1(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["chatbot.py"])
+    monkeypatch.setattr(os, "getenv", lambda key: "" if key == "OPENAI_API_KEY" else None)
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    out = capsys.readouterr().out
+    assert "Missing OPENAI_API_KEY" in out
+
+
+def test_validate_environment_nonexistent_path_exits_1(monkeypatch, capsys):
+    monkeypatch.setattr(os, "getenv", lambda key: "test-key" if key == "OPENAI_API_KEY" else None)
+    monkeypatch.setattr(sys, "argv", ["chatbot.py", "does-not-exist.pdf"])
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    out = capsys.readouterr().out
+    assert "File not found" in out
+
+
+def test_validate_environment_directory_path_exits_1(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(os, "getenv", lambda key: "test-key" if key == "OPENAI_API_KEY" else None)
+    monkeypatch.setattr(sys, "argv", ["chatbot.py", str(tmp_path)])
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    out = capsys.readouterr().out
+    assert "Not a file" in out
+
+
+def test_validate_environment_unreadable_file_exits_1(monkeypatch, tmp_path, capsys):
+    f = tmp_path / "sample.pdf"
+    f.write_text("x")
+
+    monkeypatch.setattr(os, "getenv", lambda key: "test-key" if key == "OPENAI_API_KEY" else None)
+    monkeypatch.setattr(sys, "argv", ["chatbot.py", str(f)])
+    monkeypatch.setattr(os, "access", lambda path, mode: False)
+
+    try:
+        validate_environment()
+        assert False, "Expected SystemExit"
+    except SystemExit as e:
+        assert e.code == 1
+
+    out = capsys.readouterr().out
+    assert "File is not readable" in out
+
+
+def test_validate_environment_valid_setup_prints_success_and_no_exit(monkeypatch, tmp_path, capsys):
+    f = tmp_path / "sample.pdf"
+    f.write_text("x")
+
+    monkeypatch.setattr(os, "getenv", lambda key: "test-key" if key == "OPENAI_API_KEY" else None)
+    monkeypatch.setattr(sys, "argv", ["chatbot.py", str(f)])
+    monkeypatch.setattr(os, "access", lambda path, mode: True)
+
+    validate_environment()
+
+    out = capsys.readouterr().out
+    assert "Setup OK" in out
