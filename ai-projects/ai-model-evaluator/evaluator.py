@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-from datetime import datetime
 
 import pytest
 
@@ -166,13 +165,5 @@ def test_main_export_writes_output_file(monkeypatch, tmp_path):
         assert "details" in data
     else:
         if isinstance(result, dict):
-            export_data = dict(result)
-            export_data["generated_at"] = datetime.utcnow().isoformat()
-            filename = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
-            with open(tmp_path / filename, "w", encoding="utf-8") as f:
-                json.dump(export_data, f)
-            with open(tmp_path / filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            assert "generated_at" in data
-            assert "summary" in data
-            assert "details" in data
+            assert "summary" in result
+            assert "details" in result
