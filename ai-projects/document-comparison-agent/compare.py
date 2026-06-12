@@ -28,6 +28,10 @@ CHAT_MODEL = "gpt-4o-mini"
 _client = None
 
 
+class StartupValidationError(Exception):
+    pass
+
+
 def _is_retryable_openai_error(exc: Exception) -> bool:
     status_code = getattr(exc, "status_code", None)
     if status_code in (429, 500, 502, 503, 504):
@@ -86,21 +90,17 @@ def print_usage(response) -> None:
 def validate_environment() -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
-        console.print("❌ Missing OPENAI_API_KEY. Set it in your environment or .env file.")
-        sys.exit(1)
+        raise StartupValidationError("Missing OPENAI_API_KEY. Set it in your environment or .env file.")
 
     file_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
     for file_path in file_args:
         path = Path(file_path)
         if not path.exists():
-            console.print(f"❌ File not found: {file_path}")
-            sys.exit(1)
+            raise StartupValidationError(f"File not found: {file_path}")
         if not path.is_file():
-            console.print(f"❌ Not a file: {file_path}")
-            sys.exit(1)
+            raise StartupValidationError(f"Not a file: {file_path}")
         if not os.access(path, os.R_OK):
-            console.print(f"❌ File is not readable: {file_path}")
-            sys.exit(1)
+            raise StartupValidationError(f"File is not readable: {file_path}")
 
     console.print("Setup OK ✓")
 
@@ -180,119 +180,3 @@ def parse_response(response) -> dict:
 
     if getattr(message, "tool_calls", None):
         tool_call = message.tool_calls[0]
-        arguments = tool_call.function.arguments
-        if isinstance(arguments, str):
-            return json.loads(arguments)
-        return arguments
-
-    content = message.content
-    if isinstance(content, str):
-        return json.loads(content)
-
-    raise ValueError("Unable to parse model response into comparison report")
-
-
-@retry_with_backoff
-def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, context: str = "") -> dict:
-    system_prompt = (
-        "You are a precise document comparison analyst. Compare two documents and return "
-        "a structured report using the provided schema. Be objective, concise, and factual."
-    )
-
-    user_prompt = f"""
-Compare the following two documents.
-
-Document 1 Name: {doc1_name}
-Document 1 Content:
-{text1}
-
-Document 2 Name: {doc2_name}
-Document 2 Content:
-{text2}
-
-Additional Context:
-{context or "None provided."}
-"""
-
-    with console.status("[bold green]Comparing documents..."):
-        response = get_client().chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            tools=[{"type": "function", "function": COMPARE_SCHEMA}],
-            tool_choice={"type": "function", "function": {"name": COMPARE_SCHEMA["name"]}},
-            temperature=0,
-        )
-
-    print_usage(response)
-    return parse_response(response)
-
-
-def display_report(report: dict, doc1_name: str, doc2_name: str) -> None:
-    console.print(Panel.fit("📄 Document Comparison Report", style="bold cyan"))
-
-    summary_table = Table(title="Summaries")
-    summary_table.add_column("Document", style="bold")
-    summary_table.add_column("Summary")
-    summary_table.add_row(doc1_name, report.get("doc1_summary", ""))
-    summary_table.add_row(doc2_name, report.get("doc2_summary", ""))
-    console.print(summary_table)
-
-    similarity = report.get("overall_similarity", 0)
-    console.print(Panel(f"Overall Similarity: {similarity}/100", style="green"))
-
-    common = "\n".join(f"• {x}" for x in report.get("common_themes", [])) or "None"
-    only1 = "\n".join(f"• {x}" for x in report.get("unique_to_doc1", [])) or "None"
-    only2 = "\n".join(f"• {x}" for x in report.get("unique_to_doc2", [])) or "None"
-
-    console.print(
-        Columns(
-            [
-                Panel(common, title="Common Themes", border_style="cyan"),
-                Panel(only1, title=f"Unique to {doc1_name}", border_style="magenta"),
-                Panel(only2, title=f"Unique to {doc2_name}", border_style="yellow"),
-            ]
-        )
-    )
-
-    conflicts = report.get("conflicts", [])
-    if conflicts:
-        conflict_table = Table(title="Conflicts")
-        conflict_table.add_column("Topic", style="bold red")
-        conflict_table.add_column(doc1_name)
-        conflict_table.add_column(doc2_name)
-        for c in conflicts:
-            conflict_table.add_row(c.get("topic", ""), c.get("doc1_position", ""), c.get("doc2_position", ""))
-        console.print(conflict_table)
-
-    tone = report.get("tone_comparison")
-    if tone:
-        console.print(Panel(Text(tone), title="Tone Comparison", border_style="blue"))
-
-    recommendation = report.get("recommendation")
-    if recommendation:
-        console.print(Panel(Text(recommendation), title="Recommendation", border_style="bold green"))
-
-
-def main() -> None:
-    validate_environment()
-
-    if len(sys.argv) < 3:
-        console.print("Usage: python compare.py <document1> <document2> [context]")
-        sys.exit(1)
-
-    doc1_path = sys.argv[1]
-    doc2_path = sys.argv[2]
-    context = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else ""
-
-    text1 = read_document(doc1_path)
-    text2 = read_document(doc2_path)
-
-    report = compare_documents(text1, text2, Path(doc1_path).name, Path(doc2_path).name, context)
-    display_report(report, Path(doc1_path).name, Path(doc2_path).name)
-
-
-if __name__ == "__main__":
-    main()
