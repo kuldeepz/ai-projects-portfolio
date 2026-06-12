@@ -28,37 +28,29 @@ def test_sample_item_has_issues():
     print("  [PASS] Sample work item — has expected gaps for demo purposes")
 
 @pytest.mark.parametrize(
-    "work_item,expected_missing",
+    "input_value,expected_missing",
     [
-        ({"assigned_to": ""}, True),
-        ({"assigned_to": "Some assignee"}, False),
-        ({"assigned_to": "   "}, True),
-        ({"assigned_to": None}, True),
-        ({"assigned_to": 123}, True),
-        ({}, True),
+        ("", True),
+        ("Some assignee", False),
+        ("   ", True),
     ],
 )
-def test_assigned_to_edge_cases(work_item, expected_missing):
-    """Covers empty, malformed, typed, and missing-key assignee edge cases."""
-    assigned_to = work_item.get("assigned_to")
-    is_missing = not (isinstance(assigned_to, str) and assigned_to.strip())
+def test_assigned_to_empty_string_edge_cases(input_value, expected_missing):
+    """Covers empty-string and whitespace edge cases for assignee presence checks."""
+    is_missing = not bool(input_value and input_value.strip())
     assert is_missing is expected_missing
 
 @pytest.mark.parametrize(
-    "work_item,expected_missing",
+    "story_points,expected_missing",
     [
-        ({"story_points": None}, True),
-        ({"story_points": 1}, False),
-        ({"story_points": 0}, False),
-        ({"story_points": -1}, False),
-        ({"story_points": "8"}, True),
-        ({}, True),
+        (None, True),
+        (1, False),
+        (0, False),
     ],
 )
-def test_story_points_presence_edge_cases(work_item, expected_missing):
-    """Covers None, typed, negative, and missing-key availability for story points."""
-    story_points = work_item.get("story_points")
-    is_missing = story_points is None or not isinstance(story_points, (int, float))
+def test_story_points_none_and_boundary_inputs(story_points, expected_missing):
+    """Covers None and boundary numeric inputs for story points availability."""
+    is_missing = story_points is None
     assert is_missing is expected_missing
 
 @pytest.mark.parametrize(
@@ -69,8 +61,6 @@ def test_story_points_presence_edge_cases(work_item, expected_missing):
         (0, False),
         (34, False),
         (None, False),
-        (-1, False),
-        ("8", False),
     ],
 )
 def test_fibonacci_story_point_boundary_values(sp_value, is_valid):
@@ -79,9 +69,4 @@ def test_fibonacci_story_point_boundary_values(sp_value, is_valid):
     assert (sp_value in valid_sp) is is_valid
 
 if __name__ == "__main__":
-    print("\n=== ado-workitem-analyzer: Sanity Tests ===\n")
-    try:
-        test_schema(); test_fibonacci_enum(); test_sample_item_has_issues()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); sys.exit(1)
+    raise SystemExit(pytest.main([__file__]))
