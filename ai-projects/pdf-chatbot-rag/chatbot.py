@@ -9,7 +9,7 @@ import json
 import math
 import hashlib
 from pathlib import Path
-from typing import Any, Protocol, TypedDict
+from typing import Any
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -27,20 +27,6 @@ CHUNK_OVERLAP = 50     # word overlap between chunks
 TOP_K = 4              # number of chunks to retrieve per query
 EMBED_MODEL = "text-embedding-3-small"
 CHAT_MODEL = "gpt-4o-mini"
-PRICING_PER_1K: dict[str, dict[str, float]] = {}
-
-
-class ChatMessage(TypedDict):
-    role: str
-    content: str
-
-
-class UsageBearingResponse(Protocol):
-    usage: Any
-
-
-def print_usage(response: UsageBearingResponse) -> None:
-    _ = response.usage
 
 
 def validate_environment() -> None:
@@ -53,7 +39,24 @@ def validate_environment() -> None:
         print(Fore.YELLOW + "Usage: python chatbot.py <path_to_pdf>")
         sys.exit(1)
 
-    pdf_path = sys.argv[1]
+    args = sys.argv[1:]
+    filtered_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--export", "-e"):
+            i += 1
+            if i < len(args) and not args[i].startswith("-"):
+                i += 1
+            continue
+        filtered_args.append(arg)
+        i += 1
+
+    if not filtered_args:
+        print(Fore.YELLOW + "Usage: python chatbot.py <path_to_pdf>")
+        sys.exit(1)
+
+    pdf_path = filtered_args[0]
     path = Path(pdf_path)
 
     if not os.path.exists(pdf_path):
@@ -89,9 +92,9 @@ def read_pdf(pdf_path: str) -> str:
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    words: list[str] = text.split()
-    chunks: list[str] = []
-    start: int = 0
+    words = text.split()
+    chunks = []
+    start = 0
 
     while start < len(words):
         end = min(start + chunk_size, len(words))
@@ -119,7 +122,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def retrieve_top_chunks(query_embedding: list[float], chunk_embeddings: list[list[float]], chunks: list[str], top_k: int = TOP_K) -> list[str]:
-    scored: list[tuple[float, str]] = []
+    scored = []
     with console.status("[bold green]Processing..."):
         for i, emb in enumerate(chunk_embeddings):
             score = cosine_similarity(query_embedding, emb)
@@ -129,7 +132,7 @@ def retrieve_top_chunks(query_embedding: list[float], chunk_embeddings: list[lis
     return [chunk for _, chunk in scored[:top_k]]
 
 
-def answer_question(question: str, context_chunks: list[str], chat_history: list[ChatMessage]) -> str:
+def answer_question(question: str, context_chunks: list[str], chat_history: list[dict[str, Any]]) -> str:
     context = "\n\n".join(context_chunks)
 
     system_prompt = (
@@ -137,7 +140,7 @@ def answer_question(question: str, context_chunks: list[str], chat_history: list
         "If the answer is not in the context, say you don't know."
     )
 
-    messages: list[ChatMessage] = [{"role": "system", "content": system_prompt}]
+    messages = [{"role": "system", "content": system_prompt}]
     messages.extend(chat_history)
     messages.append({
         "role": "user",
@@ -169,8 +172,8 @@ def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
     return chunks, embeddings
 
 
-def save_chat_history(chat_history: list[ChatMessage], output_path: str = "chat_history.json") -> None:
-    data: dict[str, Any] = {
+def save_chat_history(chat_history: list[dict[str, Any]], output_path: str = "chat_history.json") -> None:
+    data = {
         "timestamp": datetime.now().isoformat(),
         "history": chat_history,
     }
@@ -188,7 +191,7 @@ def main() -> None:
 
     chunks, chunk_embeddings = build_index(pdf_path)
 
-    chat_history: list[ChatMessage] = []
+    chat_history = []
 
     print(Fore.GREEN + "\nAsk questions about the document.")
     print(Fore.GREEN + "Type 'exit' to quit, 'save' to save chat history.\n")
