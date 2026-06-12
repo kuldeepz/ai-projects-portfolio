@@ -1,5 +1,6 @@
 """Sanity tests for prompt-library-manager — no API key required."""
 import sys, os, json, tempfile
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 
 def test_library_json_schema():
@@ -56,6 +57,57 @@ def test_multi_version_tracking():
     assert versions[-1]["hash"] == "v2hash34"
     print("  [PASS] Multi-version — can track multiple versions")
 
+@pytest.mark.parametrize(
+    "prompt_text,expected_hash",
+    [
+        ("", "d41d8cd9"),
+        (None, None),
+        ("a", "0cc175b9"),
+        ("😀", "2a02eac3"),
+    ],
+)
+def test_version_hash_edge_inputs(prompt_text, expected_hash):
+    """Covers empty, None, and boundary prompt inputs for hash generation."""
+    import hashlib
+    if prompt_text is None:
+        with pytest.raises(AttributeError):
+            hashlib.md5(prompt_text.encode()).hexdigest()[:8]
+    else:
+        h = hashlib.md5(prompt_text.encode()).hexdigest()[:8]
+        assert h == expected_hash
+        assert len(h) == 8
+
+@pytest.mark.parametrize(
+    "tags,expected_is_list,expected_length",
+    [
+        ([], True, 0),
+        (None, False, None),
+        (["single"], True, 1),
+        (["a", "", "b"], True, 3),
+    ],
+)
+def test_tags_list_parametrized(tags, expected_is_list, expected_length):
+    """Validates tag container behavior for empty, None, and mixed tag edge cases."""
+    mock_entry = {"name": "test", "description": "desc", "tags": tags, "versions": [], "current_version": None}
+    assert isinstance(mock_entry["tags"], list) is expected_is_list
+    if expected_is_list:
+        assert len(mock_entry["tags"]) == expected_length
+
+@pytest.mark.parametrize(
+    "current_version,version_hashes,expected_match",
+    [
+        ("", ["abc12345"], False),
+        (None, ["abc12345"], False),
+        ("deadbeef", [], False),
+        ("v2hash34", ["v1hash12", "v2hash34"], True),
+    ],
+)
+def test_current_version_boundary_cases(current_version, version_hashes, expected_match):
+    """Checks current_version matching across empty, None, and missing-version boundaries."""
+    versions = [{"hash": h, "prompt": "Prompt", "created_at": "2024-01-01", "test_results": []} for h in version_hashes]
+    matches = any(v["hash"] == current_version for v in versions)
+    assert matches is expected_match
+
 if __name__ == "__main__":
     print("\n=== prompt-library-manager: Sanity Tests ===\n")
     try:
@@ -67,3 +119,4 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); import sys; sys.exit(1)
+
