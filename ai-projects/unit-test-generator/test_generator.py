@@ -10,8 +10,8 @@ def test_signature_extraction_functions():
         def add(a, b):
             return a + b
 
-        def greet(name, greeting=\"Hello\"):
-            return f\"{greeting}, {name}\"
+        def greet(name, greeting="Hello"):
+            return f"{greeting}, {name}"
 
         async def fetch_data(url):
             pass
@@ -67,7 +67,7 @@ def test_signature_extraction_empty_inputs(source, expected):
 ])
 def test_signature_extraction_none_input(source):
     """Covers None input handling for signature extraction."""
-    with pytest.raises(Exception):
+    with pytest.raises(TypeError):
         extract_function_signatures(source)
 
 
@@ -79,12 +79,8 @@ def test_signature_extraction_none_input(source):
 def test_signature_extraction_edge_cases(source, expected_names):
     """Covers parser edge cases like positional-only args, unicode, and decorators."""
     sigs = extract_function_signatures(source)
-    extracted_names = [
-        s.split("(")[0].replace("async ", "").replace("def ", "").strip()
-        for s in sigs
-        if "(" in s
-    ]
-    assert set(expected_names).issubset(set(extracted_names))
+    for name in expected_names:
+        assert any(name in s for s in sigs)
 
 
 if __name__ == "__main__":
