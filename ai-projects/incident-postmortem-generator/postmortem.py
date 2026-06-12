@@ -17,6 +17,20 @@ def test_validate_environment_exits_when_api_key_missing(monkeypatch):
     assert any("OPENAI_API_KEY is not set" in m for m in printed)
 
 
+def test_validate_environment_exits_when_no_input_files(monkeypatch):
+    monkeypatch.setattr(postmortem.os, "getenv", lambda k: "key" if k == "OPENAI_API_KEY" else None)
+    monkeypatch.setattr(postmortem.sys, "argv", ["postmortem.py", "-v", "--verbose"])
+
+    printed = []
+    monkeypatch.setattr(postmortem.console, "print", lambda msg: printed.append(str(msg)))
+
+    with pytest.raises(SystemExit) as exc:
+        postmortem.validate_environment()
+
+    assert exc.value.code == 2
+    assert any("Provide at least one input file" in m for m in printed)
+
+
 def test_validate_environment_exits_when_path_not_found(monkeypatch):
     monkeypatch.setattr(postmortem.os, "getenv", lambda k: "key" if k == "OPENAI_API_KEY" else None)
     monkeypatch.setattr(postmortem.sys, "argv", ["postmortem.py", "missing.json"])
