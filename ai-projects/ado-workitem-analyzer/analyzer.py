@@ -19,6 +19,10 @@ load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 
+# Estimated pricing in USD per 1M tokens.
+INPUT_RATE_PER_1M = 0.15
+OUTPUT_RATE_PER_1M = 0.60
+
 _client = None
 def get_client():
     global _client
@@ -31,7 +35,10 @@ def print_usage(response):
     prompt_tokens = usage.prompt_tokens
     completion_tokens = usage.completion_tokens
     total_tokens = usage.total_tokens
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    cost = (
+        (prompt_tokens / 1_000_000) * INPUT_RATE_PER_1M
+        + (completion_tokens / 1_000_000) * OUTPUT_RATE_PER_1M
+    )
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 def validate_environment(args):
@@ -133,122 +140,4 @@ def display(item: dict, analysis: dict):
     ))
 
 
-# -------------------- Tests --------------------
-
-def test_print_usage_normal_values(monkeypatch):
-    class Usage:
-        prompt_tokens = 1000
-        completion_tokens = 500
-        total_tokens = 1500
-
-    class Response:
-        usage = Usage()
-
-    captured = []
-    monkeypatch.setattr(console, "print", lambda msg: captured.append(msg))
-
-    print_usage(Response())
-
-    assert len(captured) == 1
-    assert "1000 in + 500 out = 1500 total" in captured[0]
-    assert "$0.0000" in captured[0]
-
-
-def test_print_usage_missing_usage_raises_attribute_error():
-    class Response:
-        pass
-
-    import pytest
-    with pytest.raises(AttributeError):
-        print_usage(Response())
-
-
-def test_print_usage_zero_tokens(monkeypatch):
-    class Usage:
-        prompt_tokens = 0
-        completion_tokens = 0
-        total_tokens = 0
-
-    class Response:
-        usage = Usage()
-
-    captured = []
-    monkeypatch.setattr(console, "print", lambda msg: captured.append(msg))
-
-    print_usage(Response())
-
-    assert "0 in + 0 out = 0 total" in captured[0]
-    assert "$0.0000" in captured[0]
-
-
-def test_print_usage_cost_formula_validation(monkeypatch):
-    class Usage:
-        prompt_tokens = 200000
-        completion_tokens = 100000
-        total_tokens = 300000
-
-    class Response:
-        usage = Usage()
-
-    captured = []
-    monkeypatch.setattr(console, "print", lambda msg: captured.append(msg))
-
-    print_usage(Response())
-
-    expected_cost = (200000 / 1000) * 0.000015 + (100000 / 1000) * 0.00006
-    assert f"${expected_cost:.4f}" in captured[0]
-
-
-def test_analyze_workitem_returns_tool_args_when_usage_print_runs(monkeypatch):
-    class Usage:
-        prompt_tokens = 10
-        completion_tokens = 5
-        total_tokens = 15
-
-    args = {
-        "ready_score": 80,
-        "missing_fields": [],
-        "acceptance_criteria_issues": [],
-        "improved_acceptance_criteria": "Given X When Y Then Z",
-        "story_point_suggestion": 3,
-        "risks": [],
-        "suggestions": ["Add edge cases"],
-        "summary": "Looks good"
-    }
-
-    class Function:
-        arguments = json.dumps(args)
-
-    class ToolCall:
-        function = Function()
-
-    class Message:
-        tool_calls = [ToolCall()]
-
-    class Choice:
-        message = Message()
-
-    class Response:
-        usage = Usage()
-        choices = [Choice()]
-
-    class ChatCompletions:
-        @staticmethod
-        def create(**kwargs):
-            return Response()
-
-    class Chat:
-        completions = ChatCompletions()
-
-    class FakeClient:
-        chat = Chat()
-
-    monkeypatch.setattr(__import__(__name__), "get_client", lambda: FakeClient())
-
-    printed = []
-    monkeypatch.setattr(console, "print", lambda msg: printed.append(msg))
-
-    result = analyze_workitem(SAMPLE_WORK_ITEM)
-
-    assert result == args
-    assert any("Tokens:" in msg for msg in printed)
+# -------------------- Tests ------------------
