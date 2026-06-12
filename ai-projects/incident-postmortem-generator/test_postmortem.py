@@ -87,7 +87,11 @@ def test_postmortem_required_fields_reject_empty_strings(value):
     from postmortem import SCHEMA
 
     required = SCHEMA["parameters"]["required"]
-    assert all((not value or not value.strip()) for _ in required)
+    payload = {field: "ok" for field in required}
+    payload[required[0]] = value
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=SCHEMA["parameters"])
 
 
 def test_postmortem_required_fields_none_input():
