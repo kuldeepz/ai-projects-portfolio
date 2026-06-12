@@ -153,8 +153,8 @@ def cmd_show(name: str) -> None:
             for tr in v["test_results"]:
                 console.print(Panel(
                     f"[dim]Input:[/dim] {tr['input']}\n\n[green]Output:[/green] {tr['output'][:300]}",
-                    title="Test Result", border_style="dim"
-                ))
+            ))
 
-def cmd_test(name: str, test_input: str) -> str | None:
-    lib = load_li
+if "--verbose" in sys.argv[1:]:
+    VERBOSE = True
+    sys.argv.remove("--verbose")
