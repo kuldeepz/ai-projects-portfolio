@@ -42,6 +42,11 @@ def validate_environment() -> None:
         print(Fore.RED + f"File not found: {pdf_path}")
         sys.exit(1)
 
+    path = Path(pdf_path)
+    if path.suffix.lower() != ".pdf":
+        print(Fore.RED + f"Expected a PDF file: {pdf_path}")
+        sys.exit(1)
+
     print(Fore.GREEN + "Setup OK ✓")
 
 
