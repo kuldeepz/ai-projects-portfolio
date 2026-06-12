@@ -171,18 +171,4 @@ def display_summary(result: dict, output_file: str):
     console.print(Panel(table, title="[bold cyan]Test Generation Summary[/bold cyan]", border_style="cyan"))
 
     # Functions covered
-    covered_text = "\n".join(f"  [green]✔[/green] {fn}" for fn in result["functions_covered"])
-    console.print(Panel(covered_text, title="[bold green]Functions Covered[/bold green]", border_style="green"))
-
-
-def main():
-    global VERBOSE
-    args = parse_args()
-    VERBOSE = args.verbose
-    source_path = args.source_file
-
-    validate_environment(source_path)
-
-
-if __name__ == "__main__":
-    main()
+    co
