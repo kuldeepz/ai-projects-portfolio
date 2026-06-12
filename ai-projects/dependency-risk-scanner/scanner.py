@@ -173,48 +173,46 @@ RISK_ICONS = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵
 
 
 def display(report: dict):
-    counts = {r: sum(1 for p in report["packages"] if p["risk"] == r) for r in ("critical", "high", "medium", "low", "ok")}
-    console.print()
-    console.print(Panel.fit(
-        f"[bold]Dependency Risk Scan — {report['ecosystem']}[/bold]\n"
-        f"[dim]{report['total_packages']} packages scanned[/dim]  "
-        f"[bold red]{counts['critical']} critical[/bold red]  "
-        f"[red]{counts['high']} high[/red]  "
-        f"[yellow]{counts['medium']} medium[/yellow]  "
-        f"[green]{counts['ok']} ok[/green]",
-        title="[bold cyan]Dependency Risk Scanner[/bold cyan]", border_style="cyan"
-    ))
-    console.print(Panel(f"[italic]{report['risk_summary']}[/italic]", title="Summary", border_style="dim"))
+    counts = {r: sum(1 for p in report.get("packages", []) if p.get("risk") == r) for r in RISK_COLORS}
+    table = Table(title="Dependency Risk Report")
+    table.add_column("Package")
+    table.add_column("Version")
+    table.add_column("Risk")
+    table.add_column("Issue")
+    table.add_column("Recommendation")
 
-    if report["critical_action_required"]:
-        console.print(Panel(
-            "\n".join(f"  [bold red]‼[/bold red] {a}" for a in report["critical_action_required"]),
-            title="[bold red]Immediate Action Required[/bold red]", border_style="red"
-        ))
+    for pkg in report.get("packages", []):
+        risk = pkg.get("risk", "ok")
+        icon = RISK_ICONS.get(risk, "✅")
+        color = RISK_COLORS.get(risk, "green")
+        table.add_row(
+            pkg.get("name", "-"),
+            pkg.get("current_version", "-"),
+            f"[{color}]{icon} {risk}[/{color}]",
+            pkg.get("issue", "-"),
+            pkg.get("recommendation", "-"),
+        )
 
-    filtered = [p for p in report["packages"] if p["risk"] != "ok"]
-    if filtered:
-        t = Table(show_header=True, header_style="bold")
-        t.add_column("Risk", width=10)
-        t.add_column("Package", ratio=1)
-        t.add_column("Version", width=12)
-        t.add_column("Issue", ratio=2)
-        t.add_column("Fix", ratio=2)
-        for p in sorted(filtered, key=lambda x: ["critical", "high", "medium", "low"].index(x["risk"])):
-            c = RISK_COLORS.get(p["risk"], "white")
-            icon = RISK_ICONS.get(p["risk"], "")
-            upgrade = f"→ {p['upgrade_to']}" if p.get("upgrade_to") else ""
+    summary = (
+        f"Critical: {counts['critical']} | High: {counts['high']} | "
+        f"Medium: {counts['medium']} | Low: {counts['low']} | OK: {counts['ok']}"
+    )
+    console.print(Panel(summary, title="Risk Summary"))
+    console.print(table)
 
 
-def export_report(report: dict):
-    generated_at = datetime.now().isoformat()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    payload = dict(report)
-    payload["generated_at"] = generated_at
-    filename = f"output_{timestamp}.json"
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+def main():
+    validate_environment()
+    if len(sys.argv) < 2:
+        print("Usage: python scanner.py <dependency-file>")
+        sys.exit(1)
+
+    file_path = Path(sys.argv[1])
+    content = file_path.read_text(encoding="utf-8")
+    dep_content = parse_requirements(content, file_path.name)
+    report = scan(dep_content)
+    display(report)
 
 
 if __name__ == "__main__":
-    export_enabled = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
+    main()
