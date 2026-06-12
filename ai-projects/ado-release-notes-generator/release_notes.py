@@ -16,6 +16,15 @@ load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
 
+# Estimated USD pricing per 1K tokens.
+# Source/date should be verified against official OpenAI pricing and updated as needed.
+# Can be overridden with env vars:
+# - OPENAI_PRICE_IN_PER_1K
+# - OPENAI_PRICE_OUT_PER_1K
+PRICING_PER_1K = {
+    "gpt-4o-mini": {"in": 0.00015, "out": 0.0006},
+}
+
 _client = None
 def get_client():
     global _client
@@ -31,8 +40,27 @@ def print_usage(response):
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
     total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
-    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
+    env_in = os.getenv("OPENAI_PRICE_IN_PER_1K")
+    env_out = os.getenv("OPENAI_PRICE_OUT_PER_1K")
+
+    cost = None
+    if env_in is not None and env_out is not None:
+        try:
+            in_rate = float(env_in)
+            out_rate = float(env_out)
+            cost = (prompt_tokens / 1000) * in_rate + (completion_tokens / 1000) * out_rate
+        except ValueError:
+            cost = None
+    else:
+        rates = PRICING_PER_1K.get(MODEL)
+        if rates:
+            cost = (prompt_tokens / 1000) * rates["in"] + (completion_tokens / 1000) * rates["out"]
+
+    if cost is None:
+        console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: n/a")
+    else:
+        console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 def validate_environment():
     api_key = os.getenv("OPENAI_API_KEY")
