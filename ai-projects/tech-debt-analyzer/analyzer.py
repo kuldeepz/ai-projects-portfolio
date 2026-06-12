@@ -125,31 +125,32 @@ def display(report: dict):
         ))
     console.print()
 
-def validate_environment():
+def validate_environment(argv=None):
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser()
     parser.add_argument("target")
     parser.add_argument("context", nargs="?")
-    parser.add_argument("--out")
-    args, _ = parser.parse_known_args(sys.argv[1:])
+    parser.add_argument("--output", "-o", default=None)
+    args = parser.parse_args(argv)
+    return args.target, args.context, args.output
 
-    target_path = Path(args.target)
-    if not target_path.exists():
-        console.print(f"[red]Error:[/red] Target path does not exist: {args.target}")
-        sys.exit(1)
-    if not os.access(target_path, os.R_OK):
-        console.print(f"[red]Error:[/red] Target path is not readable: {args.target}")
-        sys.exit(1)
 
-    if args.out:
-        out_parent = Path(args.out).expanduser().resolve().parent
-        if not out_parent.exists():
-            console.print(f"[red]Error:[/red] Output directory does not exist: {out_parent}")
-            sys.exit(1)
-        if not os.access(out_parent, os.W_OK):
-            console.print(f"[red]Error:[/red] Output directory is not writable: {out_parent}")
-            sys.exit(1)
+def main():
+    target, context, output_path = validate_environment(sys.argv[1:])
+
+    code = collect_code(target)
+    report = analyze(code, context or "")
+    display(report)
+
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        console.print(f"[green]Saved report to[/green] {output_path}")
+
+
+if __name__ == "__main__":
+    main()
