@@ -59,10 +59,4 @@ def test_capacity_boundary_cases(velocity, capacity, expected):
 
 
 if __name__ == "__main__":
-    print("\n=== ado-sprint-planner: Sanity Tests ===\n")
-    try:
-        test_schema(); test_sample_backlog_integrity(); test_dependency_present()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); sys.exit(1)
-
+    sys.exit(pytest.main([__file__]))
