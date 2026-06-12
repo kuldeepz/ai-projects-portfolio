@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import time
-from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -49,6 +48,18 @@ def get_client() -> OpenAI:
 console = Console()
 
 CHAT_MODEL = "gpt-4o-mini"
+
+
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 
 ANALYSIS_SCHEMA = {
     "name": "resume_analysis",
@@ -173,6 +184,7 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict:
         tool_choice={"type": "function", "function": {"name": "resume_analysis"}},
         temperature=0.3,
     )
+    print_usage(response)
 
     tool_call = response.choices[0].message.tool_calls[0]
     return json.loads(tool_call.function.arguments)
@@ -200,15 +212,4 @@ def display_results(analysis: dict):
     score_table.add_column(style="dim")
 
 
-def should_export_results() -> bool:
-    args = sys.argv[1:]
-    return "--export" in args or "-e" in args
 
-
-def export_results(analysis: dict):
-    generated_at = datetime.utcnow().isoformat() + "Z"
-    payload = {**analysis, "generated_at": generated_at}
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    output_path = Path.cwd() / f"output_{timestamp}.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
