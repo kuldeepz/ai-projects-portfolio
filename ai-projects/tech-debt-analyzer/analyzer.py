@@ -6,6 +6,7 @@ prioritizes them by impact, and estimates remediation effort.
 
 import os, sys, json
 from pathlib import Path
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -125,11 +126,19 @@ def display(report: dict):
 
 def main():
     if len(sys.argv) < 2:
-        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context]")
-        console.print("[dim]Example: python analyzer.py src/ 'Django REST API'[/dim]")
+        console.print("[yellow]Usage:[/yellow] python analyzer.py <file_or_directory> [context] [--export|-e]")
+        console.print("[dim]Example: python analyzer.py src/ 'Django REST API' --export[/dim]")
         sys.exit(1)
-    target = sys.argv[1]
-    context = sys.argv[2] if len(sys.argv) > 2 else ""
+    args = sys.argv[1:]
+    export = False
+    if "--export" in args:
+        export = True
+        args.remove("--export")
+    if "-e" in args:
+        export = True
+        args.remove("-e")
+    target = args[0]
+    context = args[1] if len(args) > 1 else ""
     if not os.path.exists(target):
         console.print(f"[red]Not found:[/red] {target}"); sys.exit(1)
 
@@ -137,6 +146,14 @@ def main():
         code = collect_code(target)
         report = analyze(code, context)
     display(report)
+
+    if export:
+        generated_at = datetime.now().isoformat()
+        output = {**report, "generated_at": generated_at}
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"output_{timestamp}.json"
+        Path(filename).write_text(json.dumps(output, indent=2), encoding="utf-8")
+        console.print(f"[green]Exported:[/green] {filename}")
 
 if __name__ == "__main__":
     main()
