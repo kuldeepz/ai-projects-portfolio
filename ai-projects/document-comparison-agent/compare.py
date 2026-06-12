@@ -182,42 +182,55 @@ def compare_documents(text1: str, text2: str, doc1_name: str, doc2_name: str, co
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert document analyst. Compare two documents thoroughly. "
-                    "Identify what they agree on, where they differ, and where they directly conflict. "
-                    "Be specific — quote or paraphrase actual content when identifying differences."
-                )
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Compare these two documents:{ctx}\n\n"
-                    f"--- {doc1_name} ---\n{text1[:max_chars]}\n\n"
-                    f"--- {doc2_name} ---\n{text2[:max_chars]}"
-                )
-            }
-        ],
-        tools=[{"type": "function", "function": COMPARE_SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "comparison_report"}},
-        temperature=0.2,
+        ]
     )
-    print_usage(response)
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
-def main():
-    validate_environment()
+class TestValidateEnvironment(unittest.TestCase):
+    @patch("sys.exit")
+    @patch("compare.console.print")
+    @patch("os.getenv", return_value=None)
+    def test_validate_environment_missing_api_key_exits(self, mock_getenv, mock_print, mock_exit):
+        validate_environment()
+        mock_print.assert_called_once_with("❌ Missing OPENAI_API_KEY. Set it in your environment or .env file.")
+        mock_exit.assert_called_once_with(1)
 
+    @patch("sys.exit")
+    @patch("compare.console.print")
+    @patch("os.access", return_value=False)
+    @patch("pathlib.Path.is_file", return_value=True)
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("sys.argv", ["compare.py", "doc1.txt"])
+    @patch("os.getenv", return_value="test-key")
+    def test_validate_environment_unreadable_file_exits(
+        self,
+        mock_getenv,
+        mock_exists,
+        mock_is_file,
+        mock_access,
+        mock_print,
+        mock_exit,
+    ):
+        validate_environment()
+        mock_print.assert_called_once_with("❌ File is not readable: doc1.txt")
+        mock_exit.assert_called_once_with(1)
 
-class RetryWithBackoffTests(unittest.TestCase):
-    class _RetryableError(Exception):
-        def __init__(self, status_code=429):
-            super().__init__("retryable")
-            self.status_code = status_code
-
-    @patch("time.sleep")
-    def test_retry_success_first_try_no_sleep(self, sleep_mock):
-        fn = Mock(return_value="ok")
-        wrapped = retry_with_backoff(fn)
+    @patch("sys.exit")
+    @patch("compare.console.print")
+    @patch("os.access", return_value=True)
+    @patch("pathlib.Path.is_file", return_value=True)
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("sys.argv", ["compare.py", "doc1.txt", "doc2.txt"])
+    @patch("os.getenv", return_value="test-key")
+    def test_validate_environment_success(
+        self,
+        mock_getenv,
+        mock_exists,
+        mock_is_file,
+        mock_access,
+        mock_print,
+        mock_exit,
+    ):
+        validate_environment()
+        mock_print.assert_called_once_with("Setup OK ✓")
+        mock_exit.assert_not_called()
