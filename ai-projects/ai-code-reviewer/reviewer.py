@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import time
+import random
 from functools import wraps
 from pathlib import Path
 from datetime import datetime
@@ -49,21 +50,21 @@ def print_usage(response: Any) -> None:
     print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 
-def retry_with_backoff(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        delays = [1, 2, 4]
-        last_exception = None
-        for attempt in range(len(delays) + 1):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                last_exception = e
-                if attempt < len(delays):
-                    time.sleep(delays[attempt])
-                else:
-                    raise last_exception
-    return wrapper
+def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, retry_exceptions: tuple[type[Exception], ...] = (Exception,)):
+    def deco(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except retry_exceptions:
+                    if attempt == max_retries:
+                        raise
+                    delay = base_delay * (2 ** attempt)
+                    jitter = random.uniform(0, delay * 0.2)
+                    time.sleep(delay + jitter)
+        return wrapper
+    return deco
 
 
 REVIEW_SCHEMA: dict[str, Any] = {
@@ -159,7 +160,7 @@ def detect_language(file_path: str) -> str:
     return ""
 
 
-@retry_with_backoff
+@retry_with_backoff(max_retries=3, base_delay=1.0, retry_exceptions=(Exception,))
 def review_code(code: str, language: str = "", context: str = "") -> dict[str, Any]:
     lang_hint = f"Language: {language}\n" if language else ""
     ctx_hint = f"Context: {context}\n" if context else ""
@@ -179,7 +180,11 @@ def review_code(code: str, language: str = "", context: str = "") -> dict[str, A
             },
             {
                 "role": "user",
-                "content": f"{lang_hint}{ctx_hint}\nCode to review:\n```\n{code}\n```"
+                "content": f"{lang_hint}{ctx_hint}",
             },
         ],
     )
+
+    print_usage(response)
+    raw = response.choices[0].message.content or "{}"
+    return json.loads(raw)
