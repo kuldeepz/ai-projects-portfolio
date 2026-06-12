@@ -63,15 +63,4 @@ def test_raw_notes_boundary_lengths(data):
     assert len(data["raw_notes"]) >= 0
 
 if __name__ == "__main__":
-    print("\n=== standup-report-generator: Sanity Tests ===\n")
-    try:
-        test_formats_count()
-        test_formats_have_descriptions()
-        test_format_keys()
-        test_sample_notes_structure()
-        test_sample_notes_has_blockers()
-        test_sample_notes_author()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); import sys; sys.exit(1)
-
+    sys.exit(pytest.main([__file__]))
