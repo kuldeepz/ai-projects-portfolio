@@ -171,73 +171,44 @@ def display_notes(notes: dict):
     sentiment_color = SENTIMENT_STYLE.get(notes.get("sentiment", "neutral"), "white")
 
     console.print()
-    console.print(
-        Panel.fit(
-            f"[bold white]{notes['title']}[/bold white]\n"
-            f"[dim]Attendees: {', '.join(notes.get('attendees', []))}[/dim]",
-            border_style="cyan",
-            title="📝 Meeting Notes",
-        )
-    )
-
-    console.print(Markdown(f"### Executive Summary\n{notes.get('executive_summary', '')}"))
-
-    topics = notes.get("key_topics", [])
-    if topics:
-        table = Table(title="Key Topics", show_header=True, header_style="bold magenta")
-        table.add_column("Topic", style="cyan", no_wrap=True)
-        table.add_column("Discussion", style="white")
-        for item in topics:
-            table.add_row(item.get("topic", ""), item.get("discussion", ""))
-        console.print(table)
-
-    for section_title, key in [
-        ("Decisions", "decisions"),
-        ("Action Items", "action_items"),
-        ("Blockers", "blockers"),
-        ("Follow Up Meetings", "follow_up_meetings"),
-    ]:
-        value = notes.get(key, [])
-        if not value:
-            continue
-        console.print(f"\n[bold]{section_title}[/bold]")
-        if key == "action_items":
-            for ai in value:
-                console.print(f" • {ai.get('task', '')} — owner: {ai.get('owner', 'TBD')}, due: {ai.get('due', 'Not specified')}")
-        else:
-            for row in value:
-                console.print(f" • {row}")
-
-    sentiment = notes.get("sentiment", "neutral")
-    console.print(f"\nSentiment: [{sentiment_color}]{sentiment}[/{sentiment_color}]")
+    console.print(Panel.fit("[bold]Meeting Notes[/bold]"))
+    console.print(f"Title: {notes.get('title', 'Untitled')}")
+    console.print(f"Sentiment: [{sentiment_color}]{notes.get('sentiment', 'neutral')}[/{sentiment_color}]")
 
 
-def _read_source_text(source: str) -> str:
-    if source == "-":
-        with console.status("[bold green]Reading from stdin..."):
-            return sys.stdin.read()
-    with console.status(f"[bold green]Reading file: {source}..."):
-        return Path(source).read_text(encoding="utf-8")
-
-
-def main(argv=None):
-    argv = argv or sys.argv[1:]
-    if not argv:
-        console.print("Usage: python summarizer.py <transcript.txt|->")
+def main() -> int:
+    if len(sys.argv) < 2:
+        console.print("Usage: python summarizer.py <transcript-file|->")
         return 1
 
-    source = argv[0]
-    transcript = _read_source_text(source)
-    notes = summarize_transcript(transcript)
-    display_notes(notes)
+    source = sys.argv[1]
 
-    out_dir = Path("outputs")
-    out_dir.mkdir(exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = out_dir / f"meeting_notes_{stamp}.json"
-    out_path.write_text(json.dumps(notes, indent=2), encoding="utf-8")
-    console.print(f"\nSaved JSON: {out_path}")
-    return 0
+    try:
+        if source == "-":
+            with console.status("[bold green]Reading transcript from stdin..."):
+                transcript = sys.stdin.read().strip()
+        else:
+            path = Path(source)
+            with console.status("[bold green]Reading transcript file..."):
+                transcript = path.read_text(encoding="utf-8").strip()
+
+        if not transcript:
+            console.print("[red]Transcript is empty.[/red]")
+            return 1
+
+        notes = summarize_transcript(transcript)
+        display_notes(notes)
+
+        output_dir = Path("outputs")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_path = output_dir / f"meeting-notes-{timestamp}.json"
+        out_path.write_text(json.dumps(notes, indent=2), encoding="utf-8")
+        console.print(f"\nSaved notes to: {out_path}")
+        return 0
+    except FileNotFoundError:
+        console.print(f"[red]File not found:[/red] {source}")
+        return 1
 
 
 if __name__ == "__main__":
