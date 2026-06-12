@@ -5,7 +5,7 @@ for daily standups, weekly syncs, or executive status updates.
 """
 
 import os, sys, json
-from datetime import date
+from datetime import date, datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -87,11 +87,20 @@ def generate_report(data: dict) -> dict:
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def main():
-    if len(sys.argv) < 2:
+    export = False
+    args = sys.argv[1:]
+    if "--export" in args:
+        export = True
+        args.remove("--export")
+    if "-e" in args:
+        export = True
+        args.remove("-e")
+
+    if len(args) < 1:
         console.print("[dim]No file provided — using sample notes...[/dim]\n")
         data = SAMPLE_NOTES
     else:
-        with open(sys.argv[1]) as f:
+        with open(args[0]) as f:
             data = json.load(f)
 
     with console.status("[bold green]Generating report...[/bold green]"):
@@ -112,6 +121,15 @@ def main():
     with open(out, "w") as f:
         f.write(report["formatted_report"])
     console.print(f"\n[green]Saved:[/green] {out}\n")
+
+    if export:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        export_out = f"output_{timestamp}.json"
+        export_data = dict(report)
+        export_data["generated_at"] = datetime.now().isoformat()
+        with open(export_out, "w") as f:
+            json.dump(export_data, f, indent=2)
+        console.print(f"[green]Exported:[/green] {export_out}\n")
 
 if __name__ == "__main__":
     main()
