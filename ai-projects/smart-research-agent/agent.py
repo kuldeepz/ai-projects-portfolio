@@ -5,7 +5,11 @@ from unittest.mock import Mock
 import agent
 
 
-def _make_response_with_usage(prompt_tokens=None, completion_tokens=None, total_tokens=None):
+def _make_response_with_usage(
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    total_tokens: int | None = None,
+) -> SimpleNamespace:
     usage = SimpleNamespace(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
@@ -14,7 +18,7 @@ def _make_response_with_usage(prompt_tokens=None, completion_tokens=None, total_
     return SimpleNamespace(usage=usage)
 
 
-def test_print_usage_no_usage_does_not_print(capsys):
+def test_print_usage_no_usage_does_not_print(capsys: pytest.CaptureFixture[str]) -> None:
     response = SimpleNamespace(usage=None)
 
     agent.print_usage(response)
@@ -23,7 +27,7 @@ def test_print_usage_no_usage_does_not_print(capsys):
     assert captured.out == ""
 
 
-def test_print_usage_with_token_fields_prints_expected_totals(capsys):
+def test_print_usage_with_token_fields_prints_expected_totals(capsys: pytest.CaptureFixture[str]) -> None:
     response = _make_response_with_usage(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
 
     agent.print_usage(response)
@@ -33,7 +37,7 @@ def test_print_usage_with_token_fields_prints_expected_totals(capsys):
     assert "💰 Est. cost: $0.0000" in captured.out
 
 
-def test_print_usage_missing_fields_defaults_to_zero_without_errors(capsys):
+def test_print_usage_missing_fields_defaults_to_zero_without_errors(capsys: pytest.CaptureFixture[str]) -> None:
     usage = SimpleNamespace()
     response = SimpleNamespace(usage=usage)
 
@@ -43,7 +47,7 @@ def test_print_usage_missing_fields_defaults_to_zero_without_errors(capsys):
     assert "📊 Tokens: 0 in + 0 out = 0 total" in captured.out
 
 
-def test_summarize_text_calls_print_usage(monkeypatch):
+def test_summarize_text_calls_print_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_response = SimpleNamespace(
         usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2),
         choices=[SimpleNamespace(message=SimpleNamespace(content="summary"))],
