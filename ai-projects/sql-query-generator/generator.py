@@ -65,6 +65,44 @@ def test_generate_sql_returns_parsed_tool_args_with_status(monkeypatch):
     assert result == {"sql": "SELECT 1"}
 
 
+def test_retry_with_backoff_succeeds_after_transient_failures(monkeypatch):
+    attempts = {"count": 0}
+    sleeps = []
+
+    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+
+    @retry_with_backoff
+    def flaky_create():
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise TimeoutError("transient")
+        return "ok"
+
+    result = flaky_create()
+
+    assert result == "ok"
+    assert attempts["count"] == 3
+    assert sleeps == [1, 2]
+
+
+def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
+    attempts = {"count": 0}
+    sleeps = []
+
+    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+
+    @retry_with_backoff
+    def always_fails():
+        attempts["count"] += 1
+        raise ConnectionError("still failing")
+
+    with pytest.raises(ConnectionError, match="still failing"):
+        always_fails()
+
+    assert attempts["count"] == 4
+    assert sleeps == [1, 2, 4]
+
+
 def test_load_schema_missing_file_still_exits_with_status(monkeypatch, tmp_path):
     monkeypatch.setattr(generator.console, "status", lambda *a, **k: _DummyStatus())
 
