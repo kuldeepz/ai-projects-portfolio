@@ -91,6 +91,22 @@ SAMPLE_BACKLOG = {
     ]
 }
 
+def parse_export_arg(argv):
+    args = argv[:]
+    export_path = None
+
+    for flag in ("--export", "-e"):
+        while flag in args:
+            i = args.index(flag)
+            if i + 1 < len(args) and not args[i + 1].startswith("-"):
+                export_path = args[i + 1]
+                del args[i:i + 2]
+            else:
+                export_path = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+                del args[i]
+
+    return args, export_path
+
 @retry_with_backoff
 def plan_sprint(data: dict) -> dict:
     response = get_client().chat.completions.create(
@@ -142,16 +158,20 @@ def display(data: dict, plan: dict):
         console.print(Panel("\n".join(f"• {r}" for r in plan["recommendations"]), title="[bold cyan]Recommendations[/bold cyan]", border_style="cyan"))
 
 def main():
-    export = "--export" in sys.argv
+    args, export_path = parse_export_arg(sys.argv[1:])
+
     data = SAMPLE_BACKLOG
+    if args:
+        with open(args[0], "r", encoding="utf-8") as f:
+            data = json.load(f)
+
     plan = plan_sprint(data)
     display(data, plan)
 
-    if export:
-        filename = f"sprint_plan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump({"backlog": data, "plan": plan}, f, indent=2)
-        console.print(f"[green]Exported plan to {filename}[/green]")
+    if export_path:
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump(plan, f, indent=2)
+        console.print(f"\n[green]Exported sprint plan to {export_path}[/green]")
 
 if __name__ == "__main__":
     main()
