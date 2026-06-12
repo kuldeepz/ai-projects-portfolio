@@ -96,3 +96,64 @@ def call_openai(*args, **kwargs):
         if VERBOSE:
             elapsed = time.time() - started
             print(f"✅ Done in {elapsed:.1f}s")
+
+
+# ----------------------
+# Unit tests (pytest)
+# ----------------------
+
+def test_parse_args_verbose_true():
+    args, unknown = parse_args(["--verbose"])
+    assert args.verbose is True
+    assert unknown == []
+
+
+def test_configure_verbose_mutates_global_state():
+    global VERBOSE
+    VERBOSE = False
+    configure_verbose(["--verbose"])
+    assert VERBOSE is True
+    configure_verbose([])
+    assert VERBOSE is False
+
+
+def test_helper_extraction_behavior():
+    assert _extract_model_name(("gpt-4o-mini",), {}) == "gpt-4o-mini"
+    assert _extract_model_name((), {"model": "gpt-4.1"}) == "gpt-4.1"
+    assert _extract_model_name((1, 2), {}) == "unknown"
+
+    assert _extract_input_text((), {"input": "hello"}) == "hello"
+    assert _extract_input_text((), {"prompt": "hi"}) == "hi"
+    assert _extract_input_text((), {"messages": [{"role": "user", "content": "x"}]}) == [{"role": "user", "content": "x"}]
+    assert _extract_input_text(("fallback",), {}) == "fallback"
+    assert _extract_input_text((), {}) == ""
+
+    assert _estimate_token_count("") == 0
+    assert _estimate_token_count("abcd") == 1
+    assert _estimate_token_count("abcdefgh") == 2
+    assert _estimate_token_count([1, 2, 3]) >= 1
+
+
+def test_call_openai_verbose_logging_emitted(capsys):
+    global VERBOSE
+    VERBOSE = True
+    try:
+        call_openai("gpt-4o-mini", input="hello world")
+    except NotImplementedError:
+        pass
+    out = capsys.readouterr().out
+    assert "Model:" in out
+    assert "Input chars:" in out
+    assert "Calling OpenAI API" in out
+    assert "Done in" in out
+
+
+def test_call_openai_verbose_logging_suppressed(capsys):
+    global VERBOSE
+    VERBOSE = False
+    try:
+        call_openai("gpt-4o-mini", input="hello world")
+    except NotImplementedError:
+        pass
+    out = capsys.readouterr().out
+    assert out == ""
