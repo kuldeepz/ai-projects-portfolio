@@ -2,6 +2,7 @@
 import sys, os, json, tempfile
 from pathlib import Path
 import pytest
+from jsonschema import ValidationError, validate
 
 # ── incident-postmortem-generator ────────────────────────────────
 def test_postmortem_schema():
@@ -90,13 +91,16 @@ def test_postmortem_required_fields_reject_empty_strings(value):
 
 
 def test_postmortem_required_fields_none_input():
-    """Covers None inputs for required postmortem fields where values are absent."""
+    """Validates schema rejects None for required postmortem fields."""
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "incident-postmortem-generator"))
     from postmortem import SCHEMA
 
     required = SCHEMA["parameters"]["required"]
-    mock_payload = {field: None for field in required}
-    assert all(mock_payload[field] is None for field in required)
+    payload = {field: "ok" for field in required}
+    payload[required[0]] = None
+
+    with pytest.raises(ValidationError):
+        validate(instance=payload, schema=SCHEMA["parameters"])
 
 
 @pytest.mark.parametrize("team_size", [0, 1, 5, 50])
