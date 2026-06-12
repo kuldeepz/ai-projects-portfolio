@@ -82,7 +82,7 @@ def test_language_detection_edge_and_empty_inputs(filename, expected):
 @pytest.mark.parametrize("invalid_input", [None])
 def test_language_detection_none_input(invalid_input):
     """Covers None input handling for language detection."""
-    with pytest.raises(Exception):
+    with pytest.raises(TypeError):
         detect_language(invalid_input)
 
 
