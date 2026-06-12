@@ -30,6 +30,29 @@ def parse_cli_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validate_environment() -> None:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        console.print("❌ Setup error: OPENAI_API_KEY is missing or empty.")
+        console.print("Set it in your environment or .env file, then retry.")
+        sys.exit(1)
+
+    path_args = [arg for arg in sys.argv[1:] if arg and not arg.startswith("-")]
+    for raw_path in path_args:
+        path = Path(raw_path)
+        if not path.exists():
+            console.print(f"❌ Setup error: file path does not exist: {path}")
+            sys.exit(1)
+        if not path.is_file():
+            console.print(f"❌ Setup error: path is not a file: {path}")
+            sys.exit(1)
+        if not os.access(path, os.R_OK):
+            console.print(f"❌ Setup error: file is not readable: {path}")
+            sys.exit(1)
+
+    console.print("Setup OK ✓")
+
+
 def retry_with_backoff(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -182,3 +205,10 @@ tests/test_api.py::test_delete_user FAILED
 FAILED 
 ```
 """
+
+def main() -> None:
+    validate_environment()
+
+
+if __name__ == "__main__":
+    main()
