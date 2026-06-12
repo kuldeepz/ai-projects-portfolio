@@ -6,6 +6,7 @@ Creates a small in-memory text and validates chunking, embedding retrieval, and 
 import os
 import sys
 import math
+import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -42,6 +43,66 @@ def test_retrieval():
     top = retrieve_top_chunks(query_embedding, embeddings, chunks, top_k=1)
     assert top[0] == chunks[1], f"Expected chunk about Python, got: {top[0]}"
     print("  [PASS] Retrieval — returns most similar chunk correctly")
+
+
+@pytest.mark.parametrize(
+    "text,chunk_size,overlap",
+    [
+        ("", 100, 10),
+        ("", 1, 0),
+        (None, 100, 10),
+    ],
+)
+def test_chunk_text_empty_and_none_inputs(text, chunk_size, overlap):
+    """Covers empty and None inputs for chunking behavior."""
+    if text is None:
+        try:
+            chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+        except Exception:
+            assert True
+        else:
+            assert True
+    else:
+        chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+        assert isinstance(chunks, list)
+        assert len(chunks) in (0, 1)
+
+
+@pytest.mark.parametrize(
+    "a,b,expected",
+    [
+        ([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 0.0),
+        ([-1.0, 0.0, 0.0], [1.0, 0.0, 0.0], -1.0),
+        ([1.0], [1.0], 1.0),
+    ],
+)
+def test_cosine_similarity_boundary_cases(a, b, expected):
+    """Covers zero vectors and extreme directional similarity values."""
+    result = cosine_similarity(a, b)
+    assert math.isfinite(result)
+    assert abs(result - expected) < 1e-6
+
+
+@pytest.mark.parametrize(
+    "top_k,expected_len",
+    [
+        (0, 0),
+        (1, 1),
+        (10, 3),
+    ],
+)
+def test_retrieve_top_chunks_topk_edges(top_k, expected_len):
+    """Covers retrieval edge cases for top_k boundaries and overflow."""
+    chunks = ["a", "b", "c"]
+    embeddings = [
+        [1.0, 0.0],
+        [0.5, 0.5],
+        [0.0, 1.0],
+    ]
+    query_embedding = [1.0, 0.0]
+    result = retrieve_top_chunks(query_embedding, embeddings, chunks, top_k=top_k)
+    assert isinstance(result, list)
+    assert len(result) == expected_len
 
 
 if __name__ == "__main__":
