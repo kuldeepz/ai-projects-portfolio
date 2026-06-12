@@ -7,7 +7,7 @@ Supports tone selection, length control, and follow-up suggestions.
 import os
 import sys
 import json
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -28,6 +28,9 @@ class EmailOutput(TypedDict):
     follow_up_suggestions: list[str]
     word_count: int
     tone_notes: str
+
+
+JSONValue = str | int | float | bool | None | dict[str, "JSONValue"] | list["JSONValue"]
 
 
 def get_client() -> OpenAI:
@@ -54,7 +57,7 @@ TONES: dict[str, tuple[str, str]] = {
     "5": ("persuasive", "Compelling and motivating — for pitches, proposals, calls to action"),
 }
 
-EMAIL_SCHEMA: dict[str, Any] = {
+EMAIL_SCHEMA: dict[str, JSONValue] = {
     "name": "email_output",
     "description": "Generated email with metadata",
     "parameters": {
@@ -170,11 +173,4 @@ def display_result(result: EmailOutput) -> None:
     follow_text = "\n".join(f"  [cyan]→[/cyan] {s}" for s in result["follow_up_suggestions"])
     console.print(Panel(follow_text, title="[bold]Follow-up Suggestions[/bold]", border_style="blue"))
 
-    meta_table = Table(show_header=False, box=None, padding=(0, 1))
-    meta_table.add_row("[bold]Word Count:[/bold]", str(result["word_count"]))
-    meta_table.add_row("[bold]Tone Notes:[/bold]", result["tone_notes"])
-    console.print(Panel(meta_table, title="[bold]Metadata[/bold]", border_style="magenta"))
-
-
-if __name__ == "__main__":
-    pass
+    meta_table = Tabl
