@@ -38,13 +38,23 @@ def validate_environment() -> None:
         sys.exit(1)
 
     pdf_path = sys.argv[1]
+    path = Path(pdf_path)
+
     if not os.path.exists(pdf_path):
         print(Fore.RED + f"File not found: {pdf_path}")
         sys.exit(1)
 
-    path = Path(pdf_path)
     if path.suffix.lower() != ".pdf":
         print(Fore.RED + f"Expected a PDF file: {pdf_path}")
+        sys.exit(1)
+
+    try:
+        with open(pdf_path, "rb") as f:
+            if f.read(4) != b"%PDF":
+                print(Fore.RED + f"Invalid PDF file: {pdf_path}")
+                sys.exit(1)
+    except OSError:
+        print(Fore.RED + f"Cannot read file: {pdf_path}")
         sys.exit(1)
 
     print(Fore.GREEN + "Setup OK ✓")
