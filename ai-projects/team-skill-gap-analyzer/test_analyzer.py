@@ -47,17 +47,40 @@ def test_member_fit_is_array():
     assert props["member_fit"]["type"] == "array"
     print("  [PASS] Member fit — typed as array")
 
-@pytest.mark.parametrize("candidate", ["", " ", "\t"]) 
-def test_required_fields_do_not_include_empty_strings(candidate):
-    """Verify required schema fields are never empty-string placeholders."""
+def test_required_fields_are_non_empty_and_unique():
+    """Required fields should be meaningful schema keys without duplicates."""
     required = SCHEMA["parameters"]["required"]
-    assert candidate not in required
+    assert isinstance(required, list)
+    assert all(isinstance(f, str) and f.strip() for f in required)
+    assert len(required) == len(set(required))
 
-@pytest.mark.parametrize("value", [None, "", {}])
-def test_sample_project_container_is_not_none_or_empty(value):
-    """Ensure project section exists and is not None/empty-like invalid input."""
+def test_sample_project_requirements_have_valid_structure():
+    """Project requirements container should be present and typed consistently."""
     assert "project" in SAMPLE_DATA
-    assert SAMPLE_DATA["project"] != value
+    project = SAMPLE_DATA["project"]
+    assert isinstance(project, dict) and project
+
+    key = "required_skills" if "required_skills" in project else "requirements" if "requirements" in project else None
+    assert key is not None
+
+    requirements = project[key]
+    assert isinstance(requirements, (list, dict))
+    if isinstance(requirements, list):
+        assert all((isinstance(item, str) and item.strip()) or isinstance(item, dict) for item in requirements)
+
+def test_all_team_member_skills_have_consistent_types():
+    """Every team member should expose skills as list/dict, with at least one entry."""
+    members = SAMPLE_DATA["team"]
+    assert isinstance(members, list) and members
+
+    for member in members:
+        skills = member.get("skills")
+        assert isinstance(skills, (list, dict))
+        if isinstance(skills, list):
+            assert all(isinstance(skill, str) and skill.strip() for skill in skills)
+            assert len(skills) > 0
+        else:
+            assert len(skills) > 0
 
 @pytest.mark.parametrize("idx", [0, -1, 4])
 def test_team_member_boundary_indexes_have_required_keys(idx):
@@ -79,3 +102,4 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); import sys; sys.exit(1)
+
