@@ -9,6 +9,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
+from typing import Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -20,18 +21,18 @@ from rich.text import Text
 
 load_dotenv()
 
-_client = None
+_client: OpenAI | None = None
 
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
-console = Console()
+console: Console = Console()
 
 CHAT_MODEL = "gpt-4o-mini"
 
-REVIEW_SCHEMA = {
+REVIEW_SCHEMA: dict[str, Any] = {
     "name": "code_review",
     "description": "Structured code review with findings across multiple categories",
     "parameters": {
@@ -96,14 +97,14 @@ REVIEW_SCHEMA = {
     }
 }
 
-SEVERITY_COLORS = {
+SEVERITY_COLORS: dict[str, str] = {
     "critical": "bold red",
     "high": "red",
     "medium": "yellow",
     "low": "dim yellow"
 }
 
-SEVERITY_ICONS = {
+SEVERITY_ICONS: dict[str, str] = {
     "critical": "🔴",
     "high": "🟠",
     "medium": "🟡",
@@ -124,7 +125,7 @@ def detect_language(file_path: str) -> str:
     return ""
 
 
-def review_code(code: str, language: str = "", context: str = "") -> dict:
+def review_code(code: str, language: str = "", context: str = "") -> dict[str, Any]:
     lang_hint = f"Language: {language}\n" if language else ""
     ctx_hint = f"Context: {context}\n" if context else ""
 
@@ -162,7 +163,7 @@ def severity_label(severity: str) -> Text:
     return text
 
 
-def display_review(review: dict, code: str, language: str):
+def display_review(review: dict[str, Any], code: str, language: str) -> None:
     detected_lang = review.get("language", language or "unknown")
     score = review["overall_score"]
     score_color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
@@ -175,13 +176,11 @@ def display_review(review: dict, code: str, language: str):
         border_style="cyan"
     ))
 
-    # Summary
     console.print(Panel(
         f"[italic]{review['summary']}[/italic]",
         title="[bold]Summary[/bold]", border_style="dim"
     ))
 
-    # Security issues
     if review["security_issues"]:
         table = Table(show_header=True, header_style="bold red")
         table.add_column("Severity", width=10)
@@ -193,7 +192,6 @@ def display_review(review: dict, code: str, language: str):
     else:
         console.print(Panel("[green]No security issues found.[/green]", title="[bold]Security[/bold]", border_style="green"))
 
-    # Bugs
     if review["bugs"]:
         table = Table(show_header=True, header_style="bold yellow")
         table.add_column("Severity", width=10)
@@ -203,7 +201,6 @@ def display_review(review: dict, code: str, language: str):
             table.add_row(severity_label(item["severity"]), item["issue"], item["fix"])
         console.print(Panel(table, title="[bold yellow]Bugs[/bold yellow]", border_style="yellow"))
 
-    # Performance
     if review["performance_issues"]:
         perf_text = "\n".join(
             f"  [yellow]⚡[/yellow] {p['issue']}\n    [dim]→ {p['fix']}[/dim]"
@@ -211,17 +208,14 @@ def display_review(review: dict, code: str, language: str):
         )
         console.print(Panel(perf_text, title="[bold]Performance[/bold]", border_style="yellow"))
 
-    # Best practices
     if review["best_practice_violations"]:
         bp_text = "\n".join(f"  [dim]•[/dim] {v}" for v in review["best_practice_violations"])
         console.print(Panel(bp_text, title="[bold]Best Practice Violations[/bold]", border_style="dim"))
 
-    # Positives
     if review["positive_aspects"]:
         pos_text = "\n".join(f"  [green]✔[/green] {p}" for p in review["positive_aspects"])
         console.print(Panel(pos_text, title="[bold green]What's Good[/bold green]", border_style="green"))
 
-    # Refactored snippet
     if review.get("refactored_snippet"):
         console.print(Panel(
             Syntax(review["refactored_snippet"], detected_lang.lower(), theme="monokai", line_numbers=True),
@@ -232,7 +226,7 @@ def display_review(review: dict, code: str, language: str):
     console.print()
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         console.print("[yellow]Usage:[/yellow]")
         console.print("  python reviewer.py <code_file> [context] [--export|-e]")
