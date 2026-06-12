@@ -36,13 +36,10 @@ def get_client() -> OpenAI:
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Generate unit tests for a Python source file.",
-        usage="python generator.py <source_file.py> [--framework pytest|unittest] [-v|--verbose]",
-    )
+    parser = argparse.ArgumentParser(description="Generate unit tests for a Python source file.")
     parser.add_argument("source_file", help="Path to the Python source file")
     parser.add_argument("--framework", choices=["pytest", "unittest"], default="pytest")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
     return parser.parse_args(argv)
 
 
@@ -50,6 +47,7 @@ def validate_environment(source_path: str):
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
+        console.print("[yellow]Usage:[/yellow] python generator.py <source_file.py> [--framework pytest|unittest] [-v|--verbose]")
         sys.exit(1)
 
     path = Path(source_path)
