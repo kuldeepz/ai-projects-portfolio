@@ -150,23 +150,24 @@ def parse_export_arg(argv: list[str]) -> tuple[list[str], str | None]:
 
 @retry_with_backoff()
 def plan_sprint(data: dict[str, Any]) -> dict[str, Any]:
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an experienced Scrum Master and AI sprint planner. "
-                    "Select backlog items that fit within team capacity, respect dependencies, "
-                    "prioritize critical bugs and high-value stories, and define a clear sprint goal."
-                ),
-            },
-            {"role": "user", "content": f"Plan the sprint for this backlog:\n\n{json.dumps(data, indent=2)}"},
-        ],
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "sprint_plan"}},
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an experienced Scrum Master and AI sprint planner. "
+                        "Select backlog items that fit within team capacity, respect dependencies, "
+                        "prioritize critical bugs and high-value stories, and define a clear sprint goal."
+                    ),
+                },
+                {"role": "user", "content": f"Plan the sprint for this backlog:\n\n{json.dumps(data, indent=2)}"},
+            ],
+            tools=[{"type": "function", "function": SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "sprint_plan"}},
+            temperature=0.2,
+        )
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 
