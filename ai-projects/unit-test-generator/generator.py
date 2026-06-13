@@ -65,6 +65,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("source_file", help="Path to the Python source file")
     parser.add_argument("--framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument("-e", "--export", action="store_true", help="Export full results to JSON")
     return parser.parse_args(argv)
 
 
@@ -136,6 +137,16 @@ def extract_function_signatures(source_code: str) -> list[str]:
         elif isinstance(node, ast.ClassDef):
             signatures.append(f"class {node.name}")
     return signatures
+
+
+def export_results(results: dict[str, Any]) -> str:
+    timestamp = int(time.time())
+    filename = f"output_{timestamp}.json"
+    payload = dict(results)
+    payload["generated_at"] = timestamp
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    return filename
 
 
 def generate_tests(source_code: str, module_name: str, framework: str = "pytest") -> dict[str, Any]:
