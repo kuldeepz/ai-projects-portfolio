@@ -1,7 +1,9 @@
+import json
 import os
 import sys
 import time
 import unittest
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -127,34 +129,55 @@ def create_response_with_usage(client: Any, model_name: str, **kwargs: Any) -> A
     return resp
 
 
-def _parse_cli_args(args: list[str]) -> tuple[bool, Optional[str]]:
+def _parse_cli_args(args: list[str]) -> tuple[bool, Optional[str], Optional[str]]:
     verbose = False
     input_path: Optional[str] = None
+    export_path: Optional[str] = None
 
-    for arg in args:
+    i = 0
+    while i < len(args):
+        arg = args[i]
         if arg in ("--verbose", "-v"):
             verbose = True
+        elif arg in ("--export", "-e"):
+            if i + 1 < len(args):
+                export_path = args[i + 1]
+                i += 1
         elif input_path is None:
             input_path = arg
+        i += 1
 
-    return verbose, input_path
+    return verbose, input_path, export_path
+
+
+def export_results(results: Dict[str, Any], export_path: Optional[str] = None) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = export_path or f"output_{timestamp}.json"
+    payload = dict(results)
+    payload["generated_at"] = datetime.now().isoformat()
+    with open(file_name, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return file_name
 
 
 class TestCliParsing(unittest.TestCase):
     def test_verbose_long_flag_and_input_path(self) -> None:
-        verbose, input_path = _parse_cli_args(["--verbose", "file.txt"])
+        verbose, input_path, export_path = _parse_cli_args(["--verbose", "file.txt"])
         self.assertTrue(verbose)
         self.assertEqual(input_path, "file.txt")
+        self.assertIsNone(export_path)
 
     def test_short_verbose_flag_without_input_path(self) -> None:
-        verbose, input_path = _parse_cli_args(["-v"])
+        verbose, input_path, export_path = _parse_cli_args(["-v"])
         self.assertTrue(verbose)
         self.assertIsNone(input_path)
+        self.assertIsNone(export_path)
 
     def test_unknown_extra_args_first_non_flag_is_input(self) -> None:
-        verbose, input_path = _parse_cli_args(["--verbose", "file.txt", "--unknown", "extra"])
+        verbose, input_path, export_path = _parse_cli_args(["--verbose", "file.txt", "--unknown", "extra"])
         self.assertTrue(verbose)
         self.assertEqual(input_path, "file.txt")
+        self.assertIsNone(export_path)
 
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True)
     def test_short_verbose_runs_setup_check_without_input(self) -> None:
