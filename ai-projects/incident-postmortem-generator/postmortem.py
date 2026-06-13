@@ -52,6 +52,32 @@ def validate_environment(args=None):
     return args
 
 
+def print_usage(response):
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+    if not usage:
+        return
+
+    prompt_tokens = getattr(usage, "prompt_tokens", None)
+    completion_tokens = getattr(usage, "completion_tokens", None)
+    total_tokens = getattr(usage, "total_tokens", None)
+
+    if isinstance(usage, dict):
+        prompt_tokens = usage.get("prompt_tokens", prompt_tokens)
+        completion_tokens = usage.get("completion_tokens", completion_tokens)
+        total_tokens = usage.get("total_tokens", total_tokens)
+
+    prompt_tokens = prompt_tokens or 0
+    completion_tokens = completion_tokens or 0
+    total_tokens = total_tokens or (prompt_tokens + completion_tokens)
+
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(
+        f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}"
+    )
+
+
 def export_results(results):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = Path(f"postmortem_export_{timestamp}.json")
