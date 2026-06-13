@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import unittest
+from io import StringIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Optional
@@ -159,6 +160,62 @@ class TestCliParsing(unittest.TestCase):
     def test_verbose_with_input_validates_existing_file(self) -> None:
         with NamedTemporaryFile() as tmp:
             validate_environment(tmp.name)
+
+
+class _DummyResponses:
+    def __init__(self, response: Any) -> None:
+        self._response = response
+
+    def create(self, **kwargs: Any) -> Any:
+        return self._response
+
+
+class _DummyClient:
+    def __init__(self, response: Any) -> None:
+        self.responses = _DummyResponses(response)
+
+
+class _DummyResponse:
+    def __init__(self, usage: Any) -> None:
+        self.usage = usage
+
+
+class TestCreateResponseWithUsageVerboseDiagnostics(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_verbose = globals()["VERBOSE"]
+
+    def tearDown(self) -> None:
+        globals()["VERBOSE"] = self._original_verbose
+
+    def test_non_verbose_has_no_diagnostics_and_prints_usage(self) -> None:
+        globals()["VERBOSE"] = False
+        response = _DummyResponse({"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
+        client = _DummyClient(response)
+
+        with patch("sys.stdout", new_callable=StringIO) as stdout:
+            create_response_with_usage(client, "gpt-test", input="hello world")
+            output = stdout.getvalue()
+
+        self.assertNotIn("Input size - chars:", output)
+        self.assertNotIn("⏳ Calling OpenAI API...", output)
+        self.assertNotIn("✅ Done in", output)
+        self.assertIn("Model: gpt-test", output)
+        self.assertIn("Token usage - prompt: 10, completion: 5, total: 15", output)
+
+    def test_verbose_includes_diagnostics_and_prints_usage(self) -> None:
+        globals()["VERBOSE"] = True
+        response = _DummyResponse({"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5})
+        client = _DummyClient(response)
+
+        with patch("sys.stdout", new_callable=StringIO) as stdout:
+            create_response_with_usage(client, "gpt-test", input="abcd")
+            output = stdout.getvalue()
+
+        self.assertIn("Input size - chars: 4, tokens(approx): 1", output)
+        self.assertIn("⏳ Calling OpenAI API...", output)
+        self.assertIn("✅ Done in", output)
+        self.assertIn("Model: gpt-test", output)
+        self.assertIn("Token usage - prompt: 3, completion: 2, total: 5", output)
 
 
 if __name__ == "__main__":
