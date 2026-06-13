@@ -168,50 +168,35 @@ def load_resume(path: str) -> str:
 @retry_with_backoff
 def analyze_resume(resume_text: str, target_role: str = "") -> dict[str, Any]:
     """Call GPT with function calling to get structured resume analysis."""
-    role_context = f"\nTarget role: {target_role}" if target_role else ""
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert resume reviewer and career coach with 15+ years of experience "
-                "in technical recruiting and hiring. Analyze resumes objectively and provide actionable feedback."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Analyze this resume and return structured JSON with strengths, gaps, ATS issues, and improvements."
-                f"{role_context}\n\nResume:\n{resume_text}"
-            ),
-        },
-    ]
-
-    if VERBOSE:
-        total_chars = sum(len(m.get("content", "")) for m in messages)
-        console.print(f"[dim]Model: {CHAT_MODEL}[/dim]")
-        console.print(f"[dim]Input chars: {total_chars}[/dim]")
-
-    start = time.time()
     with console.status("[bold green]Processing..."):
-        response = get_client().chat.completions.create(
+        role_line = f"Target role: {target_role}\n" if target_role else ""
+        prompt = (
+            "Analyze this resume and return structured JSON via function call.\n"
+            f"{role_line}"
+            f"Resume:\n{resume_text}"
+        )
+
+        client = get_client()
+        response = client.chat.completions.create(
             model=CHAT_MODEL,
-            messages=messages,
-            functions=[ANALYSIS_SCHEMA],
-            function_call={"name": "resume_analysis"},
+            messages=[
+                {"role": "system", "content": "You are an expert resume reviewer."},
+                {"role": "user", "content": prompt},
+            ],
+            tools=[{"type": "function", "function": ANALYSIS_SCHEMA}],
+            tool_choice={"type": "function", "function": {"name": "resume_analysis"}},
             temperature=0.2,
         )
-    elapsed = time.time() - start
-
-    if VERBOSE:
-        console.print(f"[dim]API call took {elapsed:.2f}s[/dim]")
 
     print_usage(response)
 
-    args = response.choices[0].message.function_call.arguments
-    return json.loads(args)
+    message = response.choices[0].message
+    tool_calls = getattr(message, "tool_calls", None) or []
+    if tool_calls:
+        args = tool_calls[0].function.arguments
+        return json.loads(args) if isinstance(args, str) else args
 
-
-if __name__ == "__main__":
-    validate_environment()
-    # CLI execution intentionally unchanged for this fix.
+    content = message.content or "{}"
+    if isinstance(content, list):
+        content = "".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in content)
+    return json.loads(content)
