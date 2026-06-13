@@ -46,15 +46,12 @@ def test_required_field_names_are_clean_non_empty_strings():
     required = EVAL_SCHEMA["parameters"]["required"]
     assert all(isinstance(f, str) and f.strip() == f and f for f in required)
 
-@pytest.mark.parametrize("case", [None] + SAMPLE_SUITE.get("test_cases", []))
-def test_sample_suite_case_entries_handle_none_and_valid_cases(case):
-    """Validates None handling and structure checks for sample suite case entries."""
-    if case is None:
-        assert case is None
-    else:
-        assert isinstance(case, dict)
-        assert "id" in case
-        assert "expected" in case
+@pytest.mark.parametrize("case", SAMPLE_SUITE.get("test_cases", []))
+def test_sample_suite_case_entries_have_required_keys(case):
+    """Validates each sample suite case has required structure."""
+    assert isinstance(case, dict)
+    assert "id" in case
+    assert "expected" in case
 
 @pytest.mark.parametrize("score", [0, 100])
 def test_score_boundary_values_supported(score):
