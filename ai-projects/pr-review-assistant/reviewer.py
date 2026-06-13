@@ -146,34 +146,23 @@ def review_diff(diff: str, context: str = "") -> dict:
         )
         if VERBOSE:
             console.print(f"✅ Done in {time.time() - started:.1f}s")
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+            if hasattr(response, "model"):
+                console.print(f"[dim]Response model:[/dim] {response.model}")
+            if hasattr(response, "usage") and response.usage is not None:
+                console.print(f"[dim]Usage:[/dim] {response.usage}")
+
+    message = response.choices[0].message
+    tool_calls = getattr(message, "tool_calls", None) or []
+    if VERBOSE:
+        console.print(f"[dim]Tool calls:[/dim] {len(tool_calls)}")
+    if not tool_calls:
+        raise ValueError("Model response did not include any tool calls")
+
+    return json.loads(tool_calls[0].function.arguments)
 
 def display(review: dict):
     verdict = review["overall_verdict"]
     v_color = VERDICT_COLORS[verdict]
     v_icon = VERDICT_ICONS[verdict]
     console.print()
-    console.print(Panel.fit(
-        f"[{v_color} bold]{v_icon} {verdict.replace('_',' ').title()}[/{v_color} bold]\n"
-        f"[dim]{review['summary']}[/dim]",
-        title="[bold cyan]PR Review[/bold cyan]", border_style="cyan"
-    ))
-
-    for comment in review["comments"]:
-        s = comment["severity"]
-        color = SEV_COLORS.get(s, "white")
-        file_hint = f"[dim]{comment.get('file','')}[/dim]  " if comment.get("file") else ""
-        body = f"{file_hint}[{color}]{s.upper()}[/{color}] [{comment['category']}]\n\n{comment['comment']}"
-        if comment.get("suggestion"):
-            body += f"\n\n[dim]Suggestion:[/dim] [green]{comment['suggestion']}[/green]"
-        
-
-def _parse_args(argv):
-    global VERBOSE
-    args = list(argv)
-    VERBOSE = "--verbose" in args or "-v" in args
-    if VERBOSE:
-        args = [a for a in args if a not in ("--verbose", "-v")]
-    return args
-
-sys.argv = [sys.argv[0]] + _parse_args(sys.argv[1:])
+    console
