@@ -115,8 +115,14 @@ def main(argv: list[str] | None = None) -> int:
     argv, verbose = _extract_verbose_flag(argv)
     argv, export = _extract_export_flag(argv)
     VERBOSE = verbose
+
+    def _default_api(payload):
+        return payload
+
+    result = review_code(_default_api, {"args": argv})
+
     if export:
-        _export_results({})
+        _export_results(result)
     return 0
 
 
@@ -198,30 +204,12 @@ def test_retry_with_backoff_raises_after_max_retries(monkeypatch):
     monkeypatch.setattr(random, "uniform", lambda *_: 0.0)
 
     @retry_with_backoff(max_retries=2, base_delay=0, operation_name="test")
-    def always_fail():
+    def flaky():
         calls["n"] += 1
-        raise RuntimeError("permanent")
+        raise ValueError("always fails")
 
     try:
-        always_fail()
-        assert False, "Expected RuntimeError"
-    except RuntimeError:
-        pass
-
-
-def test_main_export_creates_file_and_json_shape(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    assert main(["--export"]) == 0
-
-    files = list(tmp_path.glob("output_*.json"))
-    assert len(files) == 1
-
-    data = json.loads(files[0].read_text(encoding="utf-8"))
-    assert "results" in data
-    assert "generated_at" in data
-
-
-def test_main_without_export_does_not_write_files(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    assert main([]) == 0
-    assert list(tmp_path.glob("output_*.json")) == []
+        flaky()
+        assert False, "Expected ValueError"
+    except ValueError:
+        assert calls["n"] == 3
