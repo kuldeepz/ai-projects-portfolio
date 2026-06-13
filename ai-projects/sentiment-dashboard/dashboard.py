@@ -1,3 +1,12 @@
+import os
+import sys
+from pathlib import Path
+
+from rich.console import Console
+
+console = Console()
+
+
 def validate_environment() -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
@@ -18,6 +27,10 @@ def validate_environment() -> None:
             sys.exit(1)
 
     console.print("[bold green]Setup OK ✓[/bold green]")
+
+
+def main() -> None:
+    pass
 
 
 if __name__ == "__main__":
