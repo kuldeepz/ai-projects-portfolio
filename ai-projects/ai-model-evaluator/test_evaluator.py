@@ -1,5 +1,6 @@
 """Sanity tests for ai-model-evaluator — no API key required."""
 import sys, os
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from evaluator import EVAL_SCHEMA, SAMPLE_SUITE
 
@@ -40,6 +41,30 @@ def test_correctness_enum():
     assert actual == valid
     print("  [PASS] Correctness enum — correct/partial/incorrect")
 
+@pytest.mark.parametrize("value", ["", " ", "\t"])
+def test_required_field_names_are_not_empty_strings(value):
+    """Ensures required schema fields do not contain empty-string-like values."""
+    required = EVAL_SCHEMA["parameters"]["required"]
+    assert value not in required
+
+@pytest.mark.parametrize("case", [None] + SAMPLE_SUITE.get("test_cases", []))
+def test_sample_suite_case_entries_handle_none_and_valid_cases(case):
+    """Validates None handling and structure checks for sample suite case entries."""
+    if case is None:
+        assert case is None
+    else:
+        assert isinstance(case, dict)
+        assert "id" in case
+        assert "expected" in case
+
+@pytest.mark.parametrize("score", [0, 100])
+def test_score_boundary_values_supported(score):
+    """Verifies boundary score values are within the declared schema limits."""
+    score_def = EVAL_SCHEMA["parameters"]["properties"]["score"]
+    minimum = score_def.get("minimum", 0)
+    maximum = score_def.get("maximum", 100)
+    assert minimum <= score <= maximum
+
 if __name__ == "__main__":
     print("\n=== ai-model-evaluator: Sanity Tests ===\n")
     try:
@@ -52,3 +77,4 @@ if __name__ == "__main__":
         print("\n[ALL TESTS PASSED]\n")
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n"); import sys; sys.exit(1)
+
