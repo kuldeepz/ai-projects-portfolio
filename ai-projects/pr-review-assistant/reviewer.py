@@ -126,11 +126,10 @@ def review_diff(diff: str, context: str = "") -> dict:
     if VERBOSE:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input size:[/dim] {len(prompt)} chars")
-
-    started = time.time()
-    with console.status("[bold green]Processing...") as status:
+    with console.status("[bold green]Processing..."):
         if VERBOSE:
-            status.update("[bold green]Calling OpenAI API...")
+            console.print("⏳ Calling OpenAI API...")
+        started = time.time()
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -146,6 +145,6 @@ def review_diff(diff: str, context: str = "") -> dict:
             tool_choice={"type": "function", "function": {"name": "pr_review"}},
             temperature=0.2,
         )
-
-    if VERBOSE:
-        console.print(f"✅ Done in {time.time() - started:.2f}s")
+        if VERBOSE:
+            console.print(f"✅ Done in {time.time() - started:.2f}s")
+        return {}
