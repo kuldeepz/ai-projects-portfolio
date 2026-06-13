@@ -1,4 +1,4 @@
-def validate_environment():
+def validate_environment() -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[bold red]Setup error:[/bold red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
@@ -16,6 +16,8 @@ def validate_environment():
         if not os.access(candidate, os.R_OK):
             console.print(f"[bold red]Setup error:[/bold red] File is not readable: {candidate}")
             sys.exit(1)
+
+    console.print("[bold green]Setup OK ✓[/bold green]")
 
 
 if __name__ == "__main__":
