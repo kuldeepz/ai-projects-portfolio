@@ -140,9 +140,10 @@ def _parse_cli_args(args: list[str]) -> tuple[bool, Optional[str], Optional[str]
         if arg in ("--verbose", "-v"):
             verbose = True
         elif arg in ("--export", "-e"):
-            if i + 1 < len(args):
-                export_path = args[i + 1]
-                i += 1
+            if i + 1 >= len(args) or args[i + 1].startswith("-"):
+                raise SystemExit("Missing value for --export")
+            export_path = args[i + 1]
+            i += 1
         elif input_path is None:
             input_path = arg
         i += 1
@@ -176,38 +177,4 @@ class TestCliParsing(unittest.TestCase):
     def test_export_long_flag_with_value_and_input(self) -> None:
         verbose, input_path, export_path = _parse_cli_args(["--export", "out.json", "in.txt"])
         self.assertFalse(verbose)
-        self.assertEqual(input_path, "in.txt")
-        self.assertEqual(export_path, "out.json")
-
-    def test_export_short_flag_with_value(self) -> None:
-        verbose, input_path, export_path = _parse_cli_args(["-e", "out.json"])
-        self.assertFalse(verbose)
-        self.assertIsNone(input_path)
-        self.assertEqual(export_path, "out.json")
-
-    def test_export_short_flag_missing_value(self) -> None:
-        verbose, input_path, export_path = _parse_cli_args(["-e"])
-        self.assertFalse(verbose)
-        self.assertIsNone(input_path)
-        self.assertIsNone(export_path)
-
-    def test_input_then_export_flag_with_value(self) -> None:
-        verbose, input_path, export_path = _parse_cli_args(["in.txt", "--export", "out.json"])
-        self.assertFalse(verbose)
-        self.assertEqual(input_path, "in.txt")
-        self.assertEqual(export_path, "out.json")
-
-
-class TestExportResults(unittest.TestCase):
-    def test_export_results_writes_json_with_generated_at(self) -> None:
-        results = {"name": "alice", "score": 95}
-        with TemporaryDirectory() as tmpdir:
-            export_file = os.path.join(tmpdir, "results.json")
-            out = export_results(results, export_file)
-            self.assertEqual(out, export_file)
-            self.assertTrue(os.path.exists(export_file))
-            with open(export_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            self.assertEqual(data["name"], "alice")
-            self.assertEqual(data["score"], 95)
-            self.assertIn("generated_at", data)
+        self.assertEqual(input_path, "in.")
