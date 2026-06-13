@@ -37,19 +37,6 @@ def test_full_markdown_field():
     assert props["full_markdown"]["type"] == "string"
     print("  [PASS] full_markdown — present and typed as string")
 
-@pytest.mark.parametrize("input_text", ["", "   ", "\n\t"])
-def test_sample_discussion_empty_string_inputs(input_text):
-    """Covers empty and whitespace-only string edge cases for discussion parsing assumptions."""
-    normalized = (input_text or "").strip().lower()
-    assert "vector" not in normalized
-    assert "database" not in normalized
-    assert "storage" not in normalized
-
-def test_none_inputs_where_applicable():
-    """Covers None input handling where optional text values may be absent."""
-    normalized = (None or "").lower()
-    assert normalized == ""
-
 @pytest.mark.parametrize(
     "status, expected",
     [
