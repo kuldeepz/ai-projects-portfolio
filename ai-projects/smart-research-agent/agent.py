@@ -73,11 +73,11 @@ def main() -> None:
     VERBOSE = validate_environment()
 
 
-def export_results(results: dict, export_enabled: bool) -> str | None:
+def export_results(results: dict, export_enabled: bool, export_path: str | None = None) -> str | None:
     if not export_enabled:
         return None
     now = datetime.now()
-    filename = f"output_{now:%Y%m%d_%H%M%S}.json"
+    filename = export_path or f"output_{now:%Y%m%d_%H%M%S}.json"
     payload = dict(results)
     payload["generated_at"] = now.isoformat()
     with open(filename, "w", encoding="utf-8") as f:
