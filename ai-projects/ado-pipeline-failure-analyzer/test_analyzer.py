@@ -1,5 +1,6 @@
 """Sanity tests for ado-pipeline-failure-analyzer — no API key required."""
 import sys, os
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from analyzer import SCHEMA, SAMPLE_LOG
 
@@ -28,6 +29,48 @@ def test_log_tail_truncation():
     truncated = long_log[-8000:]
     assert "REAL ERROR HERE" in truncated
     print("  [PASS] Log truncation — tail strategy preserves error at end")
+
+@pytest.mark.parametrize(
+    "log_input, expected",
+    [
+        ("", ""),
+        ("short log", "short log"),
+        ("x" * 9000, "x" * 8000),
+    ],
+)
+def test_log_tail_truncation_parametrized(log_input, expected):
+    """Covers empty, short, and over-limit log truncation boundary behavior."""
+    truncated = log_input[-8000:]
+    assert truncated == expected
+
+@pytest.mark.parametrize(
+    "log_input",
+    [None, "", SAMPLE_LOG],
+)
+def test_failure_markers_detection_with_none_and_empty(log_input):
+    """Validates marker detection for None, empty input, and known failing sample logs."""
+    text = "" if log_input is None else log_input
+    has_markers = (
+        "FAILED" in text
+        and "ModuleNotFoundError" in text
+        and "##[error]" in text
+    )
+    assert has_markers is (log_input == SAMPLE_LOG)
+
+@pytest.mark.parametrize(
+    "candidate, is_valid",
+    [
+        ("", False),
+        (None, False),
+        ("unknown", True),
+        ("timeout", True),
+        ("not_a_real_type", False),
+    ],
+)
+def test_error_type_enum_membership_edge_cases(candidate, is_valid):
+    """Checks empty/None and valid-invalid boundary values for error_type enum membership."""
+    enum_values = set(SCHEMA["parameters"]["properties"]["error_type"]["enum"])
+    assert ((candidate in enum_values) if candidate is not None else False) is is_valid
 
 if __name__ == "__main__":
     print("\n=== ado-pipeline-failure-analyzer: Sanity Tests ===\n")
