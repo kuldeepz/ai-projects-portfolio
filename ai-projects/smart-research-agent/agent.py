@@ -4,10 +4,14 @@ import time
 from pathlib import Path
 
 import pytest
+from openai import APIError, APITimeoutError, RateLimitError
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
 import agent
+
+
+RETRY_EXC = (RateLimitError, APITimeoutError, APIError)
 
 
 def retry_with_backoff(func, delays=(1, 2, 4), sleeper=time.sleep):
@@ -16,7 +20,7 @@ def retry_with_backoff(func, delays=(1, 2, 4), sleeper=time.sleep):
         for attempt in range(len(delays) + 1):
             try:
                 return func(*args, **kwargs)
-            except Exception as exc:
+            except RETRY_EXC as exc:
                 last_exception = exc
                 if attempt == len(delays):
                     break
