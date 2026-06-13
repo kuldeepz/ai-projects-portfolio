@@ -104,6 +104,37 @@ class CreateChatCompletionTests(unittest.TestCase):
         mock_sleep.assert_called_once_with(1)
 
 
+class ExportResultsArgumentParsingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        global VERBOSE
+        VERBOSE = False
+
+    def test_verbose_defaults_to_false_when_not_provided(self) -> None:
+        with patch("sys.argv", ["release_notes.py"]):
+            _export_results_if_requested({"ok": True})
+
+        self.assertFalse(VERBOSE)
+
+    def test_verbose_true_when_flag_provided(self) -> None:
+        with patch("sys.argv", ["release_notes.py", "--verbose"]):
+            _export_results_if_requested({"ok": True})
+
+        self.assertTrue(VERBOSE)
+
+    def test_short_verbose_flag_sets_true(self) -> None:
+        with patch("sys.argv", ["release_notes.py", "-v"]):
+            _export_results_if_requested({"ok": True})
+
+        self.assertTrue(VERBOSE)
+
+    def test_verbose_flag_does_not_trigger_export_without_export_flag(self) -> None:
+        with patch("sys.argv", ["release_notes.py", "--verbose"]), patch("builtins.open") as mock_open:
+            _export_results_if_requested({"ok": True})
+
+        self.assertTrue(VERBOSE)
+        mock_open.assert_not_called()
+
+
 def _export_results_if_requested(results: dict[str, Any]) -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-e", "--export", action="store_true")
