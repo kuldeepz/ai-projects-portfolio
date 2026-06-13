@@ -45,10 +45,9 @@ def test_sample_discussion_empty_string_inputs(input_text):
     assert "database" not in normalized
     assert "storage" not in normalized
 
-@pytest.mark.parametrize("value", [None])
-def test_none_inputs_where_applicable(value):
+def test_none_inputs_where_applicable():
     """Covers None input handling where optional text values may be absent."""
-    normalized = (value or "").lower()
+    normalized = (None or "").lower()
     assert normalized == ""
 
 @pytest.mark.parametrize(
