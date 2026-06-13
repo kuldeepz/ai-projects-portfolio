@@ -4,18 +4,18 @@ from pathlib import Path
 
 from rich.console import Console
 
-console = Console()
+console: Console = Console()
 
 
 def validate_environment() -> None:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key: str | None = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[bold red]Setup error:[/bold red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
         sys.exit(1)
 
-    path_args = [arg for arg in sys.argv[1:] if arg and not arg.startswith("-")]
+    path_args: list[str] = [arg for arg in sys.argv[1:] if arg and not arg.startswith("-")]
     for raw_arg in path_args:
-        candidate = Path(raw_arg)
+        candidate: Path = Path(raw_arg)
         if not candidate.exists():
             console.print(f"[bold red]Setup error:[/bold red] File does not exist: {candidate}")
             sys.exit(1)
