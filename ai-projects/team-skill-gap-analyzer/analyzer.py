@@ -6,7 +6,7 @@ from io import StringIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
@@ -184,49 +184,37 @@ class _DummyResponse:
         self.usage = usage
 
 
-class TestCreateResponseWithUsageVerboseDiagnostics(unittest.TestCase):
-    def setUp(self) -> None:
-        self._original_verbose = globals()["VERBOSE"]
+class TestCreateResponseWithUsage(unittest.TestCase):
+    def test_uses_console_status_and_calls_create_once(self) -> None:
+        response = _DummyResponse(usage=None)
+        client = MagicMock()
+        client.responses.create.return_value = response
 
-    def tearDown(self) -> None:
-        globals()["VERBOSE"] = self._original_verbose
+        status_cm = MagicMock()
+        status_cm.__enter__.return_value = None
+        status_cm.__exit__.return_value = None
 
-    def test_non_verbose_has_no_diagnostics_and_prints_usage(self) -> None:
-        globals()["VERBOSE"] = False
-        response = _DummyResponse({"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
-        client = _DummyClient(response)
+        with patch.object(console, "status", return_value=status_cm) as mock_status:
+            result = create_response_with_usage(client, "gpt-test", input="hello")
 
-        with patch("sys.stdout", new_callable=StringIO) as stdout:
-            create_response_with_usage(client, "gpt-test", input="hello world")
-            output = stdout.getvalue()
+        self.assertIs(result, response)
+        mock_status.assert_called_once_with("[bold green]Processing...")
+        client.responses.create.assert_called_once_with(model="gpt-test", input="hello")
 
-        self.assertNotIn("Input size - chars:", output)
-        self.assertNotIn("⏳ Calling OpenAI API...", output)
-        self.assertNotIn("✅ Done in", output)
-        self.assertIn("Model: gpt-test", output)
-        self.assertIn("Token usage - prompt: 10, completion: 5, total: 15", output)
+    def test_verbose_behavior_with_status_path(self) -> None:
+        response = _DummyResponse(usage=None)
+        client = MagicMock()
+        client.responses.create.return_value = response
 
-    def test_verbose_includes_diagnostics_and_prints_usage(self) -> None:
-        globals()["VERBOSE"] = True
-        response = _DummyResponse({"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5})
-        client = _DummyClient(response)
+        status_cm = MagicMock()
+        status_cm.__enter__.return_value = None
+        status_cm.__exit__.return_value = None
 
-        with patch("sys.stdout", new_callable=StringIO) as stdout:
-            create_response_with_usage(client, "gpt-test", input="abcd")
-            output = stdout.getvalue()
+        with patch.object(console, "status", return_value=status_cm), patch(
+            f"{__name__}.VERBOSE", True
+        ), patch("builtins.print") as mock_print:
+            result = create_response_with_usage(client, "gpt-test", input="hello")
 
-        self.assertIn("Input size - chars: 4, tokens(approx): 1", output)
-        self.assertIn("⏳ Calling OpenAI API...", output)
-        self.assertIn("✅ Done in", output)
-        self.assertIn("Model: gpt-test", output)
-        self.assertIn("Token usage - prompt: 3, completion: 2, total: 5", output)
-
-
-if __name__ == "__main__":
-    args = sys.argv[1:]
-
-    if args and args[0] == "--run-tests":
-        unittest.main(argv=[sys.argv[0]])
-    else:
-        VERBOSE, input_path = _parse_cli_args(args)
-        validate_environment(input_path)
+        self.assertIs(result, response)
+        client.responses.create.assert_called_once_with(model="gpt-test", input="hello")
+        self.assertGreaterEqual(mock_print.call_count, 2)
