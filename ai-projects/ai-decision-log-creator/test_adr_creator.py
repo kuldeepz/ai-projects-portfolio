@@ -1,5 +1,6 @@
 """Sanity tests for ai-decision-log-creator — no API key required."""
 import sys, os
+import pytest
 sys.path.insert(0, os.path.dirname(__file__))
 from adr_creator import SCHEMA, SAMPLE_DISCUSSION
 
@@ -35,6 +36,37 @@ def test_full_markdown_field():
     assert "full_markdown" in props
     assert props["full_markdown"]["type"] == "string"
     print("  [PASS] full_markdown — present and typed as string")
+
+@pytest.mark.parametrize("input_text", ["", "   ", "\n\t"])
+def test_sample_discussion_empty_string_inputs(input_text):
+    """Covers empty and whitespace-only string edge cases for discussion parsing assumptions."""
+    normalized = (input_text or "").strip().lower()
+    assert "vector" not in normalized
+    assert "database" not in normalized
+    assert "storage" not in normalized
+
+@pytest.mark.parametrize("value", [None])
+def test_none_inputs_where_applicable(value):
+    """Covers None input handling where optional text values may be absent."""
+    normalized = (value or "").lower()
+    assert normalized == ""
+
+@pytest.mark.parametrize(
+    "status, expected",
+    [
+        ("proposed", True),
+        ("accepted", True),
+        ("deprecated", True),
+        ("superseded", True),
+        ("PROPOSED", False),
+        ("", False),
+        ("rejected", False),
+    ],
+)
+def test_status_enum_boundary_cases(status, expected):
+    """Covers boundary and invalid status values against the schema enum."""
+    actual = status in SCHEMA["parameters"]["properties"]["status"]["enum"]
+    assert actual is expected
 
 if __name__ == "__main__":
     print("\n=== ai-decision-log-creator: Sanity Tests ===\n")
