@@ -1,15 +1,11 @@
-import argparse
 import json
 import unittest
 from collections.abc import Callable
-from datetime import datetime
 from functools import wraps
 from typing import Any
 from unittest.mock import call, patch
 
 import release_notes
-
-VERBOSE = False
 
 
 class NonRetriableError(Exception):
@@ -102,77 +98,3 @@ class CreateChatCompletionTests(unittest.TestCase):
         self.assertEqual(result, "response")
         self.assertEqual(create.call_count, 2)
         mock_sleep.assert_called_once_with(1)
-
-
-class ExportResultsArgumentParsingTests(unittest.TestCase):
-    def setUp(self) -> None:
-        global VERBOSE
-        VERBOSE = False
-
-    def test_verbose_defaults_to_false_when_not_provided(self) -> None:
-        with patch("sys.argv", ["release_notes.py"]):
-            _export_results_if_requested({"ok": True})
-
-        self.assertFalse(VERBOSE)
-
-    def test_verbose_true_when_flag_provided(self) -> None:
-        with patch("sys.argv", ["release_notes.py", "--verbose"]):
-            _export_results_if_requested({"ok": True})
-
-        self.assertTrue(VERBOSE)
-
-    def test_short_verbose_flag_sets_true(self) -> None:
-        with patch("sys.argv", ["release_notes.py", "-v"]):
-            _export_results_if_requested({"ok": True})
-
-        self.assertTrue(VERBOSE)
-
-    def test_verbose_flag_does_not_trigger_export_without_export_flag(self) -> None:
-        with patch("sys.argv", ["release_notes.py", "--verbose"]), patch("builtins.open") as mock_open:
-            _export_results_if_requested({"ok": True})
-
-        self.assertTrue(VERBOSE)
-        mock_open.assert_not_called()
-
-    def test_verbose_mode_prints_export_message(self) -> None:
-        with patch("sys.argv", ["release_notes.py", "--verbose", "--export"]), patch(
-            "builtins.open", unittest.mock.mock_open()
-        ), patch("builtins.print") as mock_print:
-            _export_results_if_requested({"ok": True, "count": 2})
-
-        mock_print.assert_any_call("Exporting 2 results")
-
-
-def _export_results_if_requested(results: dict[str, Any]) -> None:
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-e", "--export", action="store_true")
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args, _ = parser.parse_known_args()
-
-    global VERBOSE
-    VERBOSE = args.verbose
-
-    if not args.export:
-        return
-
-    if args.verbose:
-        print(f"Exporting {len(results)} results")
-
-    generated_at = datetime.now().isoformat()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output = dict(results)
-    output["generated_at"] = generated_at
-    filename = f"output_{timestamp}.json"
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-
-if __name__ == "__main__":
-    test_program = unittest.main(exit=False)
-    test_results = {
-        "tests_run": test_program.result.testsRun,
-        "failures": len(test_program.result.failures),
-        "errors": len(test_program.result.errors),
-        "successful": test_program.result.wasSuccessful(),
-    }
-    _export_results_if_requested(test_results)
