@@ -111,13 +111,4 @@ def test_depth_options_parametrized(value, is_valid):
 
 
 if __name__ == "__main__":
-    print("\n=== smart-research-agent: Sanity Tests ===\n")
-    try:
-        test_tool_map_completeness()
-        test_tool_schemas()
-        test_url_parsing()
-        test_depth_options()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n")
-        sys.exit(1)
+    raise SystemExit(pytest.main([__file__, "-q"]))
