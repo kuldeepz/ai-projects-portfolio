@@ -6,7 +6,7 @@ for daily standups, weekly syncs, or executive status updates.
 
 import os, sys, json, argparse, time, random, functools
 from datetime import date, datetime
-from typing import Any, Callable
+from typing import Any, Callable, ParamSpec, TypeVar
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -20,6 +20,9 @@ MODEL: str = "gpt-4o-mini"
 PRICING_PER_1K: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"in": 0.00015, "out": 0.00060},
 }
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 _client: OpenAI | None = None
 def get_client() -> OpenAI:
@@ -45,10 +48,10 @@ def print_usage(response: Any) -> None:
 
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {cost_display}")
 
-def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, max_delay: float = 8.0, jitter: float = 0.25) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
+def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, max_delay: float = 8.0, jitter: float = 0.25) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    def deco(fn: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             for attempt in range(max_retries + 1):
                 try:
                     return fn(*args, **kwargs)
@@ -58,6 +61,7 @@ def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, max_delay:
                     delay = min(base_delay * (2 ** attempt), max_delay)
                     delay *= random.uniform(1 - jitter, 1 + jitter)
                     time.sleep(delay)
+            raise RuntimeError("retry_with_backoff reached an unexpected state")
         return wrapper
     return deco
 
@@ -148,14 +152,3 @@ def generate_report(data: dict[str, Any], verbose: bool = False) -> dict[str, An
     ]
     if verbose:
         total_chars = sum(len(m["content"]) for m in messages)
-        est_tokens = int(total_chars / 4)
-        console.print(f"[dim]Model:[/dim] {MODEL}")
-        console.print(f"[dim]Input size:[/dim] {total_chars} chars (~{est_tokens} tokens)")
-        console.print("⏳ Calling OpenAI API...")
-        start = time.perf_counter()
-    response = _create_chat_completion(
-        model=MODEL,
-        messages=messages,
-        tools=[{"type": "function", "function": SCHEMA}],
-        tool_choice={"type": "function", "function": {"name": "report_output"}},
-    )
