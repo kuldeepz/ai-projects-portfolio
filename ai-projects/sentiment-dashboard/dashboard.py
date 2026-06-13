@@ -41,8 +41,12 @@ def main(args: argparse.Namespace) -> None:
     results = {}
 
     if export_requested:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        export_path = Path(f"output_{timestamp}.json")
+        if isinstance(args.export, str):
+            export_path = Path(args.export)
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            export_path = Path(f"output_{timestamp}.json")
+
         export_payload = {**results, "generated_at": datetime.now().isoformat()}
         try:
             with export_path.open("w", encoding="utf-8") as f:
