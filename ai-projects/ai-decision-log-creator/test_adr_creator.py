@@ -69,14 +69,4 @@ def test_status_enum_boundary_cases(status, expected):
     assert actual is expected
 
 if __name__ == "__main__":
-    print("\n=== ai-decision-log-creator: Sanity Tests ===\n")
-    try:
-        test_schema_required_fields()
-        test_status_enum()
-        test_alternatives_array()
-        test_sample_discussion_has_tech()
-        test_sample_discussion_has_decision_context()
-        test_full_markdown_field()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); import sys; sys.exit(1)
+    sys.exit(pytest.main([__file__]))
