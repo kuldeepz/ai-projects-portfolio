@@ -17,6 +17,7 @@ from rich.syntax import Syntax
 load_dotenv()
 console = Console()
 MODEL = "gpt-4o-mini"
+VERBOSE = False
 
 _client = None
 def get_client():
@@ -83,7 +84,7 @@ diff --git a/src/auth/login.py b/src/auth/login.py
 +++ b/src/auth/login.py
 @@ -12,8 +12,21 @@
  from db import get_connection
-
+ 
 -def authenticate(username, password):
 -    conn = get_connection()
 -    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
@@ -99,7 +100,7 @@ diff --git a/src/auth/login.py b/src/auth/login.py
 +    if user and user['password'] == password:
 +        return user
 +    return None
-
+ 
 +def reset_password(email):
 +    user = get_user_by_email(email)
 +    new_password = "temp1234"
@@ -120,7 +121,14 @@ SEV_COLORS = {"blocking": "bold red", "major": "red", "minor": "yellow", "nit": 
 @retry_with_backoff
 def review_diff(diff: str, context: str = "") -> dict:
     ctx = f"\nContext: {context}" if context else ""
+    prompt = f"Review this PR diff:{ctx}\n\n```diff\n{diff}\n```"
+    if VERBOSE:
+        console.print(f"[dim]Model:[/dim] {MODEL}")
+        console.print(f"[dim]Input size:[/dim] {len(prompt)} chars")
     with console.status("[bold green]Processing..."):
+        if VERBOSE:
+            console.print("⏳ Calling OpenAI API...")
+        started = time.time()
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -130,12 +138,14 @@ def review_diff(diff: str, context: str = "") -> dict:
                     "readability, test coverage, and design problems. "
                     "Write comments as you would in a real PR — specific, constructive, and actionable."
                 )},
-                {"role": "user", "content": f"Review this PR diff:{ctx}\n\n```diff\n{diff}\n```"}
+                {"role": "user", "content": prompt}
             ],
             tools=[{"type": "function", "function": SCHEMA}],
             tool_choice={"type": "function", "function": {"name": "pr_review"}},
             temperature=0.2,
         )
+        if VERBOSE:
+            console.print(f"✅ Done in {time.time() - started:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def display(review: dict):
@@ -157,3 +167,13 @@ def display(review: dict):
         if comment.get("suggestion"):
             body += f"\n\n[dim]Suggestion:[/dim] [green]{comment['suggestion']}[/green]"
         
+
+def _parse_args(argv):
+    global VERBOSE
+    args = list(argv)
+    VERBOSE = "--verbose" in args or "-v" in args
+    if VERBOSE:
+        args = [a for a in args if a not in ("--verbose", "-v")]
+    return args
+
+sys.argv = [sys.argv[0]] + _parse_args(sys.argv[1:])
