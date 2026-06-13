@@ -6,6 +6,8 @@ Tests tone options, length prompts, and schema structure.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from composer import TONES, LENGTH_PROMPTS, EMAIL_SCHEMA
@@ -56,6 +58,24 @@ def test_mock_result_structure():
     assert len(mock_result["alternative_subjects"]) == 2
     assert mock_result["word_count"] > 0
     print("  [PASS] Mock result structure — all fields present and valid")
+
+
+@pytest.mark.parametrize("length_key", ["", " ", "\n"])
+def test_length_prompts_empty_string_inputs(length_key):
+    """Covers empty-string and whitespace length keys as invalid inputs."""
+    assert length_key not in LENGTH_PROMPTS
+
+
+@pytest.mark.parametrize("length_key", [None])
+def test_length_prompts_none_input(length_key):
+    """Covers None as a non-supported length key input."""
+    assert length_key not in LENGTH_PROMPTS
+
+
+@pytest.mark.parametrize("tone_key", ["short", "medium", "long"])
+def test_tone_key_boundary_collision_with_length_keys(tone_key):
+    """Covers edge-case collisions where length labels must not be tone keys."""
+    assert tone_key not in TONES
 
 
 if __name__ == "__main__":
