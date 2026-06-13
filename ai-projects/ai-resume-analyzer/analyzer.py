@@ -35,7 +35,8 @@ def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
                 last_exception = e
                 if i == len(delays) - 1:
                     break
-                time.sleep(delay)
+                with console.status("[bold green]Processing..."):
+                    time.sleep(delay)
         raise last_exception
     return wrapper
 
@@ -141,14 +142,16 @@ def validate_environment() -> None:
 
 
 def extract_text_from_pdf(pdf_path: str) -> str:
-    with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        return "\n".join(p.extract_text() or "" for p in reader.pages)
+    with console.status("[bold green]Processing..."):
+        with open(pdf_path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            return "\n".join(p.extract_text() or "" for p in reader.pages)
 
 
 def extract_text_from_txt(txt_path: str) -> str:
-    with open(txt_path, "r", encoding="utf-8") as f:
-        return f.read()
+    with console.status("[bold green]Processing..."):
+        with open(txt_path, "r", encoding="utf-8") as f:
+            return f.read()
 
 
 def load_resume(path: str) -> str:
@@ -190,13 +193,14 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict[str, Any]:
         console.print(f"[dim]Input chars: {total_chars}[/dim]")
 
     start = time.time()
-    response = get_client().chat.completions.create(
-        model=CHAT_MODEL,
-        messages=messages,
-        functions=[ANALYSIS_SCHEMA],
-        function_call={"name": "resume_analysis"},
-        temperature=0.2,
-    )
+    with console.status("[bold green]Processing..."):
+        response = get_client().chat.completions.create(
+            model=CHAT_MODEL,
+            messages=messages,
+            functions=[ANALYSIS_SCHEMA],
+            function_call={"name": "resume_analysis"},
+            temperature=0.2,
+        )
     elapsed = time.time() - start
 
     if VERBOSE:
