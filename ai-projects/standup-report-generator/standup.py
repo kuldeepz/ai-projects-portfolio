@@ -148,7 +148,98 @@ def generate_report(data: dict[str, Any], verbose: bool = False) -> dict[str, An
         {"role": "user", "content": (
             f"Name: {data.get('name','')}, Role: {data.get('role','')}, Date: {data.get('date','')}\n"
             f"Raw notes:\n" + "\n".join(f"- {n}" for n in data.get("raw_notes", []))
-        )}
+        )},
     ]
+
+    response = _create_chat_completion(
+        model=MODEL,
+        messages=messages,
+        response_format={"type": "json_schema", "json_schema": SCHEMA},
+    )
+
     if verbose:
-        total_chars = sum(len(m["content"]) for m in messages)
+        print_usage(response)
+
+    content = response.choices[0].message.content if response.choices else "{}"
+    try:
+        return json.loads(content)
+    except Exception:
+        return {
+            "title": "Generated Report",
+            "formatted_report": content,
+            "key_highlights": [],
+        }
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Generate standup/status reports from bullet notes")
+    parser.add_argument("--input-file", help="Path to JSON file with notes")
+    parser.add_argument("--export-out", help="Optional output file path")
+    parser.add_argument("--format", choices=["standup", "weekly", "executive", "slack"], default="standup")
+    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--smoke-test", action="store_true", help="Import/type-check smoke signal")
+    return parser
+
+
+def run_typecheck_smoke() -> int:
+    """Best-effort local static check + import smoke for standup.py.
+
+    This addresses type-hint quality regression risk when CI hooks are absent.
+    """
+    import py_compile
+
+    target = os.path.abspath(__file__)
+    try:
+        py_compile.compile(target, doraise=True)
+        console.print("✅ Smoke: standup.py compiles")
+    except Exception as exc:
+        console.print(f"❌ Smoke compile failed: {exc}")
+        return 1
+
+    # Optional mypy check if available in environment.
+    try:
+        import subprocess
+        result = subprocess.run([sys.executable, "-m", "mypy", target], capture_output=True, text=True)
+        if result.returncode == 0:
+            console.print("✅ mypy: standup.py passed")
+        else:
+            console.print("⚠️ mypy reported issues:\n" + (result.stdout or result.stderr))
+            return result.returncode
+    except Exception:
+        console.print("ℹ️ mypy not available; skipped")
+
+    return 0
+
+
+def main() -> int:
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    if args.smoke_test:
+        return run_typecheck_smoke()
+
+    validate_environment(args)
+
+    data = SAMPLE_NOTES.copy()
+    data["format"] = args.format
+
+    if args.input_file:
+        with open(args.input_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            data.setdefault("format", args.format)
+
+    report = generate_report(data, verbose=args.verbose)
+
+    markdown = report.get("formatted_report", "")
+    title = report.get("title", "Status Report")
+    console.print(Panel(Markdown(f"# {title}\n\n{markdown}"), title="Generated"))
+
+    if args.export_out:
+        with open(args.export_out, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
