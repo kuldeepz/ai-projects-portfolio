@@ -207,50 +207,128 @@ SAMPLE_BACKLOG: Backlog = {
         {"id": "US-103", "title": "Export reports to PDF", "priority": "High", "story_points": 5, "dependencies": ["US-102"]},
         {"id": "US-104", "title": "Email notification service", "priority": "Medium", "story_points": 8, "dependencies": []},
         {"id": "BUG-55", "title": "Fix login redirect on mobile", "priority": "Critical", "story_points": 3, "dependencies": []},
-        {"id": "US-105", "title": "Admin user management panel", "priority": "Medium", "story_points": 13, "dependencies": ["US-101"]},
-        {"id": "US-106", "title": "API rate limiting", "priority": "Low", "story_points": 5, "dependencies": []},
-        {"id": "TECH-12", "title": "Upgrade React to v18", "priority": "Low", "story_points": 8, "dependencies": []},
+        {"id": "US-105", "title": "Admin user management panel", "priority": "Medium", "story_points": 8, "dependencies": []},
     ],
 }
 
 
-def parse_export_arg(argv: list[str]) -> tuple[list[str], str | None]:
-    args = argv[:]
-    export_path = None
-
-    for flag in ("--export", "-e"):
-        while flag in args:
-            i = args.index(flag)
-            if i + 1 < len(args) and not args[i + 1].startswith("-"):
-                export_path = args[i + 1]
-                del args[i : i + 2]
-            else:
-                export_path = f"output_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
-                del args[i]
-
-    return args, export_path
-
-
 @retry_with_backoff()
-def plan_sprint(data: Backlog) -> SprintPlan:
-    with console.status("[bold green]Processing..."):
+def generate_sprint_plan(backlog: Backlog) -> SprintPlan:
+    with console.status("[bold green]Generating sprint plan..."):
         response = get_client().chat.completions.create(
             model=MODEL,
+            tools=[SCHEMA],
+            tool_choice={"type": "function", "function": {"name": "sprint_plan"}},
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are an experienced Scrum Master and AI sprint planner. "
-                        "Select backlog items that fit within team capacity, respect dependencies, "
-                        "prioritize critical bugs and high-value stories, and define a clear sprint goal."
-                    ),
+                    "content": "You are an agile coach. Create an optimal sprint plan respecting capacity, dependencies, and priorities.",
                 },
-                {"role": "user", "content": f"Plan the sprint for this backlog:\n\n{json.dumps(data, indent=2)}"},
+                {"role": "user", "content": json.dumps(backlog)},
             ],
-            tools=[SCHEMA],
         )
-        tool_calls = response.choices[0].message.tool_calls or []
-        if not tool_calls:
-            raise ValueError("No tool call returned by model")
-        args = tool_calls[0].function.arguments
-        return json.loads(args)
+
+    args_json = response.choices[0].message.tool_calls[0].function.arguments
+    return json.loads(args_json)
+
+
+def test_generate_sprint_plan_status_success() -> None:
+    from unittest.mock import MagicMock, patch
+
+    fake_response = MagicMock()
+    fake_response.choices = [
+        MagicMock(
+            message=MagicMock(
+                tool_calls=[
+                    MagicMock(function=MagicMock(arguments=json.dumps({
+                        "sprint_goal": "Ship core",
+                        "recommended_items": [],
+                        "deferred_items": [],
+                        "total_points": 0,
+                        "capacity_utilization_pct": 0,
+                        "risks": [],
+                        "recommendations": [],
+                    })))
+                ]
+            )
+        )
+    ]
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = fake_response
+
+    with patch(__name__ + ".get_client", return_value=mock_client), patch.object(console, "status") as mock_status:
+        plan = generate_sprint_plan(SAMPLE_BACKLOG)
+
+    assert mock_status.call_count == 1
+    assert plan["sprint_goal"] == "Ship core"
+
+
+def test_generate_sprint_plan_status_retry() -> None:
+    from unittest.mock import MagicMock, patch
+
+    fake_response = MagicMock()
+    fake_response.choices = [
+        MagicMock(
+            message=MagicMock(
+                tool_calls=[
+                    MagicMock(function=MagicMock(arguments=json.dumps({
+                        "sprint_goal": "Retry works",
+                        "recommended_items": [],
+                        "deferred_items": [],
+                        "total_points": 0,
+                        "capacity_utilization_pct": 0,
+                        "risks": [],
+                        "recommendations": [],
+                    })))
+                ]
+            )
+        )
+    ]
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = [APIConnectionError("boom"), fake_response]
+
+    with patch(__name__ + ".get_client", return_value=mock_client), patch.object(console, "status") as mock_status, patch("time.sleep", return_value=None):
+        plan = generate_sprint_plan(SAMPLE_BACKLOG)
+
+    assert mock_status.call_count == 2
+    assert plan["sprint_goal"] == "Retry works"
+
+
+def test_generate_sprint_plan_status_exception_propagates() -> None:
+    from unittest.mock import MagicMock, patch
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = APIConnectionError("still failing")
+
+    with patch(__name__ + ".get_client", return_value=mock_client), patch.object(console, "status") as mock_status, patch("time.sleep", return_value=None):
+        try:
+            generate_sprint_plan(SAMPLE_BACKLOG)
+            assert False, "Expected APIConnectionError"
+        except APIConnectionError:
+            pass
+
+    assert mock_status.call_count == 3
+
+
+if __name__ == "__main__":
+    plan = generate_sprint_plan(SAMPLE_BACKLOG)
+    console.print(Panel.fit("Sprint plan generated", title="ADO Sprint Planner"))
+    table = Table(title="Recommended Items")
+    table.add_column("ID")
+    table.add_column("Title")
+    table.add_column("Points")
+    for item in plan["recommended_items"]:
+        table.add_row(item["id"], item["title"], str(item["story_points"]))
+    console.print(table)
+
+    output: ExportOutput = {
+        "generated_at": datetime.utcnow().isoformat(),
+        "model": MODEL,
+        "backlog": SAMPLE_BACKLOG,
+        "sprint_plan": plan,
+    }
+    if len(sys.argv) > 1:
+        with open(sys.argv[1], "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2)
