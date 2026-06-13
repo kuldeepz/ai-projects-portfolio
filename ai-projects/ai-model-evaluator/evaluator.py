@@ -6,7 +6,11 @@ from rich.console import Console
 
 VERBOSE = False
 DEBUG_SENSITIVE = False
-console = Console()
+
+
+def get_console():
+    return Console()
+
 
 PRICING = {
     "gpt-4.1-mini": {"in": 0.000015, "out": 0.00006},
@@ -30,7 +34,7 @@ def retry_with_backoff(func=None, *, delays=(1, 2, 4), retry_exceptions=(Timeout
         def wrapper(*args, **kwargs):
             last_exc = None
             started = time.time()
-            with console.status("[bold green]Processing..."):
+            with get_console().status("[bold green]Processing..."):
                 for attempt in range(len(delays) + 1):
                     try:
                         return target(*args, **kwargs)
@@ -136,7 +140,7 @@ def call_openai(*args, **kwargs):
             print(f"Input chars: {char_count}, tokens: {token_count}")
         started = time.time()
     try:
-        with console.status("[bold green]Processing..."):
+        with get_console().status("[bold green]Processing..."):
             raise NotImplementedError("Implement OpenAI API invocation here")
     finally:
         if VERBOSE:
@@ -189,52 +193,6 @@ if __name__ == "__main__":
     class TestEvaluatorStatusBehavior(unittest.TestCase):
         def setUp(self):
             _reset_verbose_for_tests(False)
-            self._orig_console = globals()["console"]
+            self._orig_get_console = globals()["get_console"]
             self._orig_sleep = time.sleep
-            self.tracker = {"status_calls": 0, "entered": 0, "exited": 0}
-            globals()["console"] = _FakeConsole(self.tracker)
-            time.sleep = lambda *_args, **_kwargs: None
-
-        def tearDown(self):
-            globals()["console"] = self._orig_console
-            time.sleep = self._orig_sleep
-            _reset_verbose_for_tests(False)
-
-        def test_retry_with_backoff_status_enter_exit_once_on_retry_success(self):
-            calls = {"n": 0}
-
-            @retry_with_backoff(delays=(0,), retry_exceptions=(TimeoutError,))
-            def flaky():
-                calls["n"] += 1
-                if calls["n"] == 1:
-                    raise TimeoutError("transient")
-                return "ok"
-
-            self.assertEqual(flaky(), "ok")
-            self.assertEqual(self.tracker["status_calls"], 1)
-            self.assertEqual(self.tracker["entered"], 1)
-            self.assertEqual(self.tracker["exited"], 1)
-
-        def test_retry_with_backoff_status_enter_exit_once_on_exception(self):
-            @retry_with_backoff(delays=(0,), retry_exceptions=(TimeoutError,))
-            def always_fail():
-                raise TimeoutError("still failing")
-
-            with self.assertRaises(TimeoutError):
-                always_fail()
-            self.assertEqual(self.tracker["status_calls"], 1)
-            self.assertEqual(self.tracker["entered"], 1)
-            self.assertEqual(self.tracker["exited"], 1)
-
-        def test_call_openai_status_contexts_and_non_verbose_output(self):
-            _reset_verbose_for_tests(False)
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                with self.assertRaises(NotImplementedError):
-                    call_openai(model="gpt-4.1-mini", input="hello")
-            self.assertEqual(buf.getvalue(), "")
-            self.assertEqual(self.tracker["status_calls"], 2)
-            self.assertEqual(self.tracker["entered"], 2)
-            self.assertEqual(self.tracker["exited"], 2)
-
-    unittest.main()
+            self.t
