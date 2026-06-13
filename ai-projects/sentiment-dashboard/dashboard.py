@@ -50,8 +50,12 @@ def main() -> None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         export_path = Path(f"output_{timestamp}.json")
         export_payload = {**results, "generated_at": datetime.now().isoformat()}
-        with export_path.open("w", encoding="utf-8") as f:
-            json.dump(export_payload, f, ensure_ascii=False, indent=2)
+        try:
+            with export_path.open("w", encoding="utf-8") as f:
+                json.dump(export_payload, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            console.print(f"[bold red]Export error:[/bold red] {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
