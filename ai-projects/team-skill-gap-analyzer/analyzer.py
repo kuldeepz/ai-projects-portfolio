@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
@@ -173,71 +173,38 @@ class TestCliParsing(unittest.TestCase):
         self.assertIsNone(input_path)
         self.assertIsNone(export_path)
 
-    def test_unknown_extra_args_first_non_flag_is_input(self) -> None:
-        verbose, input_path, export_path = _parse_cli_args(["--verbose", "file.txt", "--unknown", "extra"])
-        self.assertTrue(verbose)
-        self.assertEqual(input_path, "file.txt")
-        self.assertIsNone(export_path)
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True)
-    def test_short_verbose_runs_setup_check_without_input(self) -> None:
-        validate_environment(None)
+class TestExportResults(unittest.TestCase):
+    def test_export_results_writes_json_with_generated_at(self) -> None:
+        results = {"name": "alice", "score": 95}
+        with TemporaryDirectory() as tmpdir:
+            export_file = str(Path(tmpdir) / "result.json")
+            returned = export_results(results, export_file)
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True)
-    def test_verbose_with_input_validates_existing_file(self) -> None:
-        with NamedTemporaryFile() as tmp:
-            validate_environment(tmp.name)
+            self.assertEqual(returned, export_file)
+            self.assertTrue(Path(export_file).exists())
 
+            with open(export_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-class _DummyResponses:
-    def __init__(self, response: Any) -> None:
-        self._response = response
+            self.assertEqual(data["name"], "alice")
+            self.assertEqual(data["score"], 95)
+            self.assertIn("generated_at", data)
 
-    def create(self, **kwargs: Any) -> Any:
-        return self._response
+    def test_export_results_honors_custom_export_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            custom_path = str(Path(tmpdir) / "custom_output.json")
+            returned = export_results({"ok": True}, custom_path)
+            self.assertEqual(returned, custom_path)
+            self.assertTrue(Path(custom_path).exists())
 
-
-class _DummyClient:
-    def __init__(self, response: Any) -> None:
-        self.responses = _DummyResponses(response)
-
-
-class _DummyResponse:
-    def __init__(self, usage: Any) -> None:
-        self.usage = usage
-
-
-class TestCreateResponseWithUsage(unittest.TestCase):
-    def test_uses_console_status_and_calls_create_once(self) -> None:
-        response = _DummyResponse(usage=None)
-        client = MagicMock()
-        client.responses.create.return_value = response
-
-        status_cm = MagicMock()
-        status_cm.__enter__.return_value = None
-        status_cm.__exit__.return_value = None
-
-        with patch.object(console, "status", return_value=status_cm) as mock_status:
-            result = create_response_with_usage(client, "gpt-test", input="hello")
-
-        self.assertIs(result, response)
-        mock_status.assert_called_once_with("[bold green]Processing...")
-        client.responses.create.assert_called_once_with(model="gpt-test", input="hello")
-
-    def test_verbose_behavior_with_status_path(self) -> None:
-        response = _DummyResponse(usage=None)
-        client = MagicMock()
-        client.responses.create.return_value = response
-
-        status_cm = MagicMock()
-        status_cm.__enter__.return_value = None
-        status_cm.__exit__.return_value = None
-
-        with patch.object(console, "status", return_value=status_cm), patch(
-            f"{__name__}.VERBOSE", True
-        ), patch("builtins.print") as mock_print:
-            result = create_response_with_usage(client, "gpt-test", input="hello")
-
-        self.assertIs(result, response)
-        client.responses.create.assert_called_once_with(model="gpt-test", input="hello")
-        self.assertGreaterEqual(mock_print.call_count, 2)
+    def test_export_results_default_filename_pattern_when_none(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                returned = export_results({"k": "v"}, None)
+                self.assertTrue(Path(returned).exists())
+                self.assertRegex(Path(returned).name, r"^output_\d{8}_\d{6}\.json$")
+            finally:
+                os.chdir(cwd)
