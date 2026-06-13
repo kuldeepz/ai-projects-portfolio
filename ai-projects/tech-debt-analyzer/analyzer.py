@@ -130,35 +130,30 @@ def display(report: dict[str, Any]) -> None:
         f"[dim]Total Effort: {report['total_effort_days']} dev-days[/dim]",
         title="[bold cyan]Tech Debt Report[/bold cyan]", border_style="cyan"
     ))
-    console.print(Panel(f"[italic]{report['summary']}[/italic]", title="Summary", border_style="dim"))
+    console.print(Panel(f"[italic]{report['summary']}[/italic]", title="Summary", border_style="blue"))
 
-    t = Table(show_header=True, header_style="bold", show_lines=True)
-    t.add_column("Cat", width=6); t.add_column("Severity", width=10)
-    t.add_column("Issue", ratio=3); t.add_column("Effort", width=7); t.add_column("Fix", ratio=2)
-    for item in sorted(report["debt_items"], key=lambda x: ["critical","high","medium","low"].index(x["severity"])):
-        c = SEV_COLORS.get(item["severity"], "white")
-        icon = CAT_ICONS.get(item["category"], "•")
-        t.add_row(icon, f"[{c}]{item['severity']}[/{c}]",
-                  item["description"][:80], f"{item['effort_days']}d", item["remediation"][:60])
-    console.print(Panel(t, title="[bold]Debt Items[/bold]", border_style="red"))
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Analyze Python code for technical debt")
+    parser.add_argument("target", nargs="?", default=".", help="File or directory to analyze")
+    parser.add_argument("--context", default="", help="Additional context for analysis")
+    parser.add_argument("-m", "--model", default=MODEL, help="OpenAI model to use")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose diagnostics")
+    return parser
 
-    if report["quick_wins"]:
-        console.print(Panel(
-            "\n".join(f"  [green]⚡[/green] {q}" for q in report["quick_wins"]),
-            title="[bold green]Quick Wins (< 1 day)[/bold green]", border_style="green"
-        ))
-    console.print()
-
-def validate_environment(argv: list[str]) -> None:
-    global VERBOSE
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("-v", "--verbose", action="store_true")
-    args, _ = parser.parse_known_args(argv)
+def validate_environment(argv: list[str] | None = None) -> argparse.Namespace:
+    global MODEL, VERBOSE
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    MODEL = args.model
     VERBOSE = args.verbose
+    return args
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or not api_key.strip():
-        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
-        sys.exit(1)
+def main(argv: list[str] | None = None) -> int:
+    args = validate_environment(argv)
+    code = collect_code(args.target)
+    report = analyze(code, args.context)
+    display(report)
+    return 0
 
-    parser = a
+if __name__ == "__main__":
+    raise SystemExit(main())
