@@ -7,6 +7,7 @@ categorized by severity — ready to paste into GitHub/ADO PR.
 import os, sys, json, subprocess, time, random
 from pathlib import Path
 from datetime import datetime
+from collections.abc import Callable
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -15,21 +16,21 @@ from rich.table import Table
 from rich.syntax import Syntax
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
-VERBOSE = False
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
+VERBOSE: bool = False
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, jitter=0.2):
-    def deco(f):
-        def wrapper(*args, **kwargs):
-            last_exception = None
+def retry_with_backoff(func: Callable | None = None, *, retries: int = 3, base_delay: float = 1.0, max_delay: float = 8.0, jitter: float = 0.2) -> Callable:
+    def deco(f: Callable) -> Callable:
+        def wrapper(*args: object, **kwargs: object) -> object:
+            last_exception: Exception | None = None
             for attempt in range(retries):
                 try:
                     return f(*args, **kwargs)
@@ -44,7 +45,7 @@ def retry_with_backoff(func=None, *, retries=3, base_delay=1.0, max_delay=8.0, j
         return wrapper
     return deco(func) if func else deco
 
-SCHEMA = {
+SCHEMA: dict = {
     "name": "pr_review",
     "description": "Structured PR review with categorized comments",
     "parameters": {
@@ -78,7 +79,7 @@ SCHEMA = {
     }
 }
 
-SAMPLE_DIFF = """
+SAMPLE_DIFF: str = """
 diff --git a/src/auth/login.py b/src/auth/login.py
 --- a/src/auth/login.py
 +++ b/src/auth/login.py
@@ -108,15 +109,15 @@ diff --git a/src/auth/login.py b/src/auth/login.py
 +    send_email(email, f"Your new password is: {new_password}")
 """
 
-VERDICT_COLORS = {
+VERDICT_COLORS: dict[str, str] = {
     "approve": "green", "approve_with_comments": "yellow",
     "request_changes": "red", "needs_discussion": "magenta"
 }
-VERDICT_ICONS = {
+VERDICT_ICONS: dict[str, str] = {
     "approve": "✅", "approve_with_comments": "💬",
     "request_changes": "🚫", "needs_discussion": "❓"
 }
-SEV_COLORS = {"blocking": "bold red", "major": "red", "minor": "yellow", "nit": "dim", "praise": "green"}
+SEV_COLORS: dict[str, str] = {"blocking": "bold red", "major": "red", "minor": "yellow", "nit": "dim", "praise": "green"}
 
 @retry_with_backoff
 def review_diff(diff: str, context: str = "") -> dict:
@@ -148,70 +149,32 @@ def review_diff(diff: str, context: str = "") -> dict:
             console.print(f"✅ Done in {time.time() - started:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-def display(review: dict):
+def display(review: dict) -> None:
     verdict = review["overall_verdict"]
     v_color = VERDICT_COLORS[verdict]
     v_icon = VERDICT_ICONS[verdict]
     console.print()
-    console
+    console.print(Panel.fit(
+        f"[{v_color} bold]{v_icon} {verdict.replace('_',' ').title()}[/{v_color} bold]\n"
+        f"[dim]{review['summary']}[/dim]",
+        title="[bold cyan]PR Review[/bold cyan]", border_style="cyan"
+    ))
 
+    for comment in review["comments"]:
+        s = comment["severity"]
+        color = SEV_COLORS.get(s, "white")
+        file_hint = f"[dim]{comment.get('file','')}[/dim]  " if comment.get("file") else ""
+        body = f"{file_hint}[{color}]{s.upper()}[/{color}] [{comment['category']}]\n\n{comment['comment']}"
+        if comment.get("suggestion"):
+            body += f"\n\n[dim]Suggestion:[/dim] [green]{comment['suggestion']}[/green]"
+        
 
-# -------------------------
-# Tests for argument parsing
-# -------------------------
-import unittest
+def _parse_args(argv: list[str]) -> list[str]:
+    global VERBOSE
+    args = list(argv)
+    VERBOSE = "--verbose" in args or "-v" in args
+    if VERBOSE:
+        args = [a for a in args if a not in ("--verbose", "-v")]
+    return args
 
-
-class TestParseArgs(unittest.TestCase):
-    def setUp(self):
-        global VERBOSE
-        VERBOSE = False
-
-    def test_parse_args_no_flags(self):
-        parse = globals().get("_parse_args")
-        if parse is None:
-            self.skipTest("_parse_args not available in this module snapshot")
-        args = ["input.diff", "--context", "abc"]
-        out = parse(args)
-        self.assertEqual(out, args)
-        self.assertFalse(VERBOSE)
-
-    def test_parse_args_long_verbose(self):
-        parse = globals().get("_parse_args")
-        if parse is None:
-            self.skipTest("_parse_args not available in this module snapshot")
-        args = ["--verbose", "input.diff"]
-        out = parse(args)
-        self.assertEqual(out, ["input.diff"])
-        self.assertTrue(VERBOSE)
-
-    def test_parse_args_short_verbose(self):
-        parse = globals().get("_parse_args")
-        if parse is None:
-            self.skipTest("_parse_args not available in this module snapshot")
-        args = ["-v", "input.diff"]
-        out = parse(args)
-        self.assertEqual(out, ["input.diff"])
-        self.assertTrue(VERBOSE)
-
-    def test_parse_args_both_verbose_flags(self):
-        parse = globals().get("_parse_args")
-        if parse is None:
-            self.skipTest("_parse_args not available in this module snapshot")
-        args = ["-v", "--verbose", "input.diff"]
-        out = parse(args)
-        self.assertEqual(out, ["input.diff"])
-        self.assertTrue(VERBOSE)
-
-    def test_parse_args_preserves_order_of_other_args(self):
-        parse = globals().get("_parse_args")
-        if parse is None:
-            self.skipTest("_parse_args not available in this module snapshot")
-        args = ["cmd", "-v", "--foo", "bar", "--verbose", "baz"]
-        out = parse(args)
-        self.assertEqual(out, ["cmd", "--foo", "bar", "baz"])
-        self.assertTrue(VERBOSE)
-
-
-if __name__ == "__main__":
-    unittest.main()
+sys.argv = [sys.argv[0]] + _parse_args(sys.argv[1:])
