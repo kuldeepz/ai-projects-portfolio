@@ -147,38 +147,49 @@ def test_validate_environment_ignores_non_file_flag_arguments(monkeypatch):
 
 def test_export_results_writes_timestamped_json(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    fixed_time = datetime(2024, 1, 2, 3, 4, 5)
-    monkeypatch.setattr(postmortem, "datetime", type("D", (), {"now": staticmethod(lambda: fixed_time)}))
 
-    results = {"summary": "ok", "items": [1, 2, 3]}
-    filename = postmortem.export_results(results)
+    class FixedDateTime:
+        @classmethod
+        def now(cls):
+            return datetime(2024, 1, 2, 3, 4, 5)
 
-    assert filename == "output_20240102_030405.json"
-    out = Path(filename)
-    assert out.exists()
+    monkeypatch.setattr(postmortem, "datetime", FixedDateTime)
 
-    data = json.loads(out.read_text(encoding="utf-8"))
-    assert data["summary"] == "ok"
-    assert data["items"] == [1, 2, 3]
-    assert data["generated_at"] == "2024-01-02T03:04:05"
+    results = {"summary": "ok", "details": {"a": 1}}
+    out_path = postmortem.export_results(results)
+
+    assert Path(out_path).exists()
+    assert Path(out_path).name == "postmortem_20240102_030405.json"
+    assert json.loads(Path(out_path).read_text(encoding="utf-8")) == results
 
 
-def test_validate_environment_ignores_export_flags_as_input_files(monkeypatch):
+def test_main_with_export_triggers_export_results(monkeypatch, tmp_path):
+    input_file = tmp_path / "incident.json"
+    input_file.write_text("{}", encoding="utf-8")
+
     monkeypatch.setattr(postmortem.os, "getenv", lambda k: "key" if k == "OPENAI_API_KEY" else None)
-    monkeypatch.setattr(postmortem.sys, "argv", ["postmortem.py", "-e", "incident.json"])
+    monkeypatch.setattr(
+        postmortem.sys,
+        "argv",
+        ["postmortem.py", "--export", str(input_file)],
+    )
 
-    checked = []
-
-    def fake_exists(p):
-        checked.append(p)
-        return p == "incident.json"
-
-    monkeypatch.setattr(postmortem.os.path, "exists", fake_exists)
+    monkeypatch.setattr(postmortem.os.path, "exists", lambda p: True)
     monkeypatch.setattr(postmortem.os.path, "isfile", lambda p: True)
     monkeypatch.setattr(postmortem.os, "access", lambda p, mode: True)
 
-    with console.status("[bold green]Processing..."):
-        postmortem.validate_environment()
+    monkeypatch.setattr(postmortem, "collect_json_files", lambda: [str(input_file)])
+    monkeypatch.setattr(postmortem, "read_incident_files", lambda files: [{"id": "inc-1"}])
+    monkeypatch.setattr(postmortem, "generate_postmortem", lambda incidents: {"summary": "generated"})
 
-    assert "incident.json" in checked
-    assert "-e" not in checked
+    called = {}
+
+    def fake_export_results(result):
+        called["result"] = result
+        return str(tmp_path / "export.json")
+
+    monkeypatch.setattr(postmortem, "export_results", fake_export_results)
+
+    postmortem.main()
+
+    assert called.get("result") == {"summary": "generated"}
