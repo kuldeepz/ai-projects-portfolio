@@ -8,8 +8,11 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Optional
 from unittest.mock import patch
 
+from rich.console import Console
+
 
 VERBOSE = False
+console = Console()
 
 
 def validate_environment(input_path: Optional[str]) -> None:
@@ -113,7 +116,8 @@ def create_response_with_usage(client: Any, model_name: str, **kwargs: Any) -> A
         print(f"Input size - chars: {len(input_text)}, tokens(approx): {len(input_text) // 4}")
         print("⏳ Calling OpenAI API...")
         start = time.time()
-    resp = client.responses.create(model=model_name, **kwargs)
+    with console.status("[bold green]Processing..."):
+        resp = client.responses.create(model=model_name, **kwargs)
     if VERBOSE:
         elapsed = time.time() - start
         print(f"✅ Done in {elapsed:.1f}s")
