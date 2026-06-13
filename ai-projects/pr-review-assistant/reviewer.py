@@ -8,6 +8,7 @@ import os, sys, json, subprocess, time, random
 from pathlib import Path
 from datetime import datetime
 from collections.abc import Callable
+from typing import ParamSpec, TypeVar, TypedDict, Literal, Any, cast
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -21,15 +22,26 @@ MODEL: str = "gpt-4o-mini"
 VERBOSE: bool = False
 
 _client: OpenAI | None = None
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def retry_with_backoff(func: Callable | None = None, *, retries: int = 3, base_delay: float = 1.0, max_delay: float = 8.0, jitter: float = 0.2) -> Callable:
-    def deco(f: Callable) -> Callable:
-        def wrapper(*args: object, **kwargs: object) -> object:
+P = ParamSpec("P")
+R = TypeVar("R")
+
+def retry_with_backoff(
+    func: Callable[P, R] | None = None,
+    *,
+    retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 8.0,
+    jitter: float = 0.2,
+) -> Callable[[Callable[P, R]], Callable[P, R]] | Callable[P, R]:
+    def deco(f: Callable[P, R]) -> Callable[P, R]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             last_exception: Exception | None = None
             for attempt in range(retries):
                 try:
@@ -41,11 +53,31 @@ def retry_with_backoff(func: Callable | None = None, *, retries: int = 3, base_d
                     delay = min(max_delay, base_delay * (2 ** attempt))
                     delay *= 1 + random.uniform(-jitter, jitter)
                     time.sleep(max(0, delay))
-            raise last_exception
-        return wrapper
+            if last_exception is not None:
+                raise last_exception
+            raise RuntimeError("retry_with_backoff failed without exception")
+        return cast(Callable[P, R], wrapper)
     return deco(func) if func else deco
 
-SCHEMA: dict = {
+class ReviewComment(TypedDict, total=False):
+    severity: Literal["blocking", "major", "minor", "nit", "praise"]
+    category: Literal["correctness", "security", "performance", "readability", "testing", "design", "docs"]
+    file: str
+    comment: str
+    suggestion: str
+
+class ReviewChecklistItem(TypedDict):
+    item: str
+    status: Literal["pass", "fail", "na"]
+
+class ReviewPayload(TypedDict):
+    overall_verdict: Literal["approve", "approve_with_comments", "request_changes", "needs_discussion"]
+    summary: str
+    comments: list[ReviewComment]
+    positives: list[str]
+    checklist: list[ReviewChecklistItem]
+
+SCHEMA: dict[str, object] = {
     "name": "pr_review",
     "description": "Structured PR review with categorized comments",
     "parameters": {
@@ -120,7 +152,7 @@ VERDICT_ICONS: dict[str, str] = {
 SEV_COLORS: dict[str, str] = {"blocking": "bold red", "major": "red", "minor": "yellow", "nit": "dim", "praise": "green"}
 
 @retry_with_backoff
-def review_diff(diff: str, context: str = "") -> dict:
+def review_diff(diff: str, context: str = "") -> ReviewPayload:
     ctx = f"\nContext: {context}" if context else ""
     prompt = f"Review this PR diff:{ctx}\n\n```diff\n{diff}\n```"
     if VERBOSE:
@@ -147,4 +179,9 @@ def review_diff(diff: str, context: str = "") -> dict:
         )
         if VERBOSE:
             console.print(f"✅ Done in {time.time() - started:.2f}s")
-        return {}
+
+        tool_calls = response.choices[0].message.tool_calls
+        if not tool_calls:
+            raise ValueError("Model did not return tool call output")
+        arguments = tool_calls[0].function.arguments
+        return cast(ReviewPayload, json.loads(arguments))
