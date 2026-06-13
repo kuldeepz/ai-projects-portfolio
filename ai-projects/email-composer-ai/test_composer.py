@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from composer import TONES, LENGTH_PROMPTS, EMAIL_SCHEMA
+from composer import TONES, LENGTH_PROMPTS, EMAIL_SCHEMA, compose_email
 
 
 def test_tone_options():
@@ -60,16 +60,20 @@ def test_mock_result_structure():
     print("  [PASS] Mock result structure — all fields present and valid")
 
 
-@pytest.mark.parametrize("length_key", ["", " ", "\n"])
-def test_length_prompts_empty_string_inputs(length_key):
-    """Covers empty-string and whitespace length keys as invalid inputs."""
-    assert length_key not in LENGTH_PROMPTS
-
-
-@pytest.mark.parametrize("length_key", [None])
-def test_length_prompts_none_input(length_key):
-    """Covers None as a non-supported length key input."""
-    assert length_key not in LENGTH_PROMPTS
+@pytest.mark.parametrize("length_key", ["", " ", "\n", None])
+def test_compose_email_rejects_invalid_length_inputs(length_key):
+    """Invalid/blank length inputs should be handled by composer logic."""
+    with pytest.raises((ValueError, KeyError, TypeError)):
+        compose_email(
+            recipient_name="Sarah",
+            recipient_email="sarah@example.com",
+            sender_name="Kuldeep",
+            sender_email="kuldeep@example.com",
+            purpose="Follow up on proposal",
+            context="We shared a proposal last week and need next steps.",
+            tone="formal",
+            length=length_key,
+        )
 
 
 @pytest.mark.parametrize("tone_key", ["short", "medium", "long"])
@@ -89,3 +93,4 @@ if __name__ == "__main__":
     except AssertionError as e:
         print(f"\n[FAILED] {e}\n")
         sys.exit(1)
+
