@@ -1,7 +1,11 @@
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+VERBOSE = False
 
 
 def validate_environment(input_path: Optional[str]) -> None:
@@ -99,7 +103,17 @@ def print_usage(usage: Any, model_name: Optional[str] = None) -> None:
 
 
 def create_response_with_usage(client: Any, model_name: str, **kwargs: Any) -> Any:
+    if VERBOSE:
+        print(f"Model: {model_name}")
+        input_value = kwargs.get("input", "")
+        input_text = str(input_value)
+        print(f"Input size - chars: {len(input_text)}, tokens(approx): {len(input_text) // 4}")
+        print("⏳ Calling OpenAI API...")
+        start = time.time()
     resp = client.responses.create(model=model_name, **kwargs)
+    if VERBOSE:
+        elapsed = time.time() - start
+        print(f"✅ Done in {elapsed:.1f}s")
     usage = getattr(resp, "usage", None)
     if usage:
         print_usage(usage, model_name)
@@ -107,4 +121,13 @@ def create_response_with_usage(client: Any, model_name: str, **kwargs: Any) -> A
 
 
 if __name__ == "__main__":
-    validate_environment(sys.argv[1] if len(sys.argv) > 1 else None)
+    args = sys.argv[1:]
+    input_path: Optional[str] = None
+
+    for arg in args:
+        if arg in ("--verbose", "-v"):
+            VERBOSE = True
+        elif input_path is None:
+            input_path = arg
+
+    validate_environment(input_path)
