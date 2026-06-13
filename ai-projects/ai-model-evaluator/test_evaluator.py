@@ -41,11 +41,10 @@ def test_correctness_enum():
     assert actual == valid
     print("  [PASS] Correctness enum — correct/partial/incorrect")
 
-@pytest.mark.parametrize("value", ["", " ", "\t"])
-def test_required_field_names_are_not_empty_strings(value):
-    """Ensures required schema fields do not contain empty-string-like values."""
+def test_required_field_names_are_clean_non_empty_strings():
+    """Ensures required schema fields are non-empty, trimmed strings."""
     required = EVAL_SCHEMA["parameters"]["required"]
-    assert value not in required
+    assert all(isinstance(f, str) and f.strip() == f and f for f in required)
 
 @pytest.mark.parametrize("case", [None] + SAMPLE_SUITE.get("test_cases", []))
 def test_sample_suite_case_entries_handle_none_and_valid_cases(case):
