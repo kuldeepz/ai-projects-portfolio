@@ -31,15 +31,13 @@ def retry_with_backoff(func, delays=(1, 2, 4), sleeper=time.sleep):
     return wrapper
 
 
-def validate_environment(argv: list[str] | None = None) -> None:
-    global VERBOSE
-
+def validate_environment(argv: list[str] | None = None) -> bool:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise SystemExit("Error: OPENAI_API_KEY is not set or is empty.")
 
     args = list(sys.argv[1:] if argv is None else argv)
-    VERBOSE = any(arg in ("-v", "--verbose") for arg in args)
+    verbose = any(arg in ("-v", "--verbose") for arg in args)
 
     for arg in args:
         if arg in ("-v", "--verbose"):
@@ -55,10 +53,12 @@ def validate_environment(argv: list[str] | None = None) -> None:
             raise SystemExit(f"Error: File is not readable: {arg}")
 
     print("Setup OK ✓")
+    return verbose
 
 
 def main() -> None:
-    validate_environment()
+    global VERBOSE
+    VERBOSE = validate_environment()
 
 
 def _make_response_with_usage(
