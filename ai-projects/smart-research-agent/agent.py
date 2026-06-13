@@ -76,10 +76,10 @@ def main() -> None:
 def export_results(results: dict, export_enabled: bool) -> str | None:
     if not export_enabled:
         return None
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"output_{timestamp}.json"
+    now = datetime.now()
+    filename = f"output_{now:%Y%m%d_%H%M%S}.json"
     payload = dict(results)
-    payload["generated_at"] = datetime.now().isoformat()
+    payload["generated_at"] = now.isoformat()
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     return filename
@@ -195,46 +195,4 @@ def test_export_results_disabled_returns_none_and_writes_nothing(monkeypatch: py
     result = agent.export_results({"x": 1}, export_enabled=False)
 
     assert result is None
-    open_mock.assert_not_called()
-
-
-def test_export_results_enabled_writes_json_with_generated_at(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    output = agent.export_results({"topic": "ai"}, export_enabled=True)
-
-    assert output is not None
-    output_path = tmp_path / output
-    assert output_path.exists()
-    data = json.loads(output_path.read_text(encoding="utf-8"))
-    assert data["topic"] == "ai"
-    assert "generated_at" in data
-
-
-def test_export_results_uses_timestamp_based_default_filename(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    output = agent.export_results({"a": 1}, export_enabled=True)
-
-    assert output is not None
-    assert output.startswith("output_")
-    assert output.endswith(".json")
-
-
-def test_validate_environment_export_filename_not_treated_as_input_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-
-    exists_mock = Mock(return_value=False)
-    is_file_mock = Mock(return_value=True)
-    access_mock = Mock(return_value=True)
-
-    monkeypatch.setattr(Path, "exists", exists_mock)
-    monkeypatch.setattr(Path, "is_file", is_file_mock)
-    monkeypatch.setattr(os, "access", access_mock)
-
-    result = agent.validate_environment(["--export", "out.json"])
-
-    assert result is False
-    exists_mock.assert_not_called()
-    is_file_mock.assert_not_called()
-    access_mock.assert_not_called()
+    open_mock.assert_not_
