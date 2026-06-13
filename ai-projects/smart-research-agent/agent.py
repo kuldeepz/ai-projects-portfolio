@@ -73,7 +73,7 @@ def test_retry_succeeds_after_failures_and_uses_delay_sequence() -> None:
     def flaky() -> str:
         calls["n"] += 1
         if calls["n"] < 3:
-            raise RuntimeError("temp")
+            raise RateLimitError("temp", response=Mock(), body=None)
         return "ok"
 
     sleep_mock = Mock()
@@ -86,12 +86,12 @@ def test_retry_succeeds_after_failures_and_uses_delay_sequence() -> None:
 
 def test_retry_raises_after_max_attempts() -> None:
     def always_fail() -> None:
-        raise RuntimeError("boom")
+        raise APITimeoutError(request=Mock())
 
     sleep_mock = Mock()
     wrapped = retry_with_backoff(always_fail, sleeper=sleep_mock)
 
-    with pytest.raises(RuntimeError, match="boom"):
+    with pytest.raises(APITimeoutError):
         wrapped()
 
     assert sleep_mock.call_args_list == [call(1), call(2), call(4)]
@@ -133,7 +133,6 @@ def test_summarize_text_calls_print_usage(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     mock_create = Mock(return_value=mock_response)
-    mock_create = retry_with_backoff(mock_create, sleeper=lambda _: None)
     mock_client = SimpleNamespace(
         chat=SimpleNamespace(
             completions=SimpleNamespace(create=mock_create)
