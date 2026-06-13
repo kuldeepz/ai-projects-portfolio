@@ -126,10 +126,11 @@ def review_diff(diff: str, context: str = "") -> dict:
     if VERBOSE:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input size:[/dim] {len(prompt)} chars")
-    with console.status("[bold green]Processing..."):
+
+    started = time.time()
+    with console.status("[bold green]Processing...") as status:
         if VERBOSE:
-            console.print("⏳ Calling OpenAI API...")
-        started = time.time()
+            status.update("[bold green]Calling OpenAI API...")
         response = get_client().chat.completions.create(
             model=MODEL,
             messages=[
@@ -145,36 +146,6 @@ def review_diff(diff: str, context: str = "") -> dict:
             tool_choice={"type": "function", "function": {"name": "pr_review"}},
             temperature=0.2,
         )
-        if VERBOSE:
-            console.print(f"✅ Done in {time.time() - started:.1f}s")
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-def display(review: dict) -> None:
-    verdict = review["overall_verdict"]
-    v_color = VERDICT_COLORS[verdict]
-    v_icon = VERDICT_ICONS[verdict]
-    console.print()
-    console.print(Panel.fit(
-        f"[{v_color} bold]{v_icon} {verdict.replace('_',' ').title()}[/{v_color} bold]\n"
-        f"[dim]{review['summary']}[/dim]",
-        title="[bold cyan]PR Review[/bold cyan]", border_style="cyan"
-    ))
-
-    for comment in review["comments"]:
-        s = comment["severity"]
-        color = SEV_COLORS.get(s, "white")
-        file_hint = f"[dim]{comment.get('file','')}[/dim]  " if comment.get("file") else ""
-        body = f"{file_hint}[{color}]{s.upper()}[/{color}] [{comment['category']}]\n\n{comment['comment']}"
-        if comment.get("suggestion"):
-            body += f"\n\n[dim]Suggestion:[/dim] [green]{comment['suggestion']}[/green]"
-        
-
-def _parse_args(argv: list[str]) -> list[str]:
-    global VERBOSE
-    args = list(argv)
-    VERBOSE = "--verbose" in args or "-v" in args
     if VERBOSE:
-        args = [a for a in args if a not in ("--verbose", "-v")]
-    return args
-
-sys.argv = [sys.argv[0]] + _parse_args(sys.argv[1:])
+        console.print(f"✅ Done in {time.time() - started:.2f}s")
