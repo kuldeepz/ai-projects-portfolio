@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import sys
@@ -70,7 +71,15 @@ def validate_environment(argv: list[str] | None = None) -> bool:
 
 def main() -> None:
     global VERBOSE
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-e", "--export", nargs="?", const="auto", metavar="FILE")
+    args, _ = parser.parse_known_args(sys.argv[1:])
+
     VERBOSE = validate_environment()
+
+    if args.export is not None:
+        export_path = None if args.export == "auto" else args.export
+        export_results({}, export_enabled=True, export_path=export_path)
 
 
 def export_results(results: dict, export_enabled: bool, export_path: str | None = None) -> str | None:
@@ -195,4 +204,4 @@ def test_export_results_disabled_returns_none_and_writes_nothing(monkeypatch: py
     result = agent.export_results({"x": 1}, export_enabled=False)
 
     assert result is None
-    open_mock.assert_not_
+    open_mock
