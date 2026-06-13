@@ -9,6 +9,8 @@ from unittest.mock import call, patch
 
 import release_notes
 
+VERBOSE = False
+
 
 class NonRetriableError(Exception):
     pass
@@ -105,7 +107,11 @@ class CreateChatCompletionTests(unittest.TestCase):
 def _export_results_if_requested(results: dict[str, Any]) -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("-e", "--export", action="store_true")
+    parser.add_argument("-v", "--verbose", action="store_true")
     args, _ = parser.parse_known_args()
+
+    global VERBOSE
+    VERBOSE = args.verbose
 
     if not args.export:
         return
