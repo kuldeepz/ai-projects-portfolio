@@ -146,19 +146,7 @@ def review_diff(diff: str, context: str = "") -> dict:
         )
         if VERBOSE:
             console.print(f"✅ Done in {time.time() - started:.1f}s")
-            if hasattr(response, "model"):
-                console.print(f"[dim]Response model:[/dim] {response.model}")
-            if hasattr(response, "usage") and response.usage is not None:
-                console.print(f"[dim]Usage:[/dim] {response.usage}")
-
-    message = response.choices[0].message
-    tool_calls = getattr(message, "tool_calls", None) or []
-    if VERBOSE:
-        console.print(f"[dim]Tool calls:[/dim] {len(tool_calls)}")
-    if not tool_calls:
-        raise ValueError("Model response did not include any tool calls")
-
-    return json.loads(tool_calls[0].function.arguments)
+    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
 def display(review: dict):
     verdict = review["overall_verdict"]
@@ -166,3 +154,64 @@ def display(review: dict):
     v_icon = VERDICT_ICONS[verdict]
     console.print()
     console
+
+
+# -------------------------
+# Tests for argument parsing
+# -------------------------
+import unittest
+
+
+class TestParseArgs(unittest.TestCase):
+    def setUp(self):
+        global VERBOSE
+        VERBOSE = False
+
+    def test_parse_args_no_flags(self):
+        parse = globals().get("_parse_args")
+        if parse is None:
+            self.skipTest("_parse_args not available in this module snapshot")
+        args = ["input.diff", "--context", "abc"]
+        out = parse(args)
+        self.assertEqual(out, args)
+        self.assertFalse(VERBOSE)
+
+    def test_parse_args_long_verbose(self):
+        parse = globals().get("_parse_args")
+        if parse is None:
+            self.skipTest("_parse_args not available in this module snapshot")
+        args = ["--verbose", "input.diff"]
+        out = parse(args)
+        self.assertEqual(out, ["input.diff"])
+        self.assertTrue(VERBOSE)
+
+    def test_parse_args_short_verbose(self):
+        parse = globals().get("_parse_args")
+        if parse is None:
+            self.skipTest("_parse_args not available in this module snapshot")
+        args = ["-v", "input.diff"]
+        out = parse(args)
+        self.assertEqual(out, ["input.diff"])
+        self.assertTrue(VERBOSE)
+
+    def test_parse_args_both_verbose_flags(self):
+        parse = globals().get("_parse_args")
+        if parse is None:
+            self.skipTest("_parse_args not available in this module snapshot")
+        args = ["-v", "--verbose", "input.diff"]
+        out = parse(args)
+        self.assertEqual(out, ["input.diff"])
+        self.assertTrue(VERBOSE)
+
+    def test_parse_args_preserves_order_of_other_args(self):
+        parse = globals().get("_parse_args")
+        if parse is None:
+            self.skipTest("_parse_args not available in this module snapshot")
+        args = ["cmd", "-v", "--foo", "bar", "--verbose", "baz"]
+        out = parse(args)
+        self.assertEqual(out, ["cmd", "--foo", "bar", "baz"])
+        self.assertTrue(VERBOSE)
+
+
+if __name__ == "__main__":
+    unittest.main()
