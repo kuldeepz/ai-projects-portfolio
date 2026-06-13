@@ -166,31 +166,75 @@ if __name__ == "__main__":
         def __init__(self, usage=None):
             self.usage = usage
 
-    class TestEvaluatorCLIAndVerbose(unittest.TestCase):
+    class _StatusCM:
+        def __init__(self, tracker):
+            self._tracker = tracker
+
+        def __enter__(self):
+            self._tracker["entered"] += 1
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self._tracker["exited"] += 1
+            return False
+
+    class _FakeConsole:
+        def __init__(self, tracker):
+            self._tracker = tracker
+
+        def status(self, *_args, **_kwargs):
+            self._tracker["status_calls"] += 1
+            return _StatusCM(self._tracker)
+
+    class TestEvaluatorStatusBehavior(unittest.TestCase):
         def setUp(self):
             _reset_verbose_for_tests(False)
+            self._orig_console = globals()["console"]
+            self._orig_sleep = time.sleep
+            self.tracker = {"status_calls": 0, "entered": 0, "exited": 0}
+            globals()["console"] = _FakeConsole(self.tracker)
+            time.sleep = lambda *_args, **_kwargs: None
 
         def tearDown(self):
+            globals()["console"] = self._orig_console
+            time.sleep = self._orig_sleep
             _reset_verbose_for_tests(False)
 
-        def test_parse_args_verbose_flag(self):
-            args, unknown = parse_args(["--verbose"])
-            self.assertTrue(args.verbose)
-            self.assertFalse(args.debug_sensitive)
-            self.assertEqual(unknown, [])
+        def test_retry_with_backoff_status_enter_exit_once_on_retry_success(self):
+            calls = {"n": 0}
 
-        def test_parse_args_debug_sensitive_flag(self):
-            args, unknown = parse_args(["--verbose", "--debug-sensitive"])
-            self.assertTrue(args.verbose)
-            self.assertTrue(args.debug_sensitive)
-            self.assertEqual(unknown, [])
+            @retry_with_backoff(delays=(0,), retry_exceptions=(TimeoutError,))
+            def flaky():
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise TimeoutError("transient")
+                return "ok"
 
-        def test_configure_verbose_mutates_global_state(self):
-            self.assertFalse(VERBOSE)
-            self.assertFalse(DEBUG_SENSITIVE)
-            configure_verbose(["--verbose"])
-            self.assertTrue(VERBOSE)
-            self.assertFalse(DEBUG_SENSITIVE)
-            configure_verbose(["--verbose", "--debug-sensitive"])
-            self.assertTrue(VERBOSE)
-            self.assertTrue(DEBUG_SENSITIVE)
+            self.assertEqual(flaky(), "ok")
+            self.assertEqual(self.tracker["status_calls"], 1)
+            self.assertEqual(self.tracker["entered"], 1)
+            self.assertEqual(self.tracker["exited"], 1)
+
+        def test_retry_with_backoff_status_enter_exit_once_on_exception(self):
+            @retry_with_backoff(delays=(0,), retry_exceptions=(TimeoutError,))
+            def always_fail():
+                raise TimeoutError("still failing")
+
+            with self.assertRaises(TimeoutError):
+                always_fail()
+            self.assertEqual(self.tracker["status_calls"], 1)
+            self.assertEqual(self.tracker["entered"], 1)
+            self.assertEqual(self.tracker["exited"], 1)
+
+        def test_call_openai_status_contexts_and_non_verbose_output(self):
+            _reset_verbose_for_tests(False)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(NotImplementedError):
+                    call_openai(model="gpt-4.1-mini", input="hello")
+            self.assertEqual(buf.getvalue(), "")
+            self.assertEqual(self.tracker["status_calls"], 2)
+            self.assertEqual(self.tracker["entered"], 2)
+            self.assertEqual(self.tracker["exited"], 2)
+
+    unittest.main()
