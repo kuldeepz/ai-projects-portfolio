@@ -66,15 +66,4 @@ def test_score_boundary_values_supported(score):
     assert minimum <= score <= maximum
 
 if __name__ == "__main__":
-    print("\n=== ai-model-evaluator: Sanity Tests ===\n")
-    try:
-        test_schema_required_fields()
-        test_score_range()
-        test_sample_suite_has_cases()
-        test_sample_suite_case_structure()
-        test_hallucination_is_boolean()
-        test_correctness_enum()
-        print("\n[ALL TESTS PASSED]\n")
-    except AssertionError as e:
-        print(f"\n[FAILED] {e}\n"); import sys; sys.exit(1)
-
+    sys.exit(pytest.main([__file__]))
