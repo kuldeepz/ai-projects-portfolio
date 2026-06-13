@@ -45,6 +45,8 @@ def validate_environment(argv: list[str] | None = None) -> bool:
         if arg.startswith("-"):
             continue
         path = Path(arg)
+        if verbose:
+            print(f"[verbose] Validating path: {arg}")
         if not path.exists():
             raise SystemExit(f"Error: File path does not exist: {arg}")
         if not path.is_file():
