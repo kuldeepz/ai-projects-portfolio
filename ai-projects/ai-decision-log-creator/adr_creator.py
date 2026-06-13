@@ -7,6 +7,7 @@ import argparse
 import os, sys, json, time
 from datetime import date
 from pathlib import Path
+from typing import Any, Callable
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -22,15 +23,15 @@ PRICING_PER_1K = {
     "gpt-4o-mini": {"in": 0.000015, "out": 0.00006},
 }
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
+def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         delays = [1, 2, 4]
         last_exc = None
         for i, delay in enumerate(delays):
@@ -44,7 +45,7 @@ def retry_with_backoff(func):
         raise last_exc
     return wrapper
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = response.usage
     prompt_tokens = usage.prompt_tokens
     completion_tokens = usage.completion_tokens
@@ -153,6 +154,6 @@ def create_adr(discussion: str, adr_number: str = "001") -> dict:
         console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-def main():
+def main() -> None:
     global VERBOSE
     p
