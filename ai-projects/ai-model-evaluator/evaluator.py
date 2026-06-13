@@ -1,10 +1,12 @@
 import argparse
 import time
 from functools import wraps
+from rich.console import Console
 
 
 VERBOSE = False
 DEBUG_SENSITIVE = False
+console = Console()
 
 PRICING = {
     "gpt-4.1-mini": {"in": 0.000015, "out": 0.00006},
@@ -28,19 +30,20 @@ def retry_with_backoff(func=None, *, delays=(1, 2, 4), retry_exceptions=(Timeout
         def wrapper(*args, **kwargs):
             last_exc = None
             started = time.time()
-            for attempt in range(len(delays) + 1):
-                try:
-                    return target(*args, **kwargs)
-                except retry_exceptions as exc:
-                    last_exc = exc
-                    if VERBOSE:
-                        elapsed = time.time() - started
-                        print(
-                            f"↻ Retry {attempt + 1}/{len(delays) + 1} failed after {elapsed:.1f}s: {exc}"
-                        )
-                    if attempt == len(delays):
-                        raise
-                    time.sleep(delays[attempt])
+            with console.status("[bold green]Processing..."):
+                for attempt in range(len(delays) + 1):
+                    try:
+                        return target(*args, **kwargs)
+                    except retry_exceptions as exc:
+                        last_exc = exc
+                        if VERBOSE:
+                            elapsed = time.time() - started
+                            print(
+                                f"↻ Retry {attempt + 1}/{len(delays) + 1} failed after {elapsed:.1f}s: {exc}"
+                            )
+                        if attempt == len(delays):
+                            raise
+                        time.sleep(delays[attempt])
             raise last_exc
 
         return wrapper
@@ -133,7 +136,8 @@ def call_openai(*args, **kwargs):
             print(f"Input chars: {char_count}, tokens: {token_count}")
         started = time.time()
     try:
-        raise NotImplementedError("Implement OpenAI API invocation here")
+        with console.status("[bold green]Processing..."):
+            raise NotImplementedError("Implement OpenAI API invocation here")
     finally:
         if VERBOSE:
             elapsed = time.time() - started
