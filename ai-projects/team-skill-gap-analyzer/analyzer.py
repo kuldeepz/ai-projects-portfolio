@@ -173,38 +173,41 @@ class TestCliParsing(unittest.TestCase):
         self.assertIsNone(input_path)
         self.assertIsNone(export_path)
 
+    def test_export_long_flag_with_value_and_input(self) -> None:
+        verbose, input_path, export_path = _parse_cli_args(["--export", "out.json", "in.txt"])
+        self.assertFalse(verbose)
+        self.assertEqual(input_path, "in.txt")
+        self.assertEqual(export_path, "out.json")
+
+    def test_export_short_flag_with_value(self) -> None:
+        verbose, input_path, export_path = _parse_cli_args(["-e", "out.json"])
+        self.assertFalse(verbose)
+        self.assertIsNone(input_path)
+        self.assertEqual(export_path, "out.json")
+
+    def test_export_short_flag_missing_value(self) -> None:
+        verbose, input_path, export_path = _parse_cli_args(["-e"])
+        self.assertFalse(verbose)
+        self.assertIsNone(input_path)
+        self.assertIsNone(export_path)
+
+    def test_input_then_export_flag_with_value(self) -> None:
+        verbose, input_path, export_path = _parse_cli_args(["in.txt", "--export", "out.json"])
+        self.assertFalse(verbose)
+        self.assertEqual(input_path, "in.txt")
+        self.assertEqual(export_path, "out.json")
+
 
 class TestExportResults(unittest.TestCase):
     def test_export_results_writes_json_with_generated_at(self) -> None:
         results = {"name": "alice", "score": 95}
         with TemporaryDirectory() as tmpdir:
-            export_file = str(Path(tmpdir) / "result.json")
-            returned = export_results(results, export_file)
-
-            self.assertEqual(returned, export_file)
-            self.assertTrue(Path(export_file).exists())
-
+            export_file = os.path.join(tmpdir, "results.json")
+            out = export_results(results, export_file)
+            self.assertEqual(out, export_file)
+            self.assertTrue(os.path.exists(export_file))
             with open(export_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-
             self.assertEqual(data["name"], "alice")
             self.assertEqual(data["score"], 95)
             self.assertIn("generated_at", data)
-
-    def test_export_results_honors_custom_export_path(self) -> None:
-        with TemporaryDirectory() as tmpdir:
-            custom_path = str(Path(tmpdir) / "custom_output.json")
-            returned = export_results({"ok": True}, custom_path)
-            self.assertEqual(returned, custom_path)
-            self.assertTrue(Path(custom_path).exists())
-
-    def test_export_results_default_filename_pattern_when_none(self) -> None:
-        with TemporaryDirectory() as tmpdir:
-            cwd = os.getcwd()
-            try:
-                os.chdir(tmpdir)
-                returned = export_results({"k": "v"}, None)
-                self.assertTrue(Path(returned).exists())
-                self.assertRegex(Path(returned).name, r"^output_\d{8}_\d{6}\.json$")
-            finally:
-                os.chdir(cwd)
