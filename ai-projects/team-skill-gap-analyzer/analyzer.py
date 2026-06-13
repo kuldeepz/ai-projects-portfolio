@@ -161,6 +161,15 @@ def export_results(results: Dict[str, Any], export_path: Optional[str] = None) -
     return file_name
 
 
+def run_cli(results: Dict[str, Any], argv: Optional[list[str]] = None) -> Dict[str, Any]:
+    args = sys.argv[1:] if argv is None else argv
+    _, _, export_path = _parse_cli_args(args)
+    if export_path is not None:
+        out = export_results(results, export_path)
+        print(f"Exported JSON: {out}")
+    return results
+
+
 class TestCliParsing(unittest.TestCase):
     def test_verbose_long_flag_and_input_path(self) -> None:
         verbose, input_path, export_path = _parse_cli_args(["--verbose", "file.txt"])
@@ -175,6 +184,26 @@ class TestCliParsing(unittest.TestCase):
         self.assertIsNone(export_path)
 
     def test_export_long_flag_with_value_and_input(self) -> None:
-        verbose, input_path, export_path = _parse_cli_args(["--export", "out.json", "in.txt"])
+        verbose, input_path, export_path = _parse_cli_args(["--export", "out.json", "file.txt"])
         self.assertFalse(verbose)
-        self.assertEqual(input_path, "in.")
+        self.assertEqual(input_path, "file.txt")
+        self.assertEqual(export_path, "out.json")
+
+    def test_export_short_flag_with_value(self) -> None:
+        verbose, input_path, export_path = _parse_cli_args(["-e", "out.json"])
+        self.assertFalse(verbose)
+        self.assertIsNone(input_path)
+        self.assertEqual(export_path, "out.json")
+
+    def test_export_missing_value_raises(self) -> None:
+        with self.assertRaises(SystemExit):
+            _parse_cli_args(["--export"])
+
+    def test_run_cli_exports_when_export_flag_is_provided(self) -> None:
+        sample_results = {"score": 42}
+        with patch(__name__ + ".export_results", return_value="out.json") as mock_export:
+            with patch("builtins.print") as mock_print:
+                returned = run_cli(sample_results, ["--export", "out.json"])
+        self.assertEqual(returned, sample_results)
+        mock_export.assert_called_once_with(sample_results, "out.json")
+        mock_print.assert_any_call("Exported JSON: out.json")
