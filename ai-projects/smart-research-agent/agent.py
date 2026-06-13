@@ -12,6 +12,7 @@ import agent
 
 
 RETRY_EXC = (RateLimitError, APITimeoutError, APIError)
+VERBOSE = False
 
 
 def retry_with_backoff(func, delays=(1, 2, 4), sleeper=time.sleep):
@@ -31,12 +32,18 @@ def retry_with_backoff(func, delays=(1, 2, 4), sleeper=time.sleep):
 
 
 def validate_environment(argv: list[str] | None = None) -> None:
+    global VERBOSE
+
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise SystemExit("Error: OPENAI_API_KEY is not set or is empty.")
 
     args = list(sys.argv[1:] if argv is None else argv)
+    VERBOSE = any(arg in ("-v", "--verbose") for arg in args)
+
     for arg in args:
+        if arg in ("-v", "--verbose"):
+            continue
         if arg.startswith("-"):
             continue
         path = Path(arg)
