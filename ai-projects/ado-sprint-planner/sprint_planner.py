@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import time
-from typing import Any, Callable
+from typing import Any, Callable, NotRequired, TypedDict
 
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
@@ -17,6 +17,86 @@ ADO Sprint Planner
 Analyzes a product backlog (JSON) + team capacity/velocity and recommends
 the optimal sprint composition with story point distribution.
 """
+
+
+class Team(TypedDict):
+    name: str
+    velocity: int
+    capacity_this_sprint: int
+    members: int
+
+
+class BacklogItem(TypedDict):
+    id: str
+    title: str
+    priority: str
+    story_points: int
+    dependencies: list[str]
+
+
+class Backlog(TypedDict):
+    team: Team
+    sprint_number: int
+    items: list[BacklogItem]
+
+
+class RecommendedItem(TypedDict):
+    id: str
+    title: str
+    story_points: int
+    reason: str
+
+
+class DeferredItem(TypedDict):
+    id: str
+    title: str
+    reason: str
+
+
+class SprintPlan(TypedDict):
+    sprint_goal: str
+    recommended_items: list[RecommendedItem]
+    deferred_items: list[DeferredItem]
+    total_points: int
+    capacity_utilization_pct: int
+    risks: list[str]
+    recommendations: list[str]
+
+
+class JsonSchemaRef(TypedDict):
+    type: str
+
+
+class JsonSchemaProperty(TypedDict, total=False):
+    type: str
+    items: JsonSchemaRef | "JsonSchemaObject"
+    properties: dict[str, "JsonSchemaProperty"]
+    required: list[str]
+
+
+class JsonSchemaObject(TypedDict):
+    type: str
+    properties: dict[str, JsonSchemaProperty]
+    required: list[str]
+
+
+class ToolFunction(TypedDict):
+    name: str
+    description: str
+    parameters: JsonSchemaObject
+
+
+class ToolSpec(TypedDict):
+    type: str
+    function: ToolFunction
+
+
+class ExportOutput(TypedDict):
+    generated_at: str
+    model: str
+    backlog: Backlog
+    sprint_plan: SprintPlan
+
 
 load_dotenv()
 console: Console = Console()
@@ -66,56 +146,59 @@ def get_client() -> OpenAI:
     return _client
 
 
-SCHEMA: dict[str, Any] = {
-    "name": "sprint_plan",
-    "description": "AI-generated sprint plan",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "sprint_goal": {"type": "string"},
-            "recommended_items": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "title": {"type": "string"},
-                        "story_points": {"type": "integer"},
-                        "reason": {"type": "string"},
+SCHEMA: ToolSpec = {
+    "type": "function",
+    "function": {
+        "name": "sprint_plan",
+        "description": "AI-generated sprint plan",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sprint_goal": {"type": "string"},
+                "recommended_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "story_points": {"type": "integer"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["id", "title", "story_points", "reason"],
                     },
-                    "required": ["id", "title", "story_points", "reason"],
                 },
-            },
-            "deferred_items": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "title": {"type": "string"},
-                        "reason": {"type": "string"},
+                "deferred_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["id", "title", "reason"],
                     },
-                    "required": ["id", "title", "reason"],
                 },
+                "total_points": {"type": "integer"},
+                "capacity_utilization_pct": {"type": "integer"},
+                "risks": {"type": "array", "items": {"type": "string"}},
+                "recommendations": {"type": "array", "items": {"type": "string"}},
             },
-            "total_points": {"type": "integer"},
-            "capacity_utilization_pct": {"type": "integer"},
-            "risks": {"type": "array", "items": {"type": "string"}},
-            "recommendations": {"type": "array", "items": {"type": "string"}},
+            "required": [
+                "sprint_goal",
+                "recommended_items",
+                "deferred_items",
+                "total_points",
+                "capacity_utilization_pct",
+                "risks",
+                "recommendations",
+            ],
         },
-        "required": [
-            "sprint_goal",
-            "recommended_items",
-            "deferred_items",
-            "total_points",
-            "capacity_utilization_pct",
-            "risks",
-            "recommendations",
-        ],
     },
 }
 
-SAMPLE_BACKLOG: dict[str, Any] = {
+SAMPLE_BACKLOG: Backlog = {
     "team": {"name": "Phoenix", "velocity": 40, "capacity_this_sprint": 36, "members": 5},
     "sprint_number": 15,
     "items": [
@@ -149,7 +232,7 @@ def parse_export_arg(argv: list[str]) -> tuple[list[str], str | None]:
 
 
 @retry_with_backoff()
-def plan_sprint(data: dict[str, Any]) -> dict[str, Any]:
+def plan_sprint(data: Backlog) -> SprintPlan:
     with console.status("[bold green]Processing..."):
         response = get_client().chat.completions.create(
             model=MODEL,
@@ -164,13 +247,10 @@ def plan_sprint(data: dict[str, Any]) -> dict[str, Any]:
                 },
                 {"role": "user", "content": f"Plan the sprint for this backlog:\n\n{json.dumps(data, indent=2)}"},
             ],
-            tools=[{"type": "function", "function": SCHEMA}],
-            tool_choice={"type": "function", "function": {"name": "sprint_plan"}},
-            temperature=0.2,
+            tools=[SCHEMA],
         )
-    return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
-
-
-def display(data: dict[str, Any], plan: dict[str, Any]) -> None:
-    team = data["team"]
- 
+        tool_calls = response.choices[0].message.tool_calls or []
+        if not tool_calls:
+            raise ValueError("No tool call returned by model")
+        args = tool_calls[0].function.arguments
+        return json.loads(args)
