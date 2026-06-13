@@ -6,6 +6,7 @@ for daily standups, weekly syncs, or executive status updates.
 
 import os, sys, json, argparse, time, random, functools
 from datetime import date, datetime
+from typing import Any, Callable
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -13,21 +14,21 @@ from rich.panel import Panel
 from rich.markdown import Markdown
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
 
-PRICING_PER_1K = {
+PRICING_PER_1K: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"in": 0.00015, "out": 0.00060},
 }
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -44,10 +45,10 @@ def print_usage(response):
 
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: {cost_display}")
 
-def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25):
-    def deco(fn):
+def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0, max_delay: float = 8.0, jitter: float = 0.25) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             for attempt in range(max_retries + 1):
                 try:
                     return fn(*args, **kwargs)
@@ -60,13 +61,13 @@ def retry_with_backoff(max_retries=3, base_delay=1.0, max_delay=8.0, jitter=0.25
         return wrapper
     return deco
 
-def validate_environment(parsed):
+def validate_environment(parsed: Any) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("❌ OPENAI_API_KEY is not set. Please set it in your environment or .env file.")
         sys.exit(1)
 
-    paths_to_check = []
+    paths_to_check: list[str] = []
     if getattr(parsed, "input_file", None):
         paths_to_check.append(parsed.input_file)
     if getattr(parsed, "export_out", None):
@@ -86,14 +87,14 @@ def validate_environment(parsed):
     if getattr(parsed, "verbose", False):
         console.print("Setup OK ✓")
 
-FORMATS = {
+FORMATS: dict[str, tuple[str, str]] = {
     "1": ("standup", "Daily standup (Yesterday / Today / Blockers)"),
     "2": ("weekly", "Weekly status report (Accomplishments / Plan / Risks)"),
     "3": ("executive", "Executive summary (Business impact, concise, non-technical)"),
     "4": ("slack", "Slack-style update (short, emoji-friendly, bullet points)"),
 }
 
-SCHEMA = {
+SCHEMA: dict[str, Any] = {
     "name": "report_output",
     "description": "Generated status report",
     "parameters": {
@@ -109,7 +110,7 @@ SCHEMA = {
     }
 }
 
-SAMPLE_NOTES = {
+SAMPLE_NOTES: dict[str, Any] = {
     "name": "Kuldeep Rao",
     "role": "AI Lead",
     "date": str(date.today()),
@@ -126,10 +127,10 @@ SAMPLE_NOTES = {
 }
 
 @retry_with_backoff(max_retries=3)
-def _create_chat_completion(**kwargs):
+def _create_chat_completion(**kwargs: Any) -> Any:
     return get_client().chat.completions.create(**kwargs)
 
-def generate_report(data: dict, verbose: bool = False) -> dict:
+def generate_report(data: dict[str, Any], verbose: bool = False) -> dict[str, Any]:
     fmt = data.get("format", "standup")
     fmt_desc = next((v[1] for v in FORMATS.values() if v[0] == fmt), fmt)
     messages = [
