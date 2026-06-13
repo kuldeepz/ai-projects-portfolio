@@ -107,7 +107,6 @@ def print_usage(usage: Any, model_name: Optional[str] = None) -> None:
 
 def create_response_with_usage(client: Any, model_name: str, **kwargs: Any) -> Any:
     if VERBOSE:
-        print(f"Model: {model_name}")
         input_value = kwargs.get("input", "")
         input_text = str(input_value)
         print(f"Input size - chars: {len(input_text)}, tokens(approx): {len(input_text) // 4}")
