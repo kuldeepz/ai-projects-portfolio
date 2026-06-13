@@ -8,6 +8,7 @@ import sys
 import json
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -19,14 +20,14 @@ from rich.text import Text
 
 load_dotenv()
 
-_client = None
-VERBOSE = False
+_client: OpenAI | None = None
+VERBOSE: bool = False
 
 
-def retry_with_backoff(func):
-    def wrapper(*args, **kwargs):
+def retry_with_backoff(func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         delays = [1, 2, 4]
-        last_exception = None
+        last_exception: Exception | None = None
         for i, delay in enumerate(delays):
             try:
                 return func(*args, **kwargs)
@@ -46,12 +47,12 @@ def get_client() -> OpenAI:
     return _client
 
 
-console = Console()
+console: Console = Console()
 
-CHAT_MODEL = "gpt-4o-mini"
+CHAT_MODEL: str = "gpt-4o-mini"
 
 
-def print_usage(response):
+def print_usage(response: Any) -> None:
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -62,7 +63,7 @@ def print_usage(response):
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
 
-ANALYSIS_SCHEMA = {
+ANALYSIS_SCHEMA: dict[str, Any] = {
     "name": "resume_analysis",
     "description": "Structured analysis of a resume",
     "parameters": {
@@ -114,7 +115,7 @@ ANALYSIS_SCHEMA = {
 }
 
 
-def validate_environment():
+def validate_environment() -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[red]Missing OPENAI_API_KEY.[/red] Set it in your environment or .env file.")
@@ -162,7 +163,7 @@ def load_resume(path: str) -> str:
 
 
 @retry_with_backoff
-def analyze_resume(resume_text: str, target_role: str = "") -> dict:
+def analyze_resume(resume_text: str, target_role: str = "") -> dict[str, Any]:
     """Call GPT with function calling to get structured resume analysis."""
     role_context = f"\nTarget role: {target_role}" if target_role else ""
 
