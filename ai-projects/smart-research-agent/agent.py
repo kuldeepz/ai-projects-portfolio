@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,23 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import agent
+
+
+def retry_with_backoff(func):
+    def wrapper(*args, **kwargs):
+        delays = [1, 2, 4]
+        last_exception = None
+        for attempt in range(len(delays) + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as exc:
+                last_exception = exc
+                if attempt == len(delays):
+                    break
+                time.sleep(delays[attempt])
+        raise last_exception
+
+    return wrapper
 
 
 def validate_environment(argv: list[str] | None = None) -> None:
@@ -82,6 +100,7 @@ def test_summarize_text_calls_print_usage(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     mock_create = Mock(return_value=mock_response)
+    mock_create = retry_with_backoff(mock_create)
     mock_client = SimpleNamespace(
         chat=SimpleNamespace(
             completions=SimpleNamespace(create=mock_create)
