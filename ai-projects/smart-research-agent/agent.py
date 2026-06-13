@@ -154,3 +154,36 @@ def test_summarize_text_calls_print_usage(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert result == "summary"
     print_usage_mock.assert_called_once_with(mock_response)
+
+
+def test_validate_environment_accepts_long_verbose_flag_and_sets_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    result = agent.validate_environment(["--verbose"])
+
+    assert result is True
+
+
+def test_validate_environment_short_verbose_not_treated_as_path_and_main_sets_verbose(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(sys, "argv", ["prog", "-v", "somefile.txt"])
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr(os, "access", lambda *args, **kwargs: True)
+
+    agent.VERBOSE = False
+    agent.main()
+
+    assert agent.VERBOSE is True
+
+
+def test_main_resets_verbose_false_when_flag_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(sys, "argv", ["prog"])
+
+    agent.VERBOSE = True
+    agent.main()
+
+    assert agent.VERBOSE is False
