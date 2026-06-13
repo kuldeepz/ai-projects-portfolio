@@ -57,7 +57,7 @@ def print_usage(response):
         return
     prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
     completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    total_tokens = getattr(response, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
     cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
     console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
 
@@ -171,36 +171,42 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict:
             "role": "system",
             "content": (
                 "You are an expert resume reviewer and career coach with 15+ years of experience "
-                "in techn"
+                "in technical recruiting and hiring. Analyze resumes objectively and provide actionable feedback."
             ),
-        }
+        },
+        {
+            "role": "user",
+            "content": (
+                "Analyze this resume and return structured JSON with strengths, gaps, ATS issues, and improvements."
+                f"{role_context}\n\nResume:\n{resume_text}"
+            ),
+        },
     ]
 
     if VERBOSE:
-        total_chars = sum(len(m.get("content", "") or "") for m in messages)
-        console.print(f"🔎 Model: {CHAT_MODEL}")
-        console.print(f"🧮 Input size: {total_chars} chars")
-        console.print("⏳ Calling OpenAI API...")
-        start = time.time()
+        total_chars = sum(len(m.get("content", "")) for m in messages)
+        console.print(f"[dim]Model: {CHAT_MODEL}[/dim]")
+        console.print(f"[dim]Input chars: {total_chars}[/dim]")
 
+    start = time.time()
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
         messages=messages,
+        functions=[ANALYSIS_SCHEMA],
+        function_call={"name": "resume_analysis"},
+        temperature=0.2,
     )
+    elapsed = time.time() - start
 
     if VERBOSE:
-        elapsed = time.time() - start
-        usage = getattr(response, "usage", None)
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-        completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-        total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) if usage else (prompt_tokens + completion_tokens)
-        console.print(f"🧮 Input tokens: {prompt_tokens}")
-        console.print(f"✅ Done in {elapsed:.1f}s")
+        console.print(f"[dim]API call took {elapsed:.2f}s[/dim]")
 
     print_usage(response)
-    return {}
+
+    args = response.choices[0].message.function_call.arguments
+    return json.loads(args)
 
 
 if __name__ == "__main__":
-    VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
     validate_environment()
+    # CLI execution intentionally unchanged for this fix.
