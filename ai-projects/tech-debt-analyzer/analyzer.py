@@ -132,28 +132,94 @@ def display(report: dict[str, Any]) -> None:
     ))
     console.print(Panel(f"[italic]{report['summary']}[/italic]", title="Summary", border_style="blue"))
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Analyze Python code for technical debt")
-    parser.add_argument("target", nargs="?", default=".", help="File or directory to analyze")
-    parser.add_argument("--context", default="", help="Additional context for analysis")
-    parser.add_argument("-m", "--model", default=MODEL, help="OpenAI model to use")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose diagnostics")
-    return parser
 
-def validate_environment(argv: list[str] | None = None) -> argparse.Namespace:
-    global MODEL, VERBOSE
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    MODEL = args.model
-    VERBOSE = args.verbose
-    return args
+def _build_fake_response() -> Any:
+    class _Fn:
+        arguments = json.dumps({
+            "overall_debt_score": 10,
+            "debt_items": [],
+            "total_effort_days": 0,
+            "quick_wins": [],
+            "summary": "ok"
+        })
 
-def main(argv: list[str] | None = None) -> int:
-    args = validate_environment(argv)
-    code = collect_code(args.target)
-    report = analyze(code, args.context)
-    display(report)
-    return 0
+    class _ToolCall:
+        function = _Fn()
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+    class _Message:
+        tool_calls = [_ToolCall()]
+
+    class _Choice:
+        message = _Message()
+
+    class _Usage:
+        prompt_tokens = 1
+        completion_tokens = 1
+        total_tokens = 2
+
+    class _Response:
+        choices = [_Choice()]
+        usage = _Usage()
+
+    return _Response()
+
+
+def _test_analyze_verbose_toggle() -> None:
+    global VERBOSE
+
+    class _FakeCompletions:
+        @staticmethod
+        def create(**kwargs: Any) -> Any:
+            return _build_fake_response()
+
+    class _FakeChat:
+        completions = _FakeCompletions()
+
+    class _FakeClient:
+        chat = _FakeChat()
+
+    class _Status:
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+    class _FakeConsole:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def print(self, *args: Any, **kwargs: Any) -> None:
+            self.calls.append(" ".join(str(a) for a in args))
+
+        def status(self, *args: Any, **kwargs: Any) -> _Status:
+            return _Status()
+
+    old_console = console
+    old_client = _client
+
+    try:
+        fake_console = _FakeConsole()
+        globals()["console"] = fake_console
+        globals()["_client"] = _FakeClient()
+
+        VERBOSE = False
+        analyze("print('x')")
+        assert not any("Model:" in c or "Input chars:" in c or "Estimated input tokens:" in c or "Calling OpenAI API" in c or "✅ Done" in c for c in fake_console.calls)
+
+        fake_console.calls.clear()
+        VERBOSE = True
+        analyze("print('x')")
+        assert any("Model:" in c for c in fake_console.calls)
+        assert any("Input chars:" in c for c in fake_console.calls)
+        assert any("Estimated input tokens:" in c for c in fake_console.calls)
+        assert any("Calling OpenAI API" in c for c in fake_console.calls)
+        assert any("✅ Done" in c for c in fake_console.calls)
+    finally:
+        globals()["console"] = old_console
+        globals()["_client"] = old_client
+        VERBOSE = False
+
+
+if __name__ == "__main__" and os.getenv("TECH_DEBT_ANALYZER_RUN_TESTS") == "1":
+    _test_analyze_verbose_toggle()
