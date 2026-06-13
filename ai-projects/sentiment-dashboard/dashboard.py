@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import sys
@@ -9,27 +10,20 @@ from rich.console import Console
 console = Console()
 
 
-def validate_environment() -> None:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--export", "-e", nargs="?", const=True, default=False)
+    parser.add_argument("paths", nargs="*")
+    return parser.parse_args(sys.argv[1:])
+
+
+def validate_environment(args: argparse.Namespace) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip():
         console.print("[bold red]Setup error:[/bold red] OPENAI_API_KEY is not set. Please add it to your environment or .env file.")
         sys.exit(1)
 
-    args = sys.argv[1:]
-    path_args = []
-    skip_next = False
-    for i, arg in enumerate(args):
-        if skip_next:
-            skip_next = False
-            continue
-        if arg in ("--export", "-e"):
-            if arg == "--export" and i + 1 < len(args) and not args[i + 1].startswith("-"):
-                skip_next = True
-            continue
-        if arg and not arg.startswith("-"):
-            path_args.append(arg)
-
-    for raw_arg in path_args:
+    for raw_arg in args.paths:
         candidate = Path(raw_arg)
         if not candidate.exists():
             console.print(f"[bold red]Setup error:[/bold red] File does not exist: {candidate}")
@@ -42,8 +36,8 @@ def validate_environment() -> None:
             sys.exit(1)
 
 
-def main() -> None:
-    export_requested = "--export" in sys.argv[1:] or "-e" in sys.argv[1:]
+def main(args: argparse.Namespace) -> None:
+    export_requested = bool(args.export)
     results = {}
 
     if export_requested:
@@ -59,5 +53,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    validate_environment()
-    main()
+    parsed_args = parse_args()
+    validate_environment(parsed_args)
+    main(parsed_args)
