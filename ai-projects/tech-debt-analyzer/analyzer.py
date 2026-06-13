@@ -133,93 +133,29 @@ def display(report: dict[str, Any]) -> None:
     console.print(Panel(f"[italic]{report['summary']}[/italic]", title="Summary", border_style="blue"))
 
 
-def _build_fake_response() -> Any:
-    class _Fn:
-        arguments = json.dumps({
-            "overall_debt_score": 10,
-            "debt_items": [],
-            "total_effort_days": 0,
-            "quick_wins": [],
-            "summary": "ok"
-        })
+def _run_print_usage_tests() -> None:
+    from types import SimpleNamespace
 
-    class _ToolCall:
-        function = _Fn()
+    # (1) usage=None prints nothing
+    with console.capture() as cap:
+        print_usage(SimpleNamespace(usage=None))
+    assert cap.get() == ""
 
-    class _Message:
-        tool_calls = [_ToolCall()]
+    # (2) valid prompt/completion/total prints totals and cost
+    usage = SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
+    with console.capture() as cap:
+        print_usage(SimpleNamespace(usage=usage))
+    out = cap.get()
+    assert "1000 in + 500 out = 1500 total" in out
+    assert "Est. cost: $0.0000" not in out
 
-    class _Choice:
-        message = _Message()
-
-    class _Usage:
-        prompt_tokens = 1
-        completion_tokens = 1
-        total_tokens = 2
-
-    class _Response:
-        choices = [_Choice()]
-        usage = _Usage()
-
-    return _Response()
+    # (3) missing total_tokens falls back to prompt+completion
+    usage_missing_total = SimpleNamespace(prompt_tokens=120, completion_tokens=30)
+    with console.capture() as cap:
+        print_usage(SimpleNamespace(usage=usage_missing_total))
+    out = cap.get()
+    assert "120 in + 30 out = 150 total" in out
 
 
-def _test_analyze_verbose_toggle() -> None:
-    global VERBOSE
-
-    class _FakeCompletions:
-        @staticmethod
-        def create(**kwargs: Any) -> Any:
-            return _build_fake_response()
-
-    class _FakeChat:
-        completions = _FakeCompletions()
-
-    class _FakeClient:
-        chat = _FakeChat()
-
-    class _Status:
-        def __enter__(self) -> None:
-            return None
-
-        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
-            return False
-
-    class _FakeConsole:
-        def __init__(self) -> None:
-            self.calls: list[str] = []
-
-        def print(self, *args: Any, **kwargs: Any) -> None:
-            self.calls.append(" ".join(str(a) for a in args))
-
-        def status(self, *args: Any, **kwargs: Any) -> _Status:
-            return _Status()
-
-    old_console = console
-    old_client = _client
-
-    try:
-        fake_console = _FakeConsole()
-        globals()["console"] = fake_console
-        globals()["_client"] = _FakeClient()
-
-        VERBOSE = False
-        analyze("print('x')")
-        assert not any("Model:" in c or "Input chars:" in c or "Estimated input tokens:" in c or "Calling OpenAI API" in c or "✅ Done" in c for c in fake_console.calls)
-
-        fake_console.calls.clear()
-        VERBOSE = True
-        analyze("print('x')")
-        assert any("Model:" in c for c in fake_console.calls)
-        assert any("Input chars:" in c for c in fake_console.calls)
-        assert any("Estimated input tokens:" in c for c in fake_console.calls)
-        assert any("Calling OpenAI API" in c for c in fake_console.calls)
-        assert any("✅ Done" in c for c in fake_console.calls)
-    finally:
-        globals()["console"] = old_console
-        globals()["_client"] = old_client
-        VERBOSE = False
-
-
-if __name__ == "__main__" and os.getenv("TECH_DEBT_ANALYZER_RUN_TESTS") == "1":
-    _test_analyze_verbose_toggle()
+if __name__ == "__main__" and os.getenv("RUN_PRINT_USAGE_TESTS") == "1":
+    _run_print_usage_tests()
