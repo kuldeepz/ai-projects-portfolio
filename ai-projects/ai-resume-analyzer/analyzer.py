@@ -20,6 +20,7 @@ from rich.text import Text
 load_dotenv()
 
 _client = None
+VERBOSE = False
 
 
 def retry_with_backoff(func):
@@ -165,21 +166,41 @@ def analyze_resume(resume_text: str, target_role: str = "") -> dict:
     """Call GPT with function calling to get structured resume analysis."""
     role_context = f"\nTarget role: {target_role}" if target_role else ""
 
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an expert resume reviewer and career coach with 15+ years of experience "
+                "in techn"
+            ),
+        }
+    ]
+
+    if VERBOSE:
+        total_chars = sum(len(m.get("content", "") or "") for m in messages)
+        console.print(f"🔎 Model: {CHAT_MODEL}")
+        console.print(f"🧮 Input size: {total_chars} chars")
+        console.print("⏳ Calling OpenAI API...")
+        start = time.time()
+
     response = get_client().chat.completions.create(
         model=CHAT_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert resume reviewer and career coach with 15+ years of experience "
-                    "in techn"
-                ),
-            }
-        ],
+        messages=messages,
     )
+
+    if VERBOSE:
+        elapsed = time.time() - start
+        usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+        completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+        total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) if usage else (prompt_tokens + completion_tokens)
+        console.print(f"🧮 Input tokens: {prompt_tokens}")
+        console.print(f"✅ Done in {elapsed:.1f}s")
+
     print_usage(response)
     return {}
 
 
 if __name__ == "__main__":
+    VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv
     validate_environment()
