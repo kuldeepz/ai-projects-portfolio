@@ -8,6 +8,7 @@ import os, sys, json
 import argparse
 from pathlib import Path
 from datetime import datetime
+from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 from rich.console import Console
@@ -15,17 +16,18 @@ from rich.panel import Panel
 from rich.table import Table
 
 load_dotenv()
-console = Console()
-MODEL = "gpt-4o-mini"
+console: Console = Console()
+MODEL: str = "gpt-4o-mini"
+VERBOSE: bool = False
 
-_client = None
-def get_client():
+_client: OpenAI | None = None
+def get_client() -> OpenAI:
     global _client
     if _client is None:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
-SCHEMA = {
+SCHEMA: dict[str, Any] = {
     "name": "tech_debt_report",
     "description": "Technical debt analysis report",
     "parameters": {
@@ -60,7 +62,7 @@ def collect_code(target: str, max_chars: int = 8000) -> str:
     p = Path(target)
     if p.is_file():
         return p.read_text(encoding="utf-8", errors="ignore")[:max_chars]
-    snippets = []
+    snippets: list[str] = []
     total = 0
     for f in sorted(p.rglob("*.py"))[:20]:
         if "__pycache__" in str(f) or ".venv" in str(f):
@@ -73,10 +75,10 @@ def collect_code(target: str, max_chars: int = 8000) -> str:
             break
     return "\n".join(snippets)[:max_chars]
 
-def analyze(code: str, context: str = "", verbose: bool = False) -> dict:
+def analyze(code: str, context: str = "") -> dict[str, Any]:
     ctx = f"\nContext: {context}" if context else ""
     user_content = f"Analyze this code for technical debt:{ctx}\n\n```\n{code}\n```"
-    if verbose:
+    if VERBOSE:
         console.print(f"[dim]Model:[/dim] {MODEL}")
         console.print(f"[dim]Input chars:[/dim] {len(user_content)}")
         console.print(f"[dim]Estimated input tokens:[/dim] {max(1, len(user_content) // 4)}")
@@ -98,16 +100,16 @@ def analyze(code: str, context: str = "", verbose: bool = False) -> dict:
             tool_choice={"type": "function", "function": {"name": "tech_debt_report"}},
             temperature=0.2,
         )
-    if verbose:
+    if VERBOSE:
         elapsed = (datetime.now() - start).total_seconds()
         console.print(f"✅ Done in {elapsed:.1f}s")
     return json.loads(response.choices[0].message.tool_calls[0].function.arguments)
 
-SEV_COLORS = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim"}
-CAT_ICONS = {"code_quality": "📝", "architecture": "🏗", "security": "🔐", "testing": "🧪",
+SEV_COLORS: dict[str, str] = {"critical": "bold red", "high": "red", "medium": "yellow", "low": "dim"}
+CAT_ICONS: dict[str, str] = {"code_quality": "📝", "architecture": "🏗", "security": "🔐", "testing": "🧪",
              "documentation": "📚", "dependencies": "📦", "performance": "⚡"}
 
-def display(report: dict):
+def display(report: dict[str, Any]) -> None:
     score = report["overall_debt_score"]
     s_color = "green" if score < 30 else "yellow" if score < 60 else "red"
     console.print()
@@ -130,4 +132,22 @@ def display(report: dict):
     console.print(Panel(t, title="[bold]Debt Items[/bold]", border_style="red"))
 
     if report["quick_wins"]:
-        console.print(P
+        console.print(Panel(
+            "\n".join(f"  [green]⚡[/green] {q}" for q in report["quick_wins"]),
+            title="[bold green]Quick Wins (< 1 day)[/bold green]", border_style="green"
+        ))
+    console.print()
+
+def validate_environment(argv: list[str]) -> None:
+    global VERBOSE
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args, _ = parser.parse_known_args(argv)
+    VERBOSE = args.verbose
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not api_key.strip():
+        console.print("[red]Error:[/red] OPENAI_API_KEY is not set. Please configure it in your environment or .env file.")
+        sys.exit(1)
+
+    parser = a
