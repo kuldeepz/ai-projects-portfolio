@@ -5,13 +5,12 @@ Tests URL parsing, text cleaning, and tool map completeness.
 
 import os
 import sys
-import urllib.parse
 
 import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agent import TOOL_MAP, TOOLS
+from agent import TOOL_MAP, TOOLS, extract_real_url, is_valid_depth
 
 
 def test_tool_map_completeness():
@@ -39,16 +38,15 @@ def test_tool_schemas():
 def test_url_parsing():
     """DuckDuckGo redirect URL extraction logic."""
     redirect = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Farticle&rut=abc"
-    real_url = urllib.parse.unquote(redirect.split("uddg=")[1].split("&")[0])
+    real_url = extract_real_url(redirect)
     assert real_url == "https://example.com/article", f"Got: {real_url}"
     print("  [PASS] URL parsing — DuckDuckGo redirect extraction correct")
 
 
 def test_depth_options():
     """Valid depth options are accepted."""
-    valid = {"quick", "standard", "deep"}
-    for d in valid:
-        assert d in valid
+    for d in {"quick", "standard", "deep"}:
+        assert is_valid_depth(d)
     print("  [PASS] Depth options — quick/standard/deep all valid")
 
 
@@ -62,11 +60,7 @@ def test_depth_options():
 )
 def test_url_parsing_empty_and_none_inputs(redirect, expected):
     """Covers empty and None redirect inputs for safe URL extraction behavior."""
-    if not redirect or "uddg=" not in redirect:
-        real_url = ""
-    else:
-        real_url = urllib.parse.unquote(redirect.split("uddg=")[1].split("&")[0])
-    assert real_url == expected
+    assert extract_real_url(redirect) == expected
 
 
 @pytest.mark.parametrize(
@@ -88,8 +82,7 @@ def test_url_parsing_empty_and_none_inputs(redirect, expected):
 )
 def test_url_parsing_edge_cases(redirect, expected):
     """Covers boundary redirect patterns including queries, encoding, and param order."""
-    real_url = urllib.parse.unquote(redirect.split("uddg=")[1].split("&")[0])
-    assert real_url == expected
+    assert extract_real_url(redirect) == expected
 
 
 @pytest.mark.parametrize(
@@ -106,8 +99,7 @@ def test_url_parsing_edge_cases(redirect, expected):
 )
 def test_depth_options_parametrized(value, is_valid):
     """Covers empty, None, and boundary depth option values for validation."""
-    valid = {"quick", "standard", "deep"}
-    assert (value in valid) is is_valid
+    assert is_valid_depth(value) is is_valid
 
 
 if __name__ == "__main__":
