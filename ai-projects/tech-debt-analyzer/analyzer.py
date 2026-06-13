@@ -27,6 +27,16 @@ def get_client() -> OpenAI:
         _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     return _client
 
+def print_usage(response: Any) -> None:
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
+    cost = (prompt_tokens / 1000) * 0.000015 + (completion_tokens / 1000) * 0.00006
+    console.print(f"📊 Tokens: {prompt_tokens} in + {completion_tokens} out = {total_tokens} total | 💰 Est. cost: ${cost:.4f}")
+
 SCHEMA: dict[str, Any] = {
     "name": "tech_debt_report",
     "description": "Technical debt analysis report",
@@ -100,6 +110,7 @@ def analyze(code: str, context: str = "") -> dict[str, Any]:
             tool_choice={"type": "function", "function": {"name": "tech_debt_report"}},
             temperature=0.2,
         )
+    print_usage(response)
     if VERBOSE:
         elapsed = (datetime.now() - start).total_seconds()
         console.print(f"✅ Done in {elapsed:.1f}s")
