@@ -134,6 +134,14 @@ class ExportResultsArgumentParsingTests(unittest.TestCase):
         self.assertTrue(VERBOSE)
         mock_open.assert_not_called()
 
+    def test_verbose_mode_prints_export_message(self) -> None:
+        with patch("sys.argv", ["release_notes.py", "--verbose", "--export"]), patch(
+            "builtins.open", unittest.mock.mock_open()
+        ), patch("builtins.print") as mock_print:
+            _export_results_if_requested({"ok": True, "count": 2})
+
+        mock_print.assert_any_call("Exporting 2 results")
+
 
 def _export_results_if_requested(results: dict[str, Any]) -> None:
     parser = argparse.ArgumentParser(add_help=False)
@@ -146,6 +154,9 @@ def _export_results_if_requested(results: dict[str, Any]) -> None:
 
     if not args.export:
         return
+
+    if args.verbose:
+        print(f"Exporting {len(results)} results")
 
     generated_at = datetime.now().isoformat()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -162,7 +173,6 @@ if __name__ == "__main__":
         "tests_run": test_program.result.testsRun,
         "failures": len(test_program.result.failures),
         "errors": len(test_program.result.errors),
-        "skipped": len(test_program.result.skipped),
         "successful": test_program.result.wasSuccessful(),
     }
     _export_results_if_requested(test_results)
