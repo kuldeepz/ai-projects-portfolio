@@ -1,6 +1,8 @@
+import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -39,8 +41,16 @@ def validate_environment(argv: list[str] | None = None) -> bool:
     args = list(sys.argv[1:] if argv is None else argv)
     verbose = any(arg in ("-v", "--verbose") for arg in args)
 
-    for arg in args:
+    skip_next = False
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
         if arg in ("-v", "--verbose"):
+            continue
+        if arg in ("-e", "--export"):
+            if i + 1 < len(args) and not args[i + 1].startswith("-"):
+                skip_next = True
             continue
         if arg.startswith("-"):
             continue
@@ -61,6 +71,18 @@ def validate_environment(argv: list[str] | None = None) -> bool:
 def main() -> None:
     global VERBOSE
     VERBOSE = validate_environment()
+
+
+def export_results(results: dict, export_enabled: bool) -> str | None:
+    if not export_enabled:
+        return None
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"output_{timestamp}.json"
+    payload = dict(results)
+    payload["generated_at"] = datetime.now().isoformat()
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return filename
 
 
 def _make_response_with_usage(
