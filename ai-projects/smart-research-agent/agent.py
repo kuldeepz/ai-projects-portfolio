@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import agent
 
@@ -61,6 +61,36 @@ def _make_response_with_usage(
         total_tokens=total_tokens,
     )
     return SimpleNamespace(usage=usage)
+
+
+def test_retry_succeeds_after_failures_and_uses_delay_sequence() -> None:
+    calls = {"n": 0}
+
+    def flaky() -> str:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("temp")
+        return "ok"
+
+    sleep_mock = Mock()
+    wrapped = retry_with_backoff(flaky, sleeper=sleep_mock)
+
+    assert wrapped() == "ok"
+    assert calls["n"] == 3
+    assert sleep_mock.call_args_list == [call(1), call(2)]
+
+
+def test_retry_raises_after_max_attempts() -> None:
+    def always_fail() -> None:
+        raise RuntimeError("boom")
+
+    sleep_mock = Mock()
+    wrapped = retry_with_backoff(always_fail, sleeper=sleep_mock)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        wrapped()
+
+    assert sleep_mock.call_args_list == [call(1), call(2), call(4)]
 
 
 def test_print_usage_no_usage_does_not_print(capsys: pytest.CaptureFixture[str]) -> None:
