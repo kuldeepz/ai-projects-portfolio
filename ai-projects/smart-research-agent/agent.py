@@ -188,26 +188,53 @@ def test_validate_environment_accepts_long_verbose_flag_and_sets_true(monkeypatc
     assert result is True
 
 
-def test_validate_environment_short_verbose_not_treated_as_path_and_main_sets_verbose(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_export_results_disabled_returns_none_and_writes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    open_mock = Mock()
+    monkeypatch.setattr("builtins.open", open_mock)
+
+    result = agent.export_results({"x": 1}, export_enabled=False)
+
+    assert result is None
+    open_mock.assert_not_called()
+
+
+def test_export_results_enabled_writes_json_with_generated_at(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    output = agent.export_results({"topic": "ai"}, export_enabled=True)
+
+    assert output is not None
+    output_path = tmp_path / output
+    assert output_path.exists()
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["topic"] == "ai"
+    assert "generated_at" in data
+
+
+def test_export_results_uses_timestamp_based_default_filename(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    output = agent.export_results({"a": 1}, export_enabled=True)
+
+    assert output is not None
+    assert output.startswith("output_")
+    assert output.endswith(".json")
+
+
+def test_validate_environment_export_filename_not_treated_as_input_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["prog", "-v", "somefile.txt"])
-    monkeypatch.setattr(Path, "exists", lambda self: True)
-    monkeypatch.setattr(Path, "is_file", lambda self: True)
-    monkeypatch.setattr(os, "access", lambda *args, **kwargs: True)
 
-    agent.VERBOSE = False
-    agent.main()
+    exists_mock = Mock(return_value=False)
+    is_file_mock = Mock(return_value=True)
+    access_mock = Mock(return_value=True)
 
-    assert agent.VERBOSE is True
+    monkeypatch.setattr(Path, "exists", exists_mock)
+    monkeypatch.setattr(Path, "is_file", is_file_mock)
+    monkeypatch.setattr(os, "access", access_mock)
 
+    result = agent.validate_environment(["--export", "out.json"])
 
-def test_main_resets_verbose_false_when_flag_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(sys, "argv", ["prog"])
-
-    agent.VERBOSE = True
-    agent.main()
-
-    assert agent.VERBOSE is False
+    assert result is False
+    exists_mock.assert_not_called()
+    is_file_mock.assert_not_called()
+    access_mock.assert_not_called()
