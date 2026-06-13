@@ -17,8 +17,6 @@ def validate_environment():
             console.print(f"[bold red]Setup error:[/bold red] File is not readable: {candidate}")
             sys.exit(1)
 
-    console.print("[bold green]Setup OK ✓[/bold green]")
-
 
 if __name__ == "__main__":
     validate_environment()
