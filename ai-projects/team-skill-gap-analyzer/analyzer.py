@@ -1,8 +1,11 @@
 import os
 import sys
 import time
+import unittest
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Optional
+from unittest.mock import patch
 
 
 VERBOSE = False
@@ -120,14 +123,50 @@ def create_response_with_usage(client: Any, model_name: str, **kwargs: Any) -> A
     return resp
 
 
-if __name__ == "__main__":
-    args = sys.argv[1:]
+def _parse_cli_args(args: list[str]) -> tuple[bool, Optional[str]]:
+    verbose = False
     input_path: Optional[str] = None
 
     for arg in args:
         if arg in ("--verbose", "-v"):
-            VERBOSE = True
+            verbose = True
         elif input_path is None:
             input_path = arg
 
-    validate_environment(input_path)
+    return verbose, input_path
+
+
+class TestCliParsing(unittest.TestCase):
+    def test_verbose_long_flag_and_input_path(self) -> None:
+        verbose, input_path = _parse_cli_args(["--verbose", "file.txt"])
+        self.assertTrue(verbose)
+        self.assertEqual(input_path, "file.txt")
+
+    def test_short_verbose_flag_without_input_path(self) -> None:
+        verbose, input_path = _parse_cli_args(["-v"])
+        self.assertTrue(verbose)
+        self.assertIsNone(input_path)
+
+    def test_unknown_extra_args_first_non_flag_is_input(self) -> None:
+        verbose, input_path = _parse_cli_args(["--verbose", "file.txt", "--unknown", "extra"])
+        self.assertTrue(verbose)
+        self.assertEqual(input_path, "file.txt")
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True)
+    def test_short_verbose_runs_setup_check_without_input(self) -> None:
+        validate_environment(None)
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=True)
+    def test_verbose_with_input_validates_existing_file(self) -> None:
+        with NamedTemporaryFile() as tmp:
+            validate_environment(tmp.name)
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+
+    if args and args[0] == "--run-tests":
+        unittest.main(argv=[sys.argv[0]])
+    else:
+        VERBOSE, input_path = _parse_cli_args(args)
+        validate_environment(input_path)
