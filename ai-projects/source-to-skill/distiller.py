@@ -211,16 +211,94 @@ def load_office(path: Path) -> tuple[str, str]:
 
 OFFICE_EXTS = {".odt", ".odp", ".ods", ".docx", ".doc", ".pptx", ".ppt", ".rtf"}
 
+# Phase 2: code-repository ingestion
+REPO_CODE_EXTS = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".rb", ".rs", ".c",
+    ".cpp", ".h", ".cs", ".php", ".scala", ".kt", ".swift", ".sql", ".sh",
+    ".yaml", ".yml", ".toml", ".ini", ".cfg", ".json", ".md", ".rst", ".txt",
+    ".ttl", ".html", ".css",
+}
+REPO_SKIP_DIRS = {
+    ".git", "node_modules", ".venv", "venv", "env", "__pycache__", "dist",
+    "build", ".pytest_cache", ".mypy_cache", ".idea", ".vscode",
+    "site-packages", ".next", ".cache", "egg-info",
+}
+MAX_REPO_FILE_BYTES = 100_000
+
+
+def _walk_repo(root: Path) -> tuple[str, str]:
+    """Concatenate readable source files under a repo dir, with file headers."""
+    parts: list[str] = []
+    total = 0
+    for path in sorted(root.rglob("*")):
+        if path.is_dir() or path.suffix.lower() not in REPO_CODE_EXTS:
+            continue
+        if any(part in REPO_SKIP_DIRS for part in path.parts):
+            continue
+        try:
+            if path.stat().st_size > MAX_REPO_FILE_BYTES:
+                continue
+            content = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        chunk = f"\n\n===== FILE: {path.relative_to(root)} =====\n{content}"
+        parts.append(chunk)
+        total += len(chunk)
+        if total > MAX_SOURCE_CHARS:
+            parts.append("\n\n[... repository truncated ...]")
+            break
+    if not parts:
+        raise SystemExit(f"No source files found under: {root}")
+    return root.name, "".join(parts)
+
+
+def _is_git_url(source: str) -> bool:
+    return source.startswith(("git@", "git+")) or source.endswith(".git")
+
+
+def load_repo(source: str) -> tuple[str, str]:
+    """Walk a local repo directory, or clone a remote git URL then walk it."""
+    if _is_git_url(source):
+        try:
+            from git import Repo
+        except ImportError:
+            raise SystemExit("Missing dependency: pip install gitpython")
+        import tempfile
+
+        url = source[len("git+"):] if source.startswith("git+") else source
+        dest = Path(tempfile.mkdtemp(prefix="s2s-repo-"))
+        console.print(f"  cloning {url} …")
+        Repo.clone_from(url, dest, depth=1)
+        name = url.rstrip("/").split("/")[-1].removesuffix(".git") or "repository"
+        _, text = _walk_repo(dest)
+        return name, text
+    path = Path(source).expanduser().resolve()
+    if not path.is_dir():
+        raise SystemExit(f"Not a directory: {path}")
+    return _walk_repo(path)
+
 
 def ingest(source: str) -> tuple[str, str, str]:
     """Return (source_kind, title, normalized_text) for any supported source."""
-    if source.lower().startswith(("http://", "https://")):
+    if _is_git_url(source):
+        title, text = load_repo(source)
+        kind = "code repository"
+    elif source.lower().startswith(("http://", "https://")):
         title, text = load_url(source)
         kind = "web page"
     else:
         path = Path(source).expanduser()
         if not path.exists():
             raise SystemExit(f"File not found: {path}")
+        if path.is_dir():
+            title, text = load_repo(source)
+            kind = "code repository"
+            text, truncated = _truncate(text)
+            if truncated:
+                console.print(
+                    f"[yellow]Note:[/] source truncated to {MAX_SOURCE_CHARS:,} chars."
+                )
+            return kind, title, text
         ext = path.suffix.lower()
         if ext == ".pdf":
             title, text = load_pdf(path)
@@ -380,6 +458,88 @@ Be faithful to the source — only encode knowledge it actually supports. Source
     return doc
 
 
+# ─── Ontology graph (Phase 2) ───────────────────────────────────────────────
+
+
+class Triple(BaseModel):
+    subject: str = Field(description="a concept as a concise noun phrase")
+    predicate: str = Field(description="the relationship, a short verb phrase")
+    object: str = Field(description="the related concept as a concise noun phrase")
+
+
+class KnowledgeGraph(BaseModel):
+    triples: list[Triple] = Field(
+        description="10-30 subject-predicate-object triples capturing the key "
+        "concepts and how they relate"
+    )
+
+
+def extract_graph(client: AzureOpenAI, kind: str, title: str, text: str) -> KnowledgeGraph:
+    """Extract a small knowledge graph (concept triples) from the source."""
+    check_budget()
+    prompt = f"""\
+Extract a small knowledge graph from this {kind} titled "{title}".
+
+Return 10-30 subject-predicate-object triples that capture the key concepts and \
+how they relate. Use concise noun phrases for subjects/objects and short verb \
+phrases for predicates (e.g. "depends on", "is a", "produces", "validates"). \
+Only encode relationships the source actually supports. Source follows:
+
+---
+{text}
+---"""
+    completion = client.beta.chat.completions.parse(
+        model=DEPLOYMENT,
+        max_tokens=MAX_TOKENS,
+        messages=[
+            {"role": "system", "content": DISTILLER_SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        response_format=KnowledgeGraph,
+    )
+    record_usage(completion.usage)
+    kg = completion.choices[0].message.parsed
+    if kg is None:
+        raise SystemExit("Model did not return a valid knowledge graph.")
+    return kg
+
+
+def write_graph(kg: KnowledgeGraph, title: str, source: str, out_dir: Path) -> Path:
+    """Serialize the knowledge graph to a Turtle (.ttl) file via rdflib."""
+    try:
+        from rdflib import Graph, Literal, Namespace
+        from rdflib.namespace import RDF, RDFS
+    except ImportError:
+        raise SystemExit("Missing dependency: pip install rdflib")
+
+    EX = Namespace("http://source-to-skill/ontology#")
+    g = Graph()
+    g.bind("ex", EX)
+
+    def node(label: str):
+        return EX[slugify(label)]
+
+    def prop(label: str):
+        return EX[slugify(label).replace("-", "_")]
+
+    src = node(title)
+    g.add((src, RDF.type, EX.Source))
+    g.add((src, RDFS.label, Literal(title)))
+    g.add((src, EX.origin, Literal(source)))
+
+    for t in kg.triples:
+        s, o = node(t.subject), node(t.object)
+        g.add((s, RDFS.label, Literal(t.subject)))
+        g.add((o, RDFS.label, Literal(t.object)))
+        g.add((s, prop(t.predicate), o))
+        g.add((s, EX.derivedFrom, src))
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{slugify(title)}.ttl"
+    g.serialize(destination=str(path), format="turtle")
+    return path
+
+
 # ─── Validation & writing ────────────────────────────────────────────────────
 
 
@@ -445,7 +605,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Distill any source (URL, PDF, ODF/DOCX) into a note or skill."
     )
-    parser.add_argument("source", help="URL or path to a PDF / ODF / DOCX / text file")
+    parser.add_argument(
+        "source",
+        help="URL, a PDF/ODF/DOCX/text file, a local repo directory, or a git URL "
+        "(ending in .git)",
+    )
     parser.add_argument(
         "--mode",
         choices=["note", "skill", "both"],
@@ -460,6 +624,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--force", action="store_true", help="overwrite an existing skill"
+    )
+    parser.add_argument(
+        "--graph",
+        action="store_true",
+        help="also extract a concept knowledge graph and write a .ttl file",
     )
     parser.add_argument(
         "--show-usage", action="store_true", help="print estimated spend and exit"
@@ -509,6 +678,15 @@ def main() -> None:
                 f"[green]✓ skill written:[/] {skill_path}  "
                 f"([cyan]{doc.category}/{doc.name}[/])"
             )
+
+    if args.graph:
+        console.print("[bold]Extracting knowledge graph…[/]")
+        kg = extract_graph(client, kind, title, text)
+        graph_path = write_graph(kg, title, args.source, args.out_dir)
+        console.print(
+            f"[green]✓ graph written:[/] {graph_path}  "
+            f"([cyan]{len(kg.triples)} triples[/])"
+        )
 
     console.print()
     _print_usage()

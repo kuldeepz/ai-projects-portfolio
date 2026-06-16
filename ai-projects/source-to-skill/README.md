@@ -25,6 +25,7 @@ ODF/DOCX─┘   (per source type)      └ skill → SkillDoc    + dedupe vs   
 | PDF | `PyMuPDF` |
 | ODF / DOCX / PPTX / RTF | `unstructured` |
 | `.md` / `.txt` | passthrough |
+| Local repo directory / git URL (`*.git`) | `GitPython` walk (code + docs) |
 
 ## Setup
 
@@ -52,7 +53,22 @@ python distiller.py ./runbook.docx --mode skill --force
 
 # Custom notes output directory
 python distiller.py ./paper.pdf --mode note --out-dir ./out
+
+# Ingest a whole repo — local directory or a remote git URL
+python distiller.py ./my-service --mode note
+python distiller.py https://github.com/owner/repo.git --mode skill
+
+# Also export an ontology / knowledge graph (.ttl) of the source's concepts
+python distiller.py ./paper.pdf --mode note --graph
 ```
+
+### Knowledge graph (`--graph`)
+
+With `--graph`, the tool extracts 10–30 concept triples from the source and
+writes a Turtle file (`<name>.ttl`) alongside the note, using `rdflib`. Each
+concept links back to a `Source` node via `ex:derivedFrom`. This ties into
+`ai-engineering-notes/14-ontology/` — load the `.ttl` in the same rdflib/owlrl
+tooling to reason over or link distilled sources.
 
 - **Notes** default to `ai-engineering-notes/notes/<slug>.md`.
 - **Skills** go to `skills/<category>/<name>/SKILL.md`, where the model proposes
@@ -115,9 +131,9 @@ python -m pytest test_distiller.py -v
 
 ## Roadmap
 
-- **Phase 2:** git-repo ingestion; knowledge-graph export (rdflib/TTL) to link
-  skills and notes — ties into `ai-engineering-notes/14-ontology/`.
-- **Phase 3:** optional Streamlit UI.
+- ~~**Phase 2:** git-repo ingestion; knowledge-graph export (rdflib/TTL).~~ ✅ done
+- **Phase 3:** optional Streamlit UI; chunking for very large sources; OWL-RL
+  reasoning over the exported graphs to link concepts across sources.
 
 ## Notes
 

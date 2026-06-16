@@ -171,5 +171,57 @@ def test_check_budget_ok_when_under(tmp_path, monkeypatch):
     distiller.check_budget()  # should not raise
 
 
+# ─── repo ingestion (Phase 2) ─────────────────────────────────────────────────
+
+
+def test_walk_repo_collects_code_skips_noise(tmp_path):
+    (tmp_path / "app.py").write_text("print('hi')")
+    (tmp_path / "README.md").write_text("# docs")
+    noise = tmp_path / "node_modules" / "pkg"
+    noise.mkdir(parents=True)
+    (noise / "index.js").write_text("module.exports = 1")
+    (tmp_path / "image.png").write_bytes(b"\x89PNG")  # non-code ext, skipped
+
+    title, text = distiller._walk_repo(tmp_path)
+    assert title == tmp_path.name
+    assert "FILE: app.py" in text
+    assert "FILE: README.md" in text
+    assert "node_modules" not in text  # skipped dir
+    assert "image.png" not in text  # skipped ext
+
+
+def test_walk_repo_empty_raises(tmp_path):
+    with pytest.raises(SystemExit):
+        distiller._walk_repo(tmp_path)
+
+
+def test_is_git_url():
+    assert distiller._is_git_url("https://github.com/owner/repo.git")
+    assert distiller._is_git_url("git@github.com:owner/repo.git")
+    assert distiller._is_git_url("git+https://x/y.git")
+    assert not distiller._is_git_url("https://example.com/article")
+
+
+# ─── knowledge graph (Phase 2) ────────────────────────────────────────────────
+
+
+def test_write_graph_produces_ttl(tmp_path):
+    pytest.importorskip("rdflib")
+    from distiller import KnowledgeGraph, Triple
+
+    kg = KnowledgeGraph(
+        triples=[
+            Triple(subject="rdflib", predicate="manages", object="RDF graph"),
+            Triple(subject="owlrl", predicate="materializes", object="entailed facts"),
+        ]
+    )
+    path = distiller.write_graph(kg, "Family Ontology", "doc.md", tmp_path)
+    assert path == tmp_path / "family-ontology.ttl"
+    ttl = path.read_text()
+    assert "@prefix ex:" in ttl
+    assert "rdflib" in ttl
+    assert "manages" in ttl
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
