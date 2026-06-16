@@ -1,0 +1,156 @@
+@prefix ex: <http://source-to-skill/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:agent rdfs:label "agent" ;
+    ex:benefits_from ex:environmental-feedback-and-human-oversight ;
+    ex:derivedFrom ex:building-effective-ai-agents .
+
+ex:agentic-systems rdfs:label "agentic systems" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:include ex:agents,
+        ex:workflows .
+
+ex:augmented-llm rdfs:label "augmented LLM" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:incorporates ex:retrieval-tools-memory ;
+    ex:serves_as ex:building-block-of-agentic-systems .
+
+ex:complexity rdfs:label "complexity" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:should_be ex:added-only-when-needed .
+
+ex:customer-support rdfs:label "customer support" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:is_a ex:promising-application-for-agents .
+
+ex:developer rdfs:label "developer" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:should_start_with ex:direct-llm-api-usage .
+
+ex:effective-agent rdfs:label "effective agent" ;
+    ex:depends_on ex:simple-composable-patterns ;
+    ex:derivedFrom ex:building-effective-ai-agents .
+
+ex:evaluator-llm rdfs:label "evaluator LLM" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:provides ex:evaluation-and-feedback .
+
+ex:evaluator-optimizer-workflow rdfs:label "evaluator-optimizer workflow" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:is_a ex:workflow-pattern .
+
+ex:frameworks rdfs:label "frameworks" ;
+    ex:can_add ex:abstraction-layers ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:simplify ex:agentic-system-implementation .
+
+ex:optimizer-llm rdfs:label "optimizer LLM" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:iteratively_refines ex:responses .
+
+ex:orchestrator rdfs:label "orchestrator" ;
+    ex:delegates ex:subtasks-to-worker-llms ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:dynamically_breaks_down ex:tasks .
+
+ex:orchestrator-workers-workflow rdfs:label "orchestrator-workers workflow" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:is_a ex:workflow-pattern .
+
+ex:parallelization rdfs:label "parallelization" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:divides ex:tasks-into-subcomponents-for-speed ;
+    ex:is_a ex:workflow-pattern .
+
+ex:prompt-chaining rdfs:label "prompt chaining" ;
+    ex:decomposes ex:task-into-steps ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:is_a ex:workflow-pattern .
+
+ex:routing rdfs:label "routing" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:is_a ex:workflow-pattern ;
+    ex:separates ex:inputs-into-specialized-prompts .
+
+ex:software-development rdfs:label "software development" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:is_a ex:promising-application-for-agents .
+
+ex:success-in-llm-systems rdfs:label "success in LLM systems" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:requires ex:iterative-measurement-and-optimization .
+
+ex:tool-definitions rdfs:label "tool definitions" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:require ex:clear-specification-and-documentation .
+
+ex:tools rdfs:label "tools" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:enable ex:llm-interaction-with-external-services .
+
+ex:abstraction-layers rdfs:label "abstraction layers" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:may_hinder ex:debugging-of-prompts-and-responses .
+
+ex:added-only-when-needed rdfs:label "added only when needed" .
+
+ex:agentic-system-implementation rdfs:label "agentic system implementation" .
+
+ex:agents rdfs:label "agents" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:enable ex:flexibility-and-model-driven-decision-making ;
+    ex:suit ex:open-ended-problems .
+
+ex:building-block-of-agentic-systems rdfs:label "building block of agentic systems" .
+
+ex:clear-specification-and-documentation rdfs:label "clear specification and documentation" .
+
+ex:debugging-of-prompts-and-responses rdfs:label "debugging of prompts and responses" .
+
+ex:direct-llm-api-usage rdfs:label "direct LLM API usage" .
+
+ex:environmental-feedback-and-human-oversight rdfs:label "environmental feedback and human oversight" .
+
+ex:evaluation-and-feedback rdfs:label "evaluation and feedback" .
+
+ex:flexibility-and-model-driven-decision-making rdfs:label "flexibility and model-driven decision-making" .
+
+ex:inputs-into-specialized-prompts rdfs:label "inputs into specialized prompts" .
+
+ex:iterative-measurement-and-optimization rdfs:label "iterative measurement and optimization" .
+
+ex:llm-interaction-with-external-services rdfs:label "LLM interaction with external services" .
+
+ex:open-ended-problems rdfs:label "open-ended problems" .
+
+ex:predictability-and-consistency rdfs:label "predictability and consistency" .
+
+ex:responses rdfs:label "responses" .
+
+ex:retrieval-tools-memory rdfs:label "retrieval, tools, memory" .
+
+ex:simple-composable-patterns rdfs:label "simple, composable patterns" .
+
+ex:subtasks-to-worker-llms rdfs:label "subtasks to worker LLMs" .
+
+ex:task-into-steps rdfs:label "task into steps" .
+
+ex:tasks rdfs:label "tasks" .
+
+ex:tasks-into-subcomponents-for-speed rdfs:label "tasks into subcomponents for speed" .
+
+ex:well-defined-tasks rdfs:label "well-defined tasks" .
+
+ex:workflows rdfs:label "workflows" ;
+    ex:derivedFrom ex:building-effective-ai-agents ;
+    ex:offer ex:predictability-and-consistency ;
+    ex:suit ex:well-defined-tasks .
+
+ex:promising-application-for-agents rdfs:label "promising application for agents" .
+
+ex:workflow-pattern rdfs:label "workflow pattern" .
+
+ex:building-effective-ai-agents a ex:Source ;
+    rdfs:label "Building Effective AI Agents" ;
+    ex:origin "https://www.anthropic.com/engineering/building-effective-agents" .
+
