@@ -30,7 +30,7 @@ ODF/DOCX─┘   (per source type)      └ skill → SkillDoc    + dedupe vs   
 ## Setup
 
 ```bash
-cd ai-projects/source-to-skill
+cd source-to-skill
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env        # then add your Azure endpoint, key, and deployment name

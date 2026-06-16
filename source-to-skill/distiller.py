@@ -51,7 +51,15 @@ MAX_TOKENS = 16000
 # keeps cost/latency sane for a single distillation). ~120K chars ≈ 30K tokens.
 MAX_SOURCE_CHARS = 120_000
 
-REPO_ROOT = Path(__file__).resolve().parents[2]  # .../MyCodebase
+def _find_repo_root(start: Path) -> Path:
+    """Walk up to the git repo root (so this works wherever the folder lives)."""
+    for parent in [start, *start.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return start.parents[1]  # fallback
+
+
+REPO_ROOT = _find_repo_root(Path(__file__).resolve())  # .../MyCodebase
 SKILL_CATEGORIES = ["developer", "it-ops", "lead", "code-checks"]
 
 REQUIRED_SKILL_SECTIONS = ["When to Use", "Steps", "Output Format"]
