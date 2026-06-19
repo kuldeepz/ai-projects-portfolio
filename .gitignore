@@ -1,0 +1,28 @@
+# Secrets — never commit
+.env
+
+# Runtime state
+seen_jobs.json
+job_agent.log
+*.log
+_task_tmp.xml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Resume files (personal documents)
+*.docx
+*.pdf
+resume.md
+
+# OS
+.DS_Store
+Thumbs.db
