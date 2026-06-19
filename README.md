@@ -1,274 +1,98 @@
-# Job Search Agent
+# AI Projects Portfolio
 
-An automated job search agent that scans multiple job boards, scores results against your resume using AI, and emails you a digest of relevant roles.
+Personal AI/ML portfolio — 25 practical tools and agents built with OpenAI GPT-4o-mini, plus custom Claude Code skills.
 
-**Runs every 30 minutes. Zero duplicates. Resume-matched relevance scoring.**
+## Repository Structure
+
+```
+ai-projects-portfolio/
+├── ai-projects/    ← 25 runnable AI/ML Python projects
+└── skills/         ← 24 pure SKILL.md agent skills (no code, no dependencies)
+    ├── developer/      5 skills  — code-review, write-tests, debug-error, explain-code, refactor-code
+    ├── it-ops/         4 skills  — incident-rca, pipeline-fix, dependency-audit, write-runbook
+    ├── lead/           6 skills  — sprint-plan, pr-review-checklist, adr-create, standup-write, skill-gap-review, release-notes
+    └── code-checks/    9 skills  — async, exceptions, null-safety, types, security, memory, concurrency, dead-code, logging
+```
 
 ---
 
-## Features
+## [ai-projects/](./ai-projects/) — Core AI Tools (1–10)
 
-| Feature | Detail |
-|---|---|
-| **Sources** | Arbeitnow (EU jobs API), LinkedIn (public search), Remotive (remote jobs API) |
-| **Filtering** | Your keywords + target locations from `.env` |
-| **AI Scoring** | GPT-4o mini rates each job against your resume (0–100%). Below-threshold jobs are silently dropped |
-| **Email digest** | HTML email with relevance badges, visa sponsorship flags, salary info |
-| **Deduplication** | JSON-based — once a job is processed it is never re-sent |
-| **Visa detection** | Regex scan of job text for sponsorship mentions |
-| **Scheduling** | Windows Task Scheduler (included helper script) |
+| # | Project | Description | Key Tech |
+|---|---------|-------------|----------|
+| 1 | [pdf-chatbot-rag](./ai-projects/pdf-chatbot-rag/) | Chat with any PDF using RAG | Embeddings, Cosine Similarity |
+| 2 | [ai-resume-analyzer](./ai-projects/ai-resume-analyzer/) | Score & improve your resume with AI | Function Calling, ATS Check |
+| 3 | [smart-research-agent](./ai-projects/smart-research-agent/) | Autonomous research agent with web search | Agent Loop, Tool Use |
+| 4 | [ai-code-reviewer](./ai-projects/ai-code-reviewer/) | Security & quality code review | Function Calling, Severity Ratings |
+| 5 | [email-composer-ai](./ai-projects/email-composer-ai/) | Generate emails from bullet points | Tone Control, Structured Output |
+| 6 | [ai-meeting-summarizer](./ai-projects/ai-meeting-summarizer/) | Transcript → action items & notes | Function Calling, Markdown Export |
+| 7 | [sql-query-generator](./ai-projects/sql-query-generator/) | Natural language → SQL (6 dialects) | Schema-aware, Multi-turn |
+| 8 | [unit-test-generator](./ai-projects/unit-test-generator/) | Auto-generate pytest suites | AST Parsing, Function Calling |
+| 9 | [document-comparison-agent](./ai-projects/document-comparison-agent/) | Compare two docs, find conflicts | Similarity Score, Side-by-side |
+| 10 | [sentiment-dashboard](./ai-projects/sentiment-dashboard/) | Sentiment + emotion analysis, batch CSV | Aspect-level, Batch Mode |
+
+## [ai-projects/](./ai-projects/) — Advanced AI Skills (11–25)
+
+> ADO automation, engineering leadership, architecture review, and MLOps tooling.
+
+| # | Project | Description | Key Tech |
+|---|---------|-------------|----------|
+| 11 | [ado-workitem-analyzer](./ai-projects/ado-workitem-analyzer/) | Score ADO work items, rewrite AC in BDD | DoR Scoring, BDD, Fibonacci SP |
+| 12 | [ado-sprint-planner](./ai-projects/ado-sprint-planner/) | Capacity-aware sprint planning | Velocity, Dependency Mgmt |
+| 13 | [ado-release-notes-generator](./ai-projects/ado-release-notes-generator/) | Work items → multi-audience release notes | Semver, Markdown Export |
+| 14 | [ado-pipeline-failure-analyzer](./ai-projects/ado-pipeline-failure-analyzer/) | CI/CD log → root cause + fix commands | Error Enum, Log Truncation |
+| 15 | [ado-test-case-generator](./ai-projects/ado-test-case-generator/) | User stories → BDD test cases (5 types) | BDD, Automation Flags |
+| 16 | [pr-review-assistant](./ai-projects/pr-review-assistant/) | Git diff → full PR review with verdict | Severity Levels, Checklist |
+| 17 | [architecture-review-agent](./ai-projects/architecture-review-agent/) | Architecture → Well-Architected review | WAF, SPoF Detection |
+| 18 | [tech-debt-analyzer](./ai-projects/tech-debt-analyzer/) | File/dir scan → debt score + quick wins | 7 Categories, Effort Days |
+| 19 | [dependency-risk-scanner](./ai-projects/dependency-risk-scanner/) | requirements.txt → CVE risk report | 5 Risk Levels, Upgrade Cmds |
+| 20 | [incident-postmortem-generator](./ai-projects/incident-postmortem-generator/) | Incident notes → blameless RCA | RCA Types, Priority Tiers |
+| 21 | [standup-report-generator](./ai-projects/standup-report-generator/) | Raw notes → standup/weekly/exec/Slack | 4 Formats, Tone-aware |
+| 22 | [prompt-library-manager](./ai-projects/prompt-library-manager/) | Versioned prompt registry with A/B testing | MD5 Versioning, CLI |
+| 23 | [ai-model-evaluator](./ai-projects/ai-model-evaluator/) | LLM-as-judge scoring + hallucination detection | Eval Framework, Judge Pattern |
+| 24 | [ai-decision-log-creator](./ai-projects/ai-decision-log-creator/) | Discussion → Architecture Decision Record | Nygard Format, Auto-numbering |
+| 25 | [team-skill-gap-analyzer](./ai-projects/team-skill-gap-analyzer/) | Team skills vs project needs → gap analysis | Coverage Score, Training Plan |
+
+---
+
+## [skills/](./skills/) — Agent Skills (24 skills)
+
+Pure SKILL.md files — no code, no dependencies. Invoke as `/skill-name` in Claude Code or any SKILL.md-compatible agent.
+
+| Category | Count | Skills |
+|----------|-------|--------|
+| [developer/](./skills/developer/) | 5 | `/code-review` · `/write-tests` · `/debug-error` · `/explain-code` · `/refactor-code` |
+| [it-ops/](./skills/it-ops/) | 4 | `/incident-rca` · `/pipeline-fix` · `/dependency-audit` · `/write-runbook` |
+| [lead/](./skills/lead/) | 6 | `/sprint-plan` · `/pr-review-checklist` · `/adr-create` · `/standup-write` · `/skill-gap-review` · `/release-notes` |
+| [code-checks/](./skills/code-checks/) | 9 | `/async-check` · `/exception-check` · `/null-safety` · `/type-check` · `/security-scan` · `/memory-check` · `/concurrency-check` · `/dead-code` · `/log-check` |
+
+> See [skills/README.md](./skills/README.md) for the full index with descriptions.
 
 ---
 
 ## Quick Start
 
-### 1. Clone / download
-
 ```bash
-git clone <repo-url> JobSearchAgent
-cd JobSearchAgent
-```
-
-### 2. Install dependencies
-
-```bash
+git clone https://github.com/kuldeepz/ai-projects-portfolio
+cd ai-projects-portfolio/ai-projects/pdf-chatbot-rag
 pip install -r requirements.txt
+cp .env.example .env   # add OPENAI_API_KEY
+python chatbot.py
 ```
 
-Minimum install (no AI scoring, no `.docx` resume):
-```bash
-pip install requests beautifulsoup4 lxml
-```
-
-### 3. Configure
+## Sanity Tests (No API Key Required)
 
 ```bash
-cp .env.example .env
+cd ai-projects
+python incident-postmortem-generator/test_postmortem.py
+python pr-review-assistant/test_reviewer.py
+python architecture-review-agent/test_reviewer.py
+# ... etc
 ```
 
-Open `.env` and fill in **at minimum**:
+## Tech Stack
 
-```
-SMTP_USER=you@gmail.com
-SMTP_APP_PASSWORD=xxxx xxxx xxxx xxxx   # Gmail App Password (see below)
-NOTIFY_EMAIL=you@gmail.com
-SEARCH_KEYWORDS=engineering manager,AI lead,tech lead
-LOCATIONS=Germany: berlin, munich; Netherlands: amsterdam
-```
-
-> **Gmail App Password setup:**
-> 1. Enable 2-Step Verification on your Google account
-> 2. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-> 3. Create an App Password → copy the 16-character code into `.env`
-
-### 4. Add your resume (optional but recommended)
-
-Create a `resume.md` file in the project folder with your resume content (plain text / Markdown).
-
-```
-# Jane Smith
-Senior Software Engineer — 8 years Python, distributed systems, team lead...
-```
-
-Or set `RESUME_PATH` in `.env` to point to an existing `.docx` or `.md` file.
-
-> Without a resume, all keyword-matching jobs are emailed unscored.
-
-### 5. Test it
-
-```bash
-python main.py --dry-run
-```
-
-This prints matching jobs to the console — no email sent, nothing saved.
-
-### 6. Run for real
-
-```bash
-python main.py
-```
-
----
-
-## Scheduling (Windows)
-
-Run once as Administrator to create a Task Scheduler entry:
-
-```bash
-python setup_scheduler.py
-```
-
-Options:
-```bash
-python setup_scheduler.py --interval 60        # every 60 minutes
-python setup_scheduler.py --task-name MyJobs   # custom task name
-python setup_scheduler.py --delete             # remove the task
-```
-
-Manual task control:
-```bash
-schtasks /Run    /TN JobSearchAgent    # trigger now
-schtasks /End    /TN JobSearchAgent    # stop running instance
-schtasks /Delete /TN JobSearchAgent    # remove task
-```
-
----
-
-## AI Scoring Setup
-
-Without credentials, all keyword-matching jobs are included (no filtering by relevance).
-
-### Option A — Standard OpenAI
-
-1. Get an API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-2. Add to `.env`:
-   ```
-   OPENAI_API_KEY=sk-...
-   ```
-
-### Option B — Azure OpenAI
-
-```
-AZURE_OPENAI_KEY=your-key
-AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
-```
-
-> Azure takes precedence if both are configured.
-
----
-
-## Configuration Reference
-
-All settings live in `.env`. See `.env.example` for the full template.
-
-| Variable | Default | Description |
-|---|---|---|
-| `SMTP_USER` | — | Gmail address used to send emails |
-| `SMTP_APP_PASSWORD` | — | Gmail App Password (not your login password) |
-| `NOTIFY_EMAIL` | — | Recipient email address |
-| `SMTP_HOST` | `smtp.gmail.com` | SMTP server (change for Outlook, etc.) |
-| `SMTP_PORT` | `587` | SMTP port |
-| `OPENAI_API_KEY` | — | Standard OpenAI key (for scoring) |
-| `AZURE_OPENAI_KEY` | — | Azure OpenAI key (alternative) |
-| `AZURE_OPENAI_ENDPOINT` | — | Azure OpenAI endpoint URL |
-| `AZURE_OPENAI_DEPLOYMENT` | `gpt-4o-mini` | Model deployment name |
-| `RESUME_PATH` | `resume.md` | Path to your resume (`.md` or `.docx`) |
-| `SEARCH_KEYWORDS` | see `.env.example` | Comma-separated role keywords |
-| `LOCATIONS` | DE + NL cities | `Country: city1, city2; Country2: city3` |
-| `MIN_SCORE` | `40` | Minimum AI relevance % (0 = send all) |
-| `MAX_JOB_AGE_DAYS` | `30` | Ignore jobs older than this |
-
-### LOCATIONS format
-
-```
-LOCATIONS=Germany: berlin, munich, frankfurt; Netherlands: amsterdam, rotterdam
-```
-
-For remote/worldwide only:
-```
-LOCATIONS=remote
-```
-
----
-
-## CLI Reference
-
-```bash
-python main.py                                   # Normal run
-python main.py --dry-run                         # Preview only (no email/save)
-python main.py --sources arbeitnow               # Single source
-python main.py --sources arbeitnow linkedin      # Multiple sources
-python main.py --sources remotive --dry-run      # Combine flags
-```
-
-Available sources: `arbeitnow`, `linkedin`, `remotive`
-
----
-
-## Project Structure
-
-```
-JobSearchAgent/
-├── main.py               Entry point
-├── config.py             Loads settings from .env
-├── scorer.py             AI relevance scoring (OpenAI / Azure OpenAI)
-├── notifier.py           Builds and sends HTML email
-├── storage.py            Tracks seen jobs (deduplication)
-├── visa_checker.py       Detects visa sponsorship mentions
-├── setup_scheduler.py    Windows Task Scheduler helper
-├── scrapers/
-│   ├── arbeitnow.py      Arbeitnow.com API (EU jobs)
-│   ├── linkedin.py       LinkedIn public search scraper
-│   └── remotive.py       Remotive.com API (remote jobs)
-├── requirements.txt
-├── .env.example          Config template — copy to .env
-├── .gitignore
-└── resume.md             Your resume (create this — not tracked by git)
-```
-
----
-
-## How It Works
-
-```
-Every 30 min (Task Scheduler)
-      │
-      ▼
-  Fetch jobs from Arbeitnow + LinkedIn + Remotive
-      │
-      ▼
-  Filter: keyword match + location match
-      │
-      ▼
-  Dedup: remove jobs already seen (seen_jobs.json)
-      │
-      ▼
-  Score: GPT-4o mini rates each job vs. your resume (0–100%)
-      │
-      ▼
-  Filter: drop jobs below MIN_SCORE
-      │
-      ▼
-  Email: HTML digest with badges → NOTIFY_EMAIL
-      │
-      ▼
-  Save: mark all processed jobs as seen
-```
-
----
-
-## Troubleshooting
-
-**No jobs found:**
-- Run `--dry-run` and check the console output per source
-- Widen your `SEARCH_KEYWORDS` or `LOCATIONS`
-- Arbeitnow only covers Europe; use Remotive for worldwide remote roles
-
-**Email not sent:**
-- Ensure `SMTP_APP_PASSWORD` is set (not your Google login password)
-- Check Gmail 2-Step Verification is enabled
-- Try running with `--dry-run` first to isolate scraping vs. email issues
-
-**Scoring not working:**
-- Confirm `OPENAI_API_KEY` or Azure credentials are set in `.env`
-- Install the openai package: `pip install openai`
-- If `resume.md` is missing, scoring is skipped and all jobs are sent
-
-**Windows Task Scheduler fails:**
-- Run `python setup_scheduler.py` as Administrator
-- Check log at `job_agent.log` in the project folder
-
----
-
-## Privacy
-
-- `.env` is excluded from git — your credentials are never committed
-- Your resume is only sent to OpenAI/Azure OpenAI for scoring; it is not stored externally
-- `seen_jobs.json` is local — it just tracks job IDs (no personal data)
-
----
-
-## License
-
-MIT
+- **LLM:** OpenAI GPT-4o-mini (function calling + structured outputs)
+- **Language:** Python 3.10+
+- **UI:** Rich terminal (panels, tables, syntax highlighting)
+- **Patterns:** Lazy client init · Agent loops · LLM-as-judge · BDD · RAG

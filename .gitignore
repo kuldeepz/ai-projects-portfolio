@@ -1,28 +1,43 @@
-# Secrets — never commit
+# Secrets & environment variables
 .env
-
-# Runtime state
-seen_jobs.json
-job_agent.log
-*.log
-_task_tmp.xml
+.env.*
+!.env.example
 
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
-.venv/
+*.pyd
+.Python
 venv/
+.venv/
 env/
 *.egg-info/
 dist/
 build/
+*.egg
 
-# Resume files (personal documents)
-*.docx
-*.pdf
-resume.md
+# Embedding caches generated at runtime
+*.cache.json
 
-# OS
+# Generated output files
+*.md.bak
+report_*.md
+notes_*.md
+generated_queries.sql
+email_*.txt
+sentiment_results_*.csv
+test_*.py.bak
+
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/

@@ -1,0 +1,194 @@
+"""
+PDF Chatbot with RAG (Retrieval-Augmented Generation)
+Loads a PDF, chunks it, creates embeddings, and answers questions using relevant context.
+"""
+
+import os
+import sys
+import json
+import math
+import hashlib
+import time
+from pathlib import Path
+from typing import Any
+from datetime import datetime
+
+from dotenv import load_dotenv
+from openai import OpenAI
+import PyPDF2
+from colorama import init, Fore, Style
+from rich.console import Console
+
+load_dotenv()
+init(autoreset=True)
+console = Console()
+
+CHUNK_SIZE = 500       # words per chunk
+CHUNK_OVERLAP = 50     # word overlap between chunks
+TOP_K = 4              # number of chunks to retrieve per query
+EMBED_MODEL = "text-embedding-3-small"
+CHAT_MODEL = "gpt-4o-mini"
+VERBOSE = False
+
+
+def validate_environment() -> None:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print(Fore.RED + "Missing OPENAI_API_KEY. Please set it in your .env file.")
+        sys.exit(1)
+
+    args = sys.argv[1:]
+    filtered_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--export", "-e"):
+            i += 1
+            if i < len(args) and not args[i].startswith("-"):
+                i += 1
+            continue
+        if arg in ("--verbose", "-v"):
+            i += 1
+            continue
+        filtered_args.append(arg)
+        i += 1
+
+    if not filtered_args:
+        print(Fore.YELLOW + "Usage: python chatbot.py <path_to_pdf>")
+        sys.exit(1)
+
+    pdf_path = filtered_args[0]
+    path = Path(pdf_path)
+
+    if not os.path.exists(pdf_path):
+        print(Fore.RED + f"File not found: {pdf_path}")
+        sys.exit(1)
+
+    if path.suffix.lower() != ".pdf":
+        print(Fore.RED + f"Expected a PDF file: {pdf_path}")
+        sys.exit(1)
+
+    try:
+        with open(pdf_path, "rb") as f:
+            if f.read(4) != b"%PDF":
+                print(Fore.RED + f"Invalid PDF file: {pdf_path}")
+                sys.exit(1)
+    except OSError:
+        print(Fore.RED + f"Cannot read file: {pdf_path}")
+        sys.exit(1)
+
+    print(Fore.GREEN + "Setup OK ✓")
+
+
+def read_pdf(pdf_path: str) -> str:
+    text = ""
+    with console.status("[bold green]Processing..."):
+        with open(pdf_path, "rb") as file:
+            reader = PyPDF2.PdfReader(file)
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
+    return text
+
+
+def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+    words = text.split()
+    chunks = []
+    start = 0
+
+    while start < len(words):
+        end = min(start + chunk_size, len(words))
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        start += chunk_size - overlap
+
+    return chunks
+
+
+def get_embedding(text: str) -> list[float]:
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if VERBOSE:
+        print(Fore.CYAN + f"Model: {EMBED_MODEL}")
+        print(Fore.CYAN + f"Input size: {len(text)} chars, {len(text.split())} tokens")
+        print(Fore.CYAN + "⏳ Calling OpenAI API...")
+        start = time.time()
+    with console.status("[bold green]Processing..."):
+        response = client.embeddings.create(model=EMBED_MODEL, input=text)
+    if VERBOSE:
+        elapsed = time.time() - start
+        print(Fore.GREEN + f"✅ Done in {elapsed:.1f}s")
+    return response.data[0].embedding
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def retrieve_top_chunks(query_embedding: list[float], chunk_embeddings: list[list[float]], chunks: list[str], top_k: int = TOP_K) -> list[str]:
+    scored = []
+    with console.status("[bold green]Processing..."):
+        for i, emb in enumerate(chunk_embeddings):
+            score = cosine_similarity(query_embedding, emb)
+            scored.append((score, chunks[i]))
+
+        scored.sort(reverse=True, key=lambda x: x[0])
+    return [chunk for _, chunk in scored[:top_k]]
+
+
+def answer_question(question: str, context_chunks: list[str], chat_history: list[dict[str, Any]]) -> str:
+    context = "\n\n".join(context_chunks)
+
+    system_prompt = (
+        "You are a helpful assistant answering questions based ONLY on provided context from a PDF. "
+        "If the answer is not in the context, say you don't know."
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(chat_history)
+    messages.append({
+        "role": "user",
+        "content": f"Context:\n{context}\n\nQuestion: {question}"
+    })
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if VERBOSE:
+        input_text = " ".join(str(m.get("content", "")) for m in messages)
+        print(Fore.CYAN + f"Model: {CHAT_MODEL}")
+        print(Fore.CYAN + f"Input size: {len(input_text)} chars, {len(input_text.split())} tokens")
+        print(Fore.CYAN + "⏳ Calling OpenAI API...")
+        start = time.time()
+    with console.status("[bold green]Processing..."):
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            messages=messages,
+            temperature=0.2,
+        )
+    if VERBOSE:
+        elapsed = time.time() - start
+        print(Fore.GREEN + f"✅ Done in {elapsed:.1f}s")
+    return response.choices[0].message.content
+
+
+def build_index(pdf_path: str) -> tuple[list[str], list[list[float]]]:
+    print(Fore.CYAN + "Reading PDF...")
+    text = read_pdf(pdf_path)
+
+    print(Fore.CYAN + "Chunking text...")
+    chunks = chunk_text(text)
+    print(Fore.CYAN + f"Created {len(chunks)} chunks")
+
+    print(Fore.CYAN + "Generating embeddings (this may take a moment)...")
+    with console.status("[bold green]Processing..."):
+        embeddings = [get_embedding(chunk) for chunk in chunks]
+
+    return chunks, embeddings
+
+
+if __name__ == "__main__":
+    pass
